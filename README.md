@@ -357,3 +357,9 @@ Use `./backup.sh` to snapshot all of this, and `./restore.sh` to migrate to a ne
 ## License
 
 MIT
+
+---
+
+## Copyright
+
+Copyright &copy; [DownStreamTech](https://downstreamtech.net). All rights reserved.
