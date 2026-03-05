@@ -1,0 +1,12 @@
+[v3_req]
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = youtube.com
+DNS.2 = www.youtube.com
+DNS.3 = m.youtube.com
+DNS.4 = youtu.be
+DNS.5 = yt.be
+DNS.6 = *.youtube.com
+DNS.7 = youtubei.googleapis.com
+DNS.8 = www.googleapis.com
+DNS.9 = suggestqueries.google.com

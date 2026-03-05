@@ -1,0 +1,10 @@
+data/
+backups/
+nginx/certs/*.key
+nginx/certs/*.crt
+nginx/certs/*.pem
+.env
+__pycache__/
+*.pyc
+*.pyo
+setup.sh

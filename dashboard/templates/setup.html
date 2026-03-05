@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RichSinkhole — Setup Guide</title>
+  <base href="{{ root_path }}/">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #0d1117; }
+    .step-badge { display: inline-block; width: 26px; height: 26px; border-radius: 50%;
+      background: #da3633; color: #fff; text-align: center; line-height: 26px;
+      font-weight: 700; font-size: 0.82rem; flex-shrink: 0; }
+    .platform-icon { font-size: 1.3rem; margin-right: 8px; }
+    kbd { background: #161b22; border: 1px solid #30363d; border-radius: 4px;
+      padding: 2px 6px; font-size: 0.85em; color: #e6edf3; }
+    .ip-highlight { font-size: 1.5rem; font-weight: 700; color: #3fb950;
+      font-family: monospace; letter-spacing: 0.04em; }
+    .mono-url { font-family: monospace; color: #79c0ff; word-break: break-all; }
+    .qr-box { background: #fff; border-radius: 8px; padding: 8px; display: inline-block; }
+    .section-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #8b949e; margin-bottom: 0.75rem; }
+    .codebox { background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+      padding: 12px 14px; position: relative; }
+    .codebox code { color: #79c0ff; font-size: 0.85rem; word-break: break-all; }
+    .copy-btn { position: absolute; top: 8px; right: 8px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar bg-dark border-bottom border-secondary px-3">
+  <a class="navbar-brand fw-bold text-danger fs-5 text-decoration-none" href="./">
+    &#11044; RichSinkhole
+  </a>
+  <a href="./" class="btn btn-sm btn-outline-secondary">Back to Dashboard</a>
+</nav>
+
+<div class="container py-4" style="max-width: 800px">
+
+  <h1 class="h3 mb-1">Setup Guide</h1>
+  <p class="text-muted mb-4">Two steps: point your DNS here, then install the CA cert for YouTube ad blocking.</p>
+
+  <!-- Server info -->
+  <div class="card mb-4 border-success">
+    <div class="card-header text-success fw-semibold small">YOUR SERVER</div>
+    <div class="card-body">
+      <div class="row g-3 align-items-center">
+        <div class="col-md-6">
+          <div class="small text-muted fw-semibold mb-1">DNS Server IP</div>
+          <div class="ip-highlight">{{ host_ip }}</div>
+          <div class="text-muted small mt-1">Use this as your DNS address everywhere below</div>
+        </div>
+        <div class="col-md-6">
+          <div class="small text-muted fw-semibold mb-1">Dashboard URL</div>
+          <div class="mono-url">http://{{ host_ip }}{% if http_port != '80' %}:{{ http_port }}{% endif %}/</div>
+          <div class="text-muted small mt-1">Live query log, blocklist, settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code -->
+  <div class="card mb-4">
+    <div class="card-header text-muted small fw-semibold">QR CODE — SCAN TO SEE DNS IP</div>
+    <div class="card-body d-flex align-items-center gap-4">
+      <div class="qr-box flex-shrink-0">
+        <img src="api/qr/dns" alt="DNS QR" width="140" height="140">
+      </div>
+      <div>
+        <div class="ip-highlight mb-1">{{ host_ip }}</div>
+        <div class="small text-muted">Scan this with your phone camera to get the DNS IP, then enter it manually in your device's network settings.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="section-label">Step 1 — DNS Setup</div>
+
+  <!-- Router -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F4F6;</span>Router — All Devices at Once
+      <span class="badge bg-success ms-2 small">Recommended</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-3">Set DNS on your router once — every device is protected automatically with no per-device config.</p>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">1</span>
+        <div>Log in to your router admin panel (usually <kbd>192.168.1.1</kbd> or <kbd>192.168.0.1</kbd>)</div>
+      </div>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">2</span>
+        <div>Find <strong>LAN Settings</strong> &rarr; <strong>DHCP Server</strong></div>
+      </div>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">3</span>
+        <div>Set <strong>Primary DNS</strong> to <span class="text-success fw-bold font-monospace">{{ host_ip }}</span></div>
+      </div>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">4</span>
+        <div>Set <strong>Secondary DNS</strong> to <kbd>1.1.1.1</kbd> (fallback)</div>
+      </div>
+      <div class="d-flex gap-3">
+        <span class="step-badge">5</span>
+        <div>Save and reconnect devices</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Per-device (collapsed) -->
+  <div class="card mb-4">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F4BB;</span>Per-Device Manual Setup
+    </div>
+    <div class="card-body small text-muted">
+      <p class="mb-2">If you can't change the router, set DNS on each device individually:</p>
+      <ul class="mb-0 ps-3">
+        <li><strong class="text-light">Windows:</strong> Settings &rarr; Network &amp; Internet &rarr; your connection &rarr; DNS server assignment &rarr; Manual &rarr; set IPv4 Preferred DNS to <span class="text-success font-monospace fw-bold">{{ host_ip }}</span></li>
+        <li class="mt-1"><strong class="text-light">macOS:</strong> System Settings &rarr; Network &rarr; your connection &rarr; Details &rarr; DNS tab &rarr; add <span class="text-success font-monospace fw-bold">{{ host_ip }}</span></li>
+        <li class="mt-1"><strong class="text-light">iPhone / iPad:</strong> Settings &rarr; Wi-Fi &rarr; tap <kbd>&#x24D8;</kbd> &rarr; Configure DNS &rarr; Manual &rarr; Add Server &rarr; <span class="text-success font-monospace fw-bold">{{ host_ip }}</span></li>
+        <li class="mt-1"><strong class="text-light">Android:</strong> Settings &rarr; Wi-Fi &rarr; modify network &rarr; Advanced &rarr; IP Settings: Static &rarr; DNS 1: <span class="text-success font-monospace fw-bold">{{ host_ip }}</span></li>
+        <li class="mt-1"><strong class="text-light">Smart TV / Console:</strong> Network Settings &rarr; IP Settings &rarr; Manual &rarr; DNS: <span class="text-success font-monospace fw-bold">{{ host_ip }}</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="section-label">Step 2 — CA Certificate (YouTube Ad Blocking)</div>
+
+  <div class="alert alert-secondary mb-3 small">
+    Enables transparent YouTube ad blocking — pre-roll, mid-roll, and post-roll ads stripped server-side.
+    Requires trusting the local CA certificate on each device. Skip if you only need DNS-level blocking.
+  </div>
+
+  <!-- iOS -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F4F2;</span>iPhone / iPad
+    </div>
+    <div class="card-body">
+      <a href="http://{{ host_ip }}/ca.mobileconfig" class="btn btn-success btn-sm mb-3">&#x1F4E5; Install Certificate Profile</a>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">1</span>
+        <div>Tap the button above in Safari — tap <kbd>Allow</kbd> to download</div>
+      </div>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">2</span>
+        <div><kbd>Settings</kbd> &rarr; <strong>Profile Downloaded</strong> &rarr; <kbd>Install</kbd> &rarr; enter passcode &rarr; <kbd>Install</kbd></div>
+      </div>
+      <div class="d-flex gap-3">
+        <span class="step-badge">3</span>
+        <div><kbd>Settings</kbd> &rarr; <strong>General</strong> &rarr; <strong>About</strong> &rarr; <strong>Certificate Trust Settings</strong> &rarr; enable <strong>RichSinkhole CA</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- macOS -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F34E;</span>macOS
+    </div>
+    <div class="card-body">
+      <a href="http://{{ host_ip }}/ca.mobileconfig" class="btn btn-success btn-sm mb-3">&#x1F4E5; Install Certificate Profile</a>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">1</span>
+        <div>Click the button above — System Settings will open automatically</div>
+      </div>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">2</span>
+        <div><strong>Privacy &amp; Security</strong> &rarr; <strong>Profiles</strong> &rarr; <kbd>Install</kbd></div>
+      </div>
+      <div class="d-flex gap-3">
+        <span class="step-badge">3</span>
+        <div>Open <strong>Keychain Access</strong> &rarr; find <strong>RichSinkhole CA</strong> &rarr; double-click &rarr; Trust &rarr; set to <strong>Always Trust</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Windows -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F5A5;</span>Windows
+    </div>
+    <div class="card-body">
+      <a href="http://{{ host_ip }}/ca.crt" class="btn btn-success btn-sm mb-3">&#x1F4E5; Download CA Certificate</a>
+      <div class="d-flex gap-3 mb-2">
+        <span class="step-badge">1</span>
+        <div>Download and double-click <kbd>richsinkhole-ca.crt</kbd> &rarr; <strong>Install Certificate</strong> &rarr; <strong>Local Machine</strong> &rarr; Next</div>
+      </div>
+      <div class="d-flex gap-3">
+        <span class="step-badge">2</span>
+        <div>Select <strong>Trusted Root Certification Authorities</strong> &rarr; OK &rarr; Next &rarr; Finish</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Linux -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F427;</span>Linux
+    </div>
+    <div class="card-body">
+      <div class="codebox mb-3">
+        <code id="linux-cmd">curl -fsSL http://{{ host_ip }}/install-cert.sh | bash</code>
+        <button class="btn btn-sm btn-outline-secondary copy-btn"
+          onclick="navigator.clipboard.writeText(document.getElementById('linux-cmd').textContent)">Copy</button>
+      </div>
+      <p class="small text-muted mb-0">Installs system-wide and injects into Firefox and Chrome/Chromium. Requires <kbd>libnss3-tools</kbd> (<code>sudo apt install libnss3-tools</code>). Restart your browser after.</p>
+    </div>
+  </div>
+
+  <!-- Android note -->
+  <div class="card mb-4">
+    <div class="card-header fw-semibold">
+      <span class="platform-icon">&#x1F4F1;</span>Android
+    </div>
+    <div class="card-body small text-muted">
+      Android 7+ does not allow apps (including the YouTube app) to trust user-installed CA certificates, so YouTube in-video ad blocking is not possible on Android.
+      DNS-level blocking (Step 1) still works for all other apps. For YouTube ads on Android, use <strong class="text-light">YouTube ReVanced</strong>.
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- Verify -->
+  <div class="card border-secondary">
+    <div class="card-header text-muted small fw-semibold">VERIFY IT'S WORKING</div>
+    <div class="card-body small">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="text-muted fw-semibold mb-1">DNS blocking</div>
+          <div class="text-muted">Visit <kbd>doubleclick.net</kbd> — it should fail to load. Check the <a href="./" class="text-info">live log</a> to see your device's queries.</div>
+        </div>
+        <div class="col-md-6">
+          <div class="text-muted fw-semibold mb-1">YouTube proxy</div>
+          <div class="text-muted">Play a video — pre-roll and mid-roll ads should be skipped. Hard-refresh with <kbd>Ctrl+Shift+R</kbd> first.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

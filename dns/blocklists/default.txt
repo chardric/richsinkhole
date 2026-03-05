@@ -1,0 +1,26 @@
+# Default ad/tracking blocklist
+doubleclick.net
+googleadservices.com
+googlesyndication.com
+adservice.google.com
+tracking.google.com
+ads.google.com
+pagead2.googlesyndication.com
+analytics.google.com
+stats.g.doubleclick.net
+ade.googlesyndication.com
+ads.facebook.com
+connect.facebook.net
+graph.facebook.com
+pixel.facebook.com
+an.facebook.com
+scorecardresearch.com
+quantserve.com
+outbrain.com
+taboola.com
+adnxs.com
+rubiconproject.com
+openx.net
+pubmatic.com
+criteo.com
+amazon-adsystem.com

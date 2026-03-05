@@ -1,0 +1,131 @@
+services:
+  unbound:
+    build: ./unbound
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dns:
+    build: ./dns
+    depends_on:
+      - unbound
+    ports:
+      - "${HOST_IP:-0.0.0.0}:53:53/udp"
+      - "${HOST_IP:-0.0.0.0}:53:53/tcp"
+    environment:
+      HOST_IP: ${HOST_IP:-}
+      TZ: ${TZ:-Asia/Manila}
+    volumes:
+      - ./data:/data
+      - ./data/config:/config
+    restart: unless-stopped
+    cap_add:
+      - NET_BIND_SERVICE
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build: ./dashboard
+    environment:
+      ROOT_PATH: /richsinkhole
+      HOST_IP: ${HOST_IP:-}
+      HTTP_PORT: ${HTTP_PORT:-80}
+      TZ: ${TZ:-Asia/Manila}
+    volumes:
+      - ./data:/data
+      - ./data/config:/config
+      - ./updater/sources.yml:/updater/sources.yml
+      - ./nginx/certs:/certs:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\" 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  updater:
+    build: ./updater
+    environment:
+      TZ: ${TZ:-Asia/Manila}
+    volumes:
+      - ./data:/data
+      - ./updater/sources.yml:/updater/sources.yml:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  youtube-proxy:
+    build: ./youtube-proxy
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "443:443"
+    volumes:
+      - ./nginx/${NGINX_CONFIG:-nginx-standalone.conf}:/etc/nginx/nginx.conf:ro
+      - ./nginx/404.html:/usr/share/nginx/404.html:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - dashboard
+      - youtube-proxy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+          cpus: "0.25"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+

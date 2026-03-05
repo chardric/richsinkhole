@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RichSinkhole</title>
+  <base href="{{ root_path }}/">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #0d1117; }
+    .navbar-brand { letter-spacing: 0.04em; }
+    .stat-card { transition: transform 0.15s; }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-value { font-size: 2.2rem; font-weight: 700; line-height: 1.1; }
+    .stat-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8b949e; }
+    .log-table-wrap { max-height: 380px; overflow-y: auto; }
+    #log-tbody tr { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .badge-blocked { background-color: #da3633; }
+    .badge-allowed { background-color: #238636; }
+    .badge-forwarded { background-color: #238636; }
+    .badge-redirected { background-color: #9e6a03; }
+    .badge-failed { background-color: #6e7681; }
+    .progress { height: 6px; }
+.accordion-button::after { filter: invert(1) opacity(0.5); }
+    .accordion-button:not(.collapsed) { box-shadow: none; }
+    .preset-toggle { cursor: pointer; width: 2.5em; height: 1.25em; }
+    .qb-count { font-size: 0.7rem; min-width: 3.5rem; text-align: center; }
+    .sse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3fb950; margin-right: 5px; }
+    .sse-dot.disconnected { background: #da3633; }
+    #toast-container { position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 280px; }
+    .health-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #3fb950; }
+    .health-dot.degraded { background: #da3633; }
+    .health-dot.unknown { background: #6e7681; }
+    .qr-box { background: #fff; border-radius: 8px; padding: 6px; display: inline-block; }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar bg-dark border-bottom border-secondary px-3 d-flex justify-content-between">
+  <span class="navbar-brand fw-bold text-danger fs-5">&#11044; RichSinkhole</span>
+  <div class="d-flex align-items-center gap-3">
+    <span class="text-muted small" id="last-refreshed"></span>
+    <span id="health-badge" title="System health">
+      <span class="health-dot unknown" id="health-dot"></span>
+      <span class="text-muted small ms-1" id="health-label">checking...</span>
+    </span>
+    <a href="setup" class="text-muted small text-decoration-none">Setup Guide</a>
+  </div>
+</nav>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<div class="container-fluid px-3 mt-3">
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs border-secondary" id="mainTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" id="tab-dash-btn" data-bs-toggle="tab" data-bs-target="#tab-dashboard" role="tab">Dashboard</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-bl-btn" data-bs-toggle="tab" data-bs-target="#tab-blocklist" role="tab">Blocklist</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-settings-btn" data-bs-toggle="tab" data-bs-target="#tab-settings" role="tab">Settings</button>
+    </li>
+  </ul>
+
+  <div class="tab-content mt-3">
+
+    <!-- ================================================================ -->
+    <!-- DASHBOARD TAB                                                      -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade show active" id="tab-dashboard" role="tabpanel">
+
+      <!-- Stat cards -->
+      <div class="row row-cols-2 row-cols-md-5 g-3 mb-3">
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value text-info" id="stat-total">-</div>
+              <div class="stat-label mt-1">Total Queries</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value text-success" id="stat-forwarded">-</div>
+              <div class="stat-label mt-1">Forwarded</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value text-danger" id="stat-blocked">-</div>
+              <div class="stat-label mt-1">Blocked</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value text-warning" id="stat-pct">-</div>
+              <div class="stat-label mt-1">Block %</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value" style="color:#e3b341" id="stat-redirected">-</div>
+              <div class="stat-label mt-1">YT Redirected</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top blocked + top clients -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold">TOP BLOCKED DOMAINS</div>
+            <div class="card-body py-2" id="top-blocked-list">
+              <div class="text-muted small text-center py-3">No data yet</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold">TOP CLIENTS</div>
+            <div class="card-body py-2" id="top-clients-list">
+              <div class="text-muted small text-center py-3">No data yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live log -->
+      <div class="card">
+        <div class="card-header">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold">
+              <span class="sse-dot" id="sse-dot"></span>Live Query Log
+            </span>
+            <div class="d-flex gap-2 align-items-center">
+              <span class="text-muted small" id="log-count">0 entries</span>
+              <button class="btn btn-sm btn-outline-secondary" id="btn-pause">Pause</button>
+              <button class="btn btn-sm btn-outline-danger" id="btn-clear-log">Clear</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="log-table-wrap" id="log-scroll">
+            <table class="table table-sm table-hover table-borderless mb-0 align-middle" id="log-table">
+              <thead class="sticky-top bg-dark">
+                <tr class="text-muted small">
+                  <th class="ps-3">Time</th>
+                  <th>Client</th>
+                  <th>Domain</th>
+                  <th>Type</th>
+                  <th class="pe-3">Action</th>
+                </tr>
+              </thead>
+              <tbody id="log-tbody"></tbody>
+            </table>
+          </div>
+          <div id="log-empty" class="text-center text-muted py-4 small">Waiting for queries...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- BLOCKLIST TAB                                                      -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-blocklist" role="tabpanel">
+
+      <div class="row g-3 mb-3">
+        <!-- Auto-update status -->
+        <div class="col-md-5">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span class="text-muted small fw-semibold">AUTO-UPDATE STATUS</span>
+              <button class="btn btn-sm btn-primary" id="btn-update-now">Update Now</button>
+            </div>
+            <div class="card-body">
+              <dl class="row small mb-0">
+                <dt class="col-5 text-muted">Schedule</dt>
+                <dd class="col-7 font-monospace">Daily at 3:00 AM</dd>
+                <dt class="col-5 text-muted">Last Updated</dt>
+                <dd class="col-7 font-monospace small" id="upd-last-updated">-</dd>
+                <dt class="col-5 text-muted">Total Domains</dt>
+                <dd class="col-7 font-monospace" id="upd-total-domains">-</dd>
+                <dt class="col-5 text-muted">Added Last Run</dt>
+                <dd class="col-7 font-monospace" id="upd-added">-</dd>
+                <dt class="col-5 text-muted">Status</dt>
+                <dd class="col-7" id="upd-status"><span class="badge bg-secondary">unknown</span></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+        <!-- Scheduled sources -->
+        <div class="col-md-7">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold">SCHEDULED SOURCES</div>
+            <div class="card-body d-flex flex-column gap-2">
+              <div id="sources-list"><div class="text-muted small">Loading...</div></div>
+              <form id="form-add-source" class="d-flex gap-2 mt-auto pt-2 border-top border-secondary">
+                <input type="url" class="form-control form-control-sm font-monospace" id="input-source-url"
+                  placeholder="https://example.com/hosts.txt">
+                <button class="btn btn-sm btn-outline-success flex-shrink-0" type="submit">Add</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick block presets -->
+      <div class="card">
+        <div class="card-header text-muted small fw-semibold">QUICK BLOCK</div>
+        <div class="accordion accordion-flush" id="qb-accordion">
+
+          <!-- Ads -->
+          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#qb-ads">
+                <span class="fw-semibold me-2">Ads &amp; Ad Networks</span>
+                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-ads-count">—</span>
+              </button>
+            </h2>
+            <div id="qb-ads" class="accordion-collapse collapse">
+              <div class="p-0">
+                <table class="table table-sm table-dark table-hover mb-0">
+                  <tbody>
+                    <tr><td class="font-monospace small ps-3">doubleclick.net</td><td class="text-muted small">Google DoubleClick ad delivery</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="doubleclick.net"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">googlesyndication.com</td><td class="text-muted small">Google AdSense display ads</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="googlesyndication.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">adservice.google.com</td><td class="text-muted small">Google ad serving service</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="adservice.google.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">amazon-adsystem.com</td><td class="text-muted small">Amazon advertising network</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="amazon-adsystem.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">taboola.com</td><td class="text-muted small">Sponsored content recommendations</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="taboola.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">outbrain.com</td><td class="text-muted small">Sponsored content recommendations</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="outbrain.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">criteo.com</td><td class="text-muted small">Retargeting ad network</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="criteo.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">adsrvr.org</td><td class="text-muted small">The Trade Desk programmatic ads</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="adsrvr.org"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">rubiconproject.com</td><td class="text-muted small">Magnite/Rubicon ad exchange</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="rubiconproject.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">pubmatic.com</td><td class="text-muted small">PubMatic ad exchange</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="pubmatic.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">openx.net</td><td class="text-muted small">OpenX ad exchange</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="openx.net"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">moatads.com</td><td class="text-muted small">Oracle Moat ad analytics</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="moatads.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">media.net</td><td class="text-muted small">Yahoo/Bing contextual ads</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="media.net"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">revcontent.com</td><td class="text-muted small">Native ad network</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="revcontent.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">smartadserver.com</td><td class="text-muted small">Smart AdServer platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="smartadserver.com"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tracking -->
+          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#qb-tracking">
+                <span class="fw-semibold me-2">Tracking &amp; Analytics</span>
+                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-tracking-count">—</span>
+              </button>
+            </h2>
+            <div id="qb-tracking" class="accordion-collapse collapse">
+              <div class="p-0">
+                <table class="table table-sm table-dark table-hover mb-0">
+                  <tbody>
+                    <tr><td class="font-monospace small ps-3">google-analytics.com</td><td class="text-muted small">Google web analytics</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="google-analytics.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">googletagmanager.com</td><td class="text-muted small">Google Tag Manager scripts</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="googletagmanager.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">hotjar.com</td><td class="text-muted small">Session recording &amp; heatmaps</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="hotjar.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">clarity.ms</td><td class="text-muted small">Microsoft Clarity session recording</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="clarity.ms"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">mixpanel.com</td><td class="text-muted small">Product analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="mixpanel.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">segment.io</td><td class="text-muted small">Customer data platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="segment.io"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">amplitude.com</td><td class="text-muted small">Product analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="amplitude.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">fullstory.com</td><td class="text-muted small">Session replay &amp; tracking</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="fullstory.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">mouseflow.com</td><td class="text-muted small">Session replay &amp; heatmaps</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="mouseflow.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">newrelic.com</td><td class="text-muted small">Browser performance monitoring</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="newrelic.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">heap.io</td><td class="text-muted small">Behavioral analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="heap.io"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">scorecardresearch.com</td><td class="text-muted small">Nielsen audience measurement</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="scorecardresearch.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">quantserve.com</td><td class="text-muted small">Quantcast audience tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="quantserve.com"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Telemetry -->
+          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#qb-telemetry">
+                <span class="fw-semibold me-2">Telemetry</span>
+                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-telemetry-count">—</span>
+              </button>
+            </h2>
+            <div id="qb-telemetry" class="accordion-collapse collapse">
+              <div class="p-0">
+                <table class="table table-sm table-dark table-hover mb-0">
+                  <tbody>
+                    <tr><td class="font-monospace small ps-3">telemetry.mozilla.org</td><td class="text-muted small">Firefox telemetry reporting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="telemetry.mozilla.org"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">incoming.telemetry.mozilla.org</td><td class="text-muted small">Firefox telemetry ingestion</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="incoming.telemetry.mozilla.org"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">telemetry.microsoft.com</td><td class="text-muted small">Windows telemetry reporting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="telemetry.microsoft.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">vortex.data.microsoft.com</td><td class="text-muted small">Windows Vortex telemetry</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="vortex.data.microsoft.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">data.microsoft.com</td><td class="text-muted small">Microsoft data collection</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="data.microsoft.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">settings-win.data.microsoft.com</td><td class="text-muted small">Windows settings telemetry</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="settings-win.data.microsoft.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">watson.telemetry.microsoft.com</td><td class="text-muted small">Windows Error Reporting (Watson)</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="watson.telemetry.microsoft.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">telemetry.apple.com</td><td class="text-muted small">Apple device telemetry</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="telemetry.apple.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">metrics.icloud.com</td><td class="text-muted small">Apple iCloud metrics</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="metrics.icloud.com"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Social Trackers -->
+          <div class="accordion-item bg-transparent border-0">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#qb-social">
+                <span class="fw-semibold me-2">Social Trackers</span>
+                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-social-count">—</span>
+              </button>
+            </h2>
+            <div id="qb-social" class="accordion-collapse collapse">
+              <div class="p-0">
+                <table class="table table-sm table-dark table-hover mb-0">
+                  <tbody>
+                    <tr><td class="font-monospace small ps-3">connect.facebook.net</td><td class="text-muted small">Facebook social plugins &amp; share buttons</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="connect.facebook.net"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">graph.facebook.com</td><td class="text-muted small">Facebook Graph API tracking</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="graph.facebook.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">static.ads-twitter.com</td><td class="text-muted small">Twitter/X ad scripts</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="static.ads-twitter.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">ads.twitter.com</td><td class="text-muted small">Twitter/X advertising</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="ads.twitter.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">platform.linkedin.com</td><td class="text-muted small">LinkedIn social tracking pixel</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="platform.linkedin.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">snap.licdn.com</td><td class="text-muted small">LinkedIn Insight Tag</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="snap.licdn.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">ads.tiktok.com</td><td class="text-muted small">TikTok advertising</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="ads.tiktok.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">analytics.tiktok.com</td><td class="text-muted small">TikTok analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="analytics.tiktok.com"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- SETTINGS TAB                                                       -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-settings" role="tabpanel">
+      <div class="row g-3">
+
+        <!-- YouTube Redirect + Captive Portal -->
+        <div class="col-12 col-lg-6">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold">TRANSPARENT PROXY &amp; CAPTIVE PORTAL</div>
+            <div class="card-body">
+              <form id="form-settings">
+                <div class="mb-3">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="yt-enabled" role="switch">
+                    <label class="form-check-label fw-semibold" for="yt-enabled">Enable YouTube Transparent Proxy</label>
+                  </div>
+                  <div class="form-text text-muted">
+                    Redirects YouTube DNS to this server. nginx intercepts HTTPS, strips ads, and forwards to real YouTube.
+                    Devices must have the CA certificate installed first.
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="cp-enabled" role="switch">
+                    <label class="form-check-label fw-semibold" for="cp-enabled">Enable Captive Portal</label>
+                  </div>
+                  <div class="form-text text-muted">
+                    Shows a certificate install page to new devices. OS captive portal detection domains resolve to this server.
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <div class="form-label small text-muted">Server IP Address</div>
+                  <div class="font-monospace fw-bold text-success fs-5" id="yt-ip-display">—</div>
+                  <div class="form-text text-muted">Auto-detected from server environment. Used for YouTube redirect and captive portal DNS responses. Hot-reloaded within 30 seconds.</div>
+                </div>
+                <button type="submit" class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+                <span class="ms-2 text-muted small" id="settings-save-status"></span>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- DNS info (minimal) -->
+        <div class="col-12 col-lg-6">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold">DNS INFO</div>
+            <div class="card-body">
+              <dl class="row mb-0 small">
+                <dt class="col-5 text-muted">Server IP</dt>
+                <dd class="col-7 font-monospace text-success fw-bold" id="info-server-ip">-</dd>
+                <dt class="col-5 text-muted">Upstream DNS</dt>
+                <dd class="col-7 font-monospace" id="info-upstream-dns">-</dd>
+                <dt class="col-5 text-muted">Blocked Domains</dt>
+                <dd class="col-7 font-monospace" id="settings-bl-count">-</dd>
+              </dl>
+              <a href="setup" class="btn btn-sm btn-outline-secondary mt-3">Setup Guide &rarr;</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
+</div><!-- /container -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>window.BASE_PATH = "{{ root_path }}";</script>
+<script src="static/app.js"></script>
+</body>
+</html>

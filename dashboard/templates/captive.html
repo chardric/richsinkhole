@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RichSinkhole — Ad-Free YouTube</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #da3633;
+      --green: #238636;
+      --green-bright: #3fb950;
+      --blue: #1f6feb;
+      --code-bg: #0d1117;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 32px 16px 48px;
+    }
+
+    /* ── Header ── */
+    .header { text-align: center; margin-bottom: 32px; }
+    .logo {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 1rem; font-weight: 700; color: var(--muted);
+      letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 20px;
+    }
+    .logo-dot { color: var(--accent); }
+    .hero-title {
+      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      font-weight: 800; line-height: 1.2;
+      letter-spacing: -0.02em; margin-bottom: 10px;
+    }
+    .hero-title span { color: var(--accent); }
+    .hero-sub { font-size: 0.95rem; color: var(--muted); line-height: 1.5; max-width: 340px; margin: 0 auto; }
+
+    /* ── Card ── */
+    .card {
+      width: 100%; max-width: 420px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px; margin-bottom: 12px;
+    }
+    .card-label {
+      font-size: 0.7rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 14px 20px; border-radius: 10px; border: none;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+      text-decoration: none; transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { opacity: 0.82; transform: scale(0.98); }
+    .btn-primary { background: var(--green); color: #fff; }
+    .btn-secondary {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border); font-size: 0.9rem; padding: 11px 20px;
+    }
+    .btn-secondary:hover { color: var(--text); border-color: var(--muted); }
+    .btn-confirm { background: var(--blue); color: #fff; }
+    .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn + .btn { margin-top: 8px; }
+
+    /* ── Platform selector ── */
+    .platforms {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 16px;
+    }
+    .plat-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 8px 4px; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); font-size: 0.65rem;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .plat-btn .icon { font-size: 1.3rem; line-height: 1; }
+    .plat-btn.active {
+      background: var(--accent); color: #fff; border-color: var(--accent);
+    }
+    .plat-btn:not(.active):hover { border-color: var(--muted); color: var(--text); }
+
+    /* ── Steps ── */
+    .steps { display: none; }
+    .steps.visible { display: block; }
+    .step {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-n {
+      flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); color: #fff; font-size: 0.7rem; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; margin-top: 1px;
+    }
+    .step-n.done { background: var(--green-bright); }
+    .step-body { font-size: 0.88rem; color: #c9d1d9; line-height: 1.45; }
+    .step-body strong { color: var(--text); }
+
+    /* ── Code block ── */
+    .code-block {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 40px 12px 14px;
+      position: relative; margin: 8px 0 4px;
+    }
+    .code-block code { font-size: 0.8rem; color: #79c0ff; word-break: break-all; display: block; }
+    .copy-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: #21262d; border: 1px solid var(--border); border-radius: 5px;
+      color: var(--muted); font-size: 0.7rem; padding: 3px 8px; cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text); }
+
+    /* ── Note ── */
+    .note { font-size: 0.78rem; color: var(--muted); margin-top: 10px; line-height: 1.4; }
+    .note a { color: #79c0ff; }
+
+    /* ── Divider ── */
+    .divider {
+      width: 100%; max-width: 420px;
+      display: flex; align-items: center; gap: 12px; margin: 4px 0;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+    .divider span { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+    /* ── Success state ── */
+    .success-wrap {
+      width: 100%; max-width: 420px;
+      text-align: center;
+    }
+    .success-icon {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: linear-gradient(135deg, #238636, #3fb950);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; margin: 0 auto 20px;
+    }
+    .success-title { font-size: 1.6rem; font-weight: 800; margin-bottom: 8px; }
+    .success-body { font-size: 0.92rem; color: var(--muted); line-height: 1.55; margin-bottom: 24px; }
+    .badges {
+      display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    .badge {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 0.8rem; color: var(--text);
+    }
+    .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-bright); }
+
+    /* ── Status ── */
+    #status-msg { font-size: 0.82rem; color: var(--muted); text-align: center; margin-top: 8px; min-height: 18px; }
+  </style>
+</head>
+<body>
+
+{% if cert_confirmed %}
+<!-- ═══════════════════════ SUCCESS STATE ═══════════════════════ -->
+<div class="header">
+  <div class="logo"><span class="logo-dot">●</span> RichSinkhole</div>
+</div>
+
+<div class="success-wrap">
+  <div class="success-icon">✓</div>
+  <h1 class="success-title">You're all set!</h1>
+  <p class="success-body">
+    YouTube ads are now blocked on this device.<br>
+    Your internet connection is active and protected.
+  </p>
+  <div class="badges">
+    <div class="badge"><span class="badge-dot"></span> Ads blocked</div>
+    <div class="badge"><span class="badge-dot"></span> Trackers blocked</div>
+    <div class="badge"><span class="badge-dot"></span> DNS secured</div>
+  </div>
+  <p class="note" style="text-align:center">You can close this page.</p>
+</div>
+
+{% else %}
+<!-- ═══════════════════════ OFFER STATE ═══════════════════════ -->
+<div class="header">
+  <div class="logo"><span class="logo-dot">●</span> RichSinkhole</div>
+  <h1 class="hero-title">YouTube<br><span>without ads</span></h1>
+  <p class="hero-sub">Install a certificate to block YouTube ads on this device — no extension needed.</p>
+</div>
+
+<!-- Platform + Install -->
+<div class="card">
+  <div class="card-label">Your device</div>
+  <div class="platforms">
+    <button class="plat-btn" id="plat-ios" onclick="setPlat('ios')">
+      <span class="icon">📱</span>iPhone
+    </button>
+    <button class="plat-btn" id="plat-mac" onclick="setPlat('mac')">
+      <span class="icon">💻</span>Mac
+    </button>
+    <button class="plat-btn" id="plat-android" onclick="setPlat('android')">
+      <span class="icon">🤖</span>Android
+    </button>
+    <button class="plat-btn" id="plat-windows" onclick="setPlat('windows')">
+      <span class="icon">🪟</span>Windows
+    </button>
+    <button class="plat-btn" id="plat-linux" onclick="setPlat('linux')">
+      <span class="icon">🐧</span>Linux
+    </button>
+  </div>
+
+  <!-- Install button (platform-specific) -->
+  <div id="install-btn-wrap"></div>
+
+  <!-- Steps per platform -->
+  <div class="steps" id="steps-ios" style="margin-top:14px">
+    <div class="step"><div class="step-n">1</div><div class="step-body">Tap <strong>Install Profile</strong> above — Settings opens automatically</div></div>
+    <div class="step"><div class="step-n">2</div><div class="step-body">Tap <strong>Profile Downloaded</strong> at the top of Settings → <strong>Install</strong></div></div>
+    <div class="step"><div class="step-n">3</div><div class="step-body">Go to <strong>Settings → General → About → Certificate Trust Settings</strong></div></div>
+    <div class="step"><div class="step-n">4</div><div class="step-body">Enable full trust for <strong>RichSinkhole CA</strong> → Continue</div></div>
+  </div>
+
+  <div class="steps" id="steps-mac" style="margin-top:14px">
+    <div class="step"><div class="step-n">1</div><div class="step-body">Click <strong>Install Profile</strong> above — System Settings opens</div></div>
+    <div class="step"><div class="step-n">2</div><div class="step-body">Go to <strong>Privacy &amp; Security → Profiles</strong> → click <strong>Install</strong></div></div>
+    <div class="step"><div class="step-n">3</div><div class="step-body">Open <strong>Keychain Access</strong> → find <strong>RichSinkhole CA</strong> → double-click</div></div>
+    <div class="step"><div class="step-n">4</div><div class="step-body">Expand <strong>Trust</strong> → set <em>When using this certificate</em> to <strong>Always Trust</strong></div></div>
+  </div>
+
+  <div class="steps" id="steps-android" style="margin-top:14px">
+    <div class="step"><div class="step-n">1</div><div class="step-body">Tap <strong>Download Certificate</strong> above</div></div>
+    <div class="step"><div class="step-n">2</div><div class="step-body"><strong>Settings → Security → Install a certificate → CA Certificate</strong></div></div>
+    <div class="step"><div class="step-n">3</div><div class="step-body">Tap <strong>Install Anyway</strong> → select <code>richsinkhole-ca.crt</code></div></div>
+    <p class="note">Note: YouTube app won't use this cert — it ignores user CAs. Use <strong>YouTube ReVanced</strong> for the app.</p>
+  </div>
+
+  <div class="steps" id="steps-windows" style="margin-top:14px">
+    <div class="step"><div class="step-n">1</div><div class="step-body">Click <strong>Download Certificate</strong> above → double-click the file</div></div>
+    <div class="step"><div class="step-n">2</div><div class="step-body">Click <strong>Install Certificate</strong> → select <strong>Local Machine</strong> → Next</div></div>
+    <div class="step"><div class="step-n">3</div><div class="step-body">Choose <strong>Trusted Root Certification Authorities</strong> → OK → Finish</div></div>
+    <div class="step"><div class="step-n">4</div><div class="step-body">Restart your browser</div></div>
+  </div>
+
+  <div class="steps" id="steps-linux" style="margin-top:14px">
+    <div class="step"><div class="step-n">1</div><div class="step-body">Run this command in a terminal — installs system-wide and into Firefox/Chrome:</div></div>
+    <div class="code-block">
+      <code id="linux-cmd">curl -fsSL http://{{ host_ip }}/install-cert.sh | bash</code>
+      <button class="copy-btn" onclick="copyCmd()">Copy</button>
+    </div>
+    <div class="step"><div class="step-n">2</div><div class="step-body">Enter your sudo password when prompted, then restart your browser</div></div>
+    <p class="note">Need <code>libnss3-tools</code> for browser install: <code>sudo apt install libnss3-tools</code></p>
+  </div>
+</div>
+
+<!-- Confirm -->
+<div class="card">
+  <div class="card-label">Already installed?</div>
+  <button class="btn btn-confirm" id="btn-confirm" onclick="confirmInstall()">
+    ✓ Mark this device as configured
+  </button>
+  <div id="status-msg"></div>
+</div>
+
+<div class="divider"><span>or</span></div>
+
+<div style="width:100%;max-width:420px">
+  <button class="btn btn-secondary" onclick="skipPortal()">
+    Skip for now — I'll do this later
+  </button>
+</div>
+
+{% endif %}
+
+<script>
+const HOST = '{{ host_ip }}';
+
+const PLAT_INSTALL = {
+  ios:     { label: '📲 Install Certificate Profile', href: `/ca.mobileconfig`, download: false },
+  mac:     { label: '💾 Install Certificate Profile', href: `/ca.mobileconfig`, download: false },
+  android: { label: '📥 Download Certificate',        href: `/ca.crt`,          download: true  },
+  windows: { label: '📥 Download Certificate',        href: `/ca.crt`,          download: true  },
+  linux:   { label: null },
+};
+
+let currentPlat = null;
+
+function detectPlat() {
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return 'ios';
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return 'ios';
+  if (/Macintosh|Mac OS X/.test(ua)) return 'mac';
+  if (/Android/.test(ua)) return 'android';
+  if (/Windows/.test(ua)) return 'windows';
+  if (/Linux/.test(ua)) return 'linux';
+  return 'ios';
+}
+
+function setPlat(p) {
+  currentPlat = p;
+  document.querySelectorAll('.plat-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('plat-' + p).classList.add('active');
+  document.querySelectorAll('.steps').forEach(s => s.classList.remove('visible'));
+  const s = document.getElementById('steps-' + p);
+  if (s) s.classList.add('visible');
+
+  const wrap = document.getElementById('install-btn-wrap');
+  const cfg = PLAT_INSTALL[p];
+  if (!cfg || !cfg.label) { wrap.innerHTML = ''; return; }
+  const a = document.createElement('a');
+  a.className = 'btn btn-primary';
+  a.textContent = cfg.label;
+  a.href = cfg.href;
+  if (cfg.download) a.download = '';
+  wrap.innerHTML = '';
+  wrap.appendChild(a);
+}
+
+function copyCmd() {
+  const text = document.getElementById('linux-cmd').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+async function confirmInstall() {
+  const btn = document.getElementById('btn-confirm');
+  const msg = document.getElementById('status-msg');
+  btn.disabled = true;
+  msg.textContent = 'Saving…';
+  try {
+    const res = await fetch('/captive/accept', { method: 'POST' });
+    if (res.ok) {
+      location.reload();
+    } else {
+      msg.textContent = 'Error — try again.';
+      btn.disabled = false;
+    }
+  } catch {
+    msg.textContent = 'Network error — try again.';
+    btn.disabled = false;
+  }
+}
+
+async function skipPortal() {
+  try { await fetch('/captive/skip', { method: 'POST' }); } catch {}
+  // Device is already whitelisted from page load — just close/navigate away
+  window.close();
+  // If window.close() doesn't work (most browsers block it), show a message
+  setTimeout(() => {
+    document.body.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:24px;text-align:center">
+        <div style="font-size:2rem;margin-bottom:16px">✓</div>
+        <p style="color:#e6edf3;font-size:1.1rem;font-weight:600;margin-bottom:8px">You're connected</p>
+        <p style="color:#8b949e;font-size:0.88rem">Close this tab and browse normally.<br>Visit <strong>/richsinkhole/setup</strong> anytime to install the cert.</p>
+      </div>`;
+  }, 200);
+}
+
+// Auto-detect on load
+setPlat(detectPlat());
+</script>
+</body>
+</html>

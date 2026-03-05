@@ -1,0 +1,12 @@
+upstream_dns: unbound
+log_level: info
+youtube_redirect_enabled: true
+youtube_redirect_ip: ""
+youtube_domains:
+  - youtube.com
+  - www.youtube.com
+  - youtu.be
+  - yt.be
+  - m.youtube.com
+captive_portal_enabled: false
+captive_portal_ip: ""

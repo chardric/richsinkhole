@@ -1,0 +1,25 @@
+sources:
+  - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+  - https://adaway.org/hosts.txt
+  - https://raw.githubusercontent.com/anudeepND/blacklist/master/adservers.txt
+  # Adult content blocking
+  - https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts
+  - https://raw.githubusercontent.com/mhhakim/pihole-blocklist/master/porn.txt
+  - https://blocklistproject.github.io/Lists/porn.txt
+
+update_interval_hours: 24
+
+# Webhook notifications (optional — remove or leave webhook_url blank to disable)
+notifications:
+  webhook_url: ""
+  events:
+    - blocklist_updated
+    - daily_summary
+    - new_client
+
+whitelist:
+  - youtube.com
+  - www.youtube.com
+  - youtu.be
+  - yt.be
+  - m.youtube.com

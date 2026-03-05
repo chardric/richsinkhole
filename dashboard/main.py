@@ -1,0 +1,318 @@
+import base64
+import os
+import sqlite3
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import aiosqlite
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from routers import blocklist, doh, health, logs, qr, settings, stats, updater
+
+SINKHOLE_DB = "/data/sinkhole.db"
+BLOCKLIST_DB = "/data/blocklist.db"
+CERT_PATH = "/certs/ca.crt"
+
+HOST_IP = os.getenv("HOST_IP", "")
+# Sub-path prefix when served behind a reverse proxy (e.g. /richsinkhole)
+ROOT_PATH = os.getenv("ROOT_PATH", "").rstrip("/")
+
+
+def _portal_url(request: Request) -> str:
+    """Return absolute URL to the captive portal page."""
+    if HOST_IP:
+        return f"http://{HOST_IP}/captive-portal"
+    # Fall back to the request's own host
+    return str(request.base_url).rstrip("/") + "/captive-portal"
+
+
+def _real_ip(request: Request) -> str:
+    return (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.client.host
+    )
+
+
+def _is_whitelisted(ip: str) -> bool:
+    try:
+        with sqlite3.connect(SINKHOLE_DB) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM captive_whitelist WHERE ip=?", (ip,)
+            ).fetchone()
+            return row is not None
+    except Exception:
+        return False
+
+
+def _whitelist_ip(ip: str) -> None:
+    with sqlite3.connect(SINKHOLE_DB) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO captive_whitelist (ip, ts) VALUES (?, datetime('now'))",
+            (ip,),
+        )
+        conn.commit()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    for db_path in (SINKHOLE_DB, BLOCKLIST_DB):
+        async with aiosqlite.connect(db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.commit()
+    # Captive portal whitelist table
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS captive_whitelist (
+                ip TEXT PRIMARY KEY,
+                ts TEXT NOT NULL
+            )
+        """)
+        await db.commit()
+    yield
+
+
+app = FastAPI(title="RichSinkhole Dashboard", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/static", StaticFiles(directory="/dashboard/static"), name="static")
+templates = Jinja2Templates(directory="/dashboard/templates")
+
+app.include_router(stats.router, prefix="/api")
+app.include_router(logs.router, prefix="/api")
+app.include_router(blocklist.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")
+app.include_router(updater.router, prefix="/api")
+app.include_router(qr.router, prefix="/api")
+app.include_router(health.router)
+
+app.include_router(doh.router)
+
+
+# ─── Captive portal detection endpoints ────────────────────────────────────────
+
+# Expected success responses per OS (path suffix → response)
+_CAPTIVE_SUCCESS = {
+    "hotspot-detect.html":          (200, "text/html",  "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"),
+    "library/test/success.html":    (200, "text/html",  "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"),
+    "success.html":                 (200, "text/html",  "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"),
+    "canonical.html":               (200, "text/html",  '<meta http-equiv="refresh" content="0;url=https://support.mozilla.org/kb/captive-portal">'),
+    "generate_204":                 (204, "text/plain", ""),
+    "check_network_status.txt":     (204, "text/plain", ""),
+    "connecttest.txt":              (200, "text/plain", "Microsoft Connect Test"),
+    "ncsi.txt":                     (200, "text/plain", "Microsoft NCSI"),
+    "success.txt":                  (200, "text/plain", ""),
+}
+
+
+@app.api_route("/captive/{path:path}", methods=["GET", "HEAD"])
+async def captive_check(request: Request, path: str):
+    client_ip = _real_ip(request)
+    if _is_whitelisted(client_ip):
+        key = path.lstrip("/")
+        status, ctype, body = _CAPTIVE_SUCCESS.get(key, (200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"))
+        return Response(content=body.encode(), status_code=status, media_type=ctype)
+    return RedirectResponse(url=_portal_url(request), status_code=302)
+
+
+@app.post("/captive/accept")
+async def captive_accept(request: Request):
+    client_ip = _real_ip(request)
+    _whitelist_ip(client_ip)
+    return JSONResponse({"status": "ok", "ip": client_ip})
+
+
+@app.post("/captive/skip")
+async def captive_skip(request: Request):
+    """Skip the cert install — whitelist the device so internet works."""
+    client_ip = _real_ip(request)
+    _whitelist_ip(client_ip)
+    return JSONResponse({"status": "ok", "ip": client_ip})
+
+
+@app.get("/captive-portal", response_class=HTMLResponse)
+async def captive_portal(request: Request):
+    client_ip = _real_ip(request)
+    cert_confirmed = _is_whitelisted(client_ip)
+    host_ip = HOST_IP or request.headers.get("host", "").split(":")[0]
+    # Auto-whitelist on page visit — internet access is never blocked
+    if not cert_confirmed:
+        _whitelist_ip(client_ip)
+    return templates.TemplateResponse("captive.html", {
+        "request": request,
+        "host_ip": host_ip,
+        "cert_confirmed": cert_confirmed,
+    })
+
+
+# ─── CA cert and mobileconfig ─────────────────────────────────────────────────
+
+@app.get("/install-cert.sh")
+async def install_cert_script(request: Request):
+    server_ip = HOST_IP or request.headers.get("host", "").split(":")[0]
+    script = f"""#!/usr/bin/env bash
+set -e
+
+SERVER="{server_ip}"
+CERT_URL="http://$SERVER/ca.crt"
+CERT_NAME="richsinkhole-ca"
+CERT_FILE="/tmp/$CERT_NAME.crt"
+
+echo "==> Downloading RichSinkhole CA certificate..."
+curl -fsSL "$CERT_URL" -o "$CERT_FILE"
+
+echo "==> Installing system-wide (requires sudo)..."
+sudo cp "$CERT_FILE" "/usr/local/share/ca-certificates/$CERT_NAME.crt"
+sudo update-ca-certificates
+
+install_nss() {{
+    local db="$1"
+    if [ -d "$db" ]; then
+        certutil -A -n "RichSinkhole CA" -t "CT,," -i "$CERT_FILE" -d "sql:$db" 2>/dev/null && \\
+            echo "   Installed in: $db" || true
+    fi
+}}
+
+if command -v certutil &>/dev/null; then
+    echo "==> Installing in browser NSS databases..."
+    # Firefox profiles
+    for db in "$HOME/.mozilla/firefox/"*.default* "$HOME/.mozilla/firefox/"*.default-release*; do
+        install_nss "$db"
+    done
+    # Flatpak Firefox
+    for db in "$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox/"*.default*; do
+        install_nss "$db"
+    done
+    # Chrome / Chromium
+    mkdir -p "$HOME/.pki/nssdb"
+    certutil -d "sql:$HOME/.pki/nssdb" -N --empty-password 2>/dev/null || true
+    install_nss "$HOME/.pki/nssdb"
+else
+    echo "   [!] certutil not found — skipping browser install."
+    echo "   Run: sudo apt install libnss3-tools"
+    echo "   Then re-run this script."
+fi
+
+echo "==> Whitelisting this device..."
+curl -fsS -X POST "http://$SERVER/captive/accept" -o /dev/null
+
+echo ""
+echo "Done! YouTube ads are now blocked on this device."
+echo "You may need to restart your browser for the certificate to take effect."
+"""
+    return Response(
+        content=script.encode(),
+        media_type="text/plain",
+        headers={"Content-Disposition": 'attachment; filename="install-cert.sh"'},
+    )
+
+
+@app.get("/ca.crt")
+async def ca_cert():
+    try:
+        content = Path(CERT_PATH).read_bytes()
+    except FileNotFoundError:
+        return Response(content=b"Certificate not found", status_code=404)
+    return Response(
+        content=content,
+        media_type="application/x-x509-ca-cert",
+        headers={"Content-Disposition": 'attachment; filename="richsinkhole-ca.crt"'},
+    )
+
+
+@app.get("/ca.mobileconfig")
+async def ca_mobileconfig():
+    try:
+        pem = Path(CERT_PATH).read_text()
+    except FileNotFoundError:
+        return Response(content=b"Certificate not found", status_code=404)
+    # Strip PEM headers to get raw base64 DER
+    cert_b64 = "\n".join(
+        line for line in pem.strip().splitlines() if not line.startswith("-----")
+    )
+    profile = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadCertificateFileName</key>
+      <string>richsinkhole-ca.crt</string>
+      <key>PayloadContent</key>
+      <data>{cert_b64}</data>
+      <key>PayloadDescription</key>
+      <string>RichSinkhole CA Certificate</string>
+      <key>PayloadDisplayName</key>
+      <string>RichSinkhole CA</string>
+      <key>PayloadIdentifier</key>
+      <string>com.richsinkhole.ca.cert</string>
+      <key>PayloadType</key>
+      <string>com.apple.security.root</string>
+      <key>PayloadUUID</key>
+      <string>{str(uuid.uuid4()).upper()}</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+    </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Installs the RichSinkhole CA certificate for transparent YouTube ad blocking</string>
+  <key>PayloadDisplayName</key>
+  <string>RichSinkhole Network</string>
+  <key>PayloadIdentifier</key>
+  <string>com.richsinkhole.profile</string>
+  <key>PayloadOrganization</key>
+  <string>RichSinkhole</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>{str(uuid.uuid4()).upper()}</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict></plist>"""
+    return Response(
+        content=profile.encode(),
+        media_type="application/x-apple-aspen-config",
+        headers={"Content-Disposition": 'attachment; filename="richsinkhole.mobileconfig"'},
+    )
+
+
+# ─── Main pages ───────────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "root_path": ROOT_PATH,
+    })
+
+
+@app.get("/setup", response_class=HTMLResponse)
+async def setup(request: Request):
+    import socket
+    host_ip = HOST_IP
+    if not host_ip:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            host_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            host_ip = "YOUR_SERVER_IP"
+    http_port = os.getenv("HTTP_PORT", "80")
+    return templates.TemplateResponse("setup.html", {
+        "request": request,
+        "root_path": ROOT_PATH,
+        "host_ip": host_ip,
+        "http_port": http_port,
+    })
