@@ -1,3 +1,8 @@
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 """
 DNS-over-HTTPS (RFC 8484) endpoint.
 Accepts GET (dns= param) and POST (raw body) and forwards to the DNS container.

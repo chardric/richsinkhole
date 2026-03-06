@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+ * Developed by: Richard R. Ayuyang, PhD
+ *               Professor II, CSU
+ * All rights reserved.
+ */
+
 "use strict";
 
 // Sub-path prefix injected by the server (e.g. "/richsinkhole" when behind nginx).

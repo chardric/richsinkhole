@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 # deploy.sh — Build arm64 Docker images locally and push to RPi.
 # No source code is copied to RPi. It loads and runs pre-built images only.
 #

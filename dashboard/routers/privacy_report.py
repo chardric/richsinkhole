@@ -1,3 +1,8 @@
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 """
 IoT Privacy Leak Report — maps DNS queries per device to their parent company.
 """

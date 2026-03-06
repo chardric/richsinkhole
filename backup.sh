@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 # backup.sh — Back up all RichSinkhole persistent data to a single archive.
 #
 # What's backed up:

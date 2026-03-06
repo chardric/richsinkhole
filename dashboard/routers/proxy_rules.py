@@ -1,3 +1,8 @@
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 """
 Reverse Proxy rule manager.
 Writes per-hostname nginx server blocks to /nginx/conf.d/ and reloads nginx

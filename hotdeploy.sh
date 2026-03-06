@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 # hotdeploy.sh — Fast dev deploy: rsync source into running container, restart.
 # No image rebuild. Use only when Python/JS/HTML files changed, NOT dependencies.
 #

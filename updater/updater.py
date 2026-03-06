@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 """
 RichSinkhole Blocklist Updater
 Fetches remote blocklists on a schedule and upserts into blocklist.db.

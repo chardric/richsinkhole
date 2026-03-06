@@ -1,3 +1,8 @@
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 """
 Simple auth middleware using HMAC-signed session cookies.
 Password stored as pbkdf2 hash in config.yml. Zero new dependencies.

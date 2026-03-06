@@ -1,3 +1,8 @@
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD
+#               Professor II, CSU
+# All rights reserved.
+
 import asyncio
 import aiosqlite
 from fastapi import APIRouter, HTTPException
