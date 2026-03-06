@@ -134,6 +134,7 @@ services:
     volumes:
       - ./nginx/${NGINX_CONFIG:-nginx-standalone.conf}:/etc/nginx/nginx.conf:ro
       - ./nginx/404.html:/usr/share/nginx/404.html:ro
+      - ./nginx/50x.html:/usr/share/nginx/50x.html:ro
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./nginx/conf.d:/etc/nginx/conf.d
     depends_on:
