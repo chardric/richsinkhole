@@ -28,6 +28,9 @@ echo "==> Target: $REMOTE ($PLATFORM)"
 echo "==> Services to deploy: ${SERVICES[*]}"
 echo ""
 
+# Ensure buildx builder uses Cloudflare DNS (avoids host DNS issues during build)
+docker exec buildx_buildkit_${BUILDER}0 sh -c "echo 'nameserver 1.1.1.1' > /etc/resolv.conf" 2>/dev/null || true
+
 for svc in "${SERVICES[@]}"; do
   IMAGE="richsinkhole-${svc}:latest"
   CTX="./${svc}"

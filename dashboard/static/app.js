@@ -138,15 +138,31 @@ function prependLogRow(entry) {
   empty.style.display = "none";
 
   const tr = document.createElement("tr");
-  const badgeClass = { blocked: "badge-blocked", allowed: "badge-forwarded", forwarded: "badge-forwarded", redirected: "badge-redirected", failed: "badge-failed" }[entry.action] || "badge-forwarded";
+  const ACTION_META = {
+    blocked:   { cls: "badge-blocked",   label: "Blocked"         },
+    forwarded: { cls: "badge-forwarded", label: "Forwarded"       },
+    allowed:   { cls: "badge-forwarded", label: "Forwarded"       },
+    cached:    { cls: "badge-cached",    label: "Cached"          },
+    youtube:   { cls: "badge-youtube",   label: "YouTube"         },
+    captive:   { cls: "badge-captive",   label: "Captive Portal"  },
+    redirected:{ cls: "badge-captive",   label: "Redirected"      },
+    failed:    { cls: "badge-failed",    label: "Failed"          },
+    nxdomain:  { cls: "badge-failed",    label: "NXDOMAIN"        },
+    ratelimited:{ cls: "badge-failed",   label: "Rate Limited"    },
+  };
+  const meta = ACTION_META[entry.action] || { cls: "badge-forwarded", label: entry.action };
+  const detail = (() => {
+    const parts = [];
+    if (entry.upstream) parts.push(escHtml(entry.upstream));
+    if (entry.response_ms != null) parts.push(entry.response_ms + "ms");
+    return parts.length ? `<div class="text-muted" style="font-size:0.68rem;margin-top:1px">${parts.join(" · ")}</div>` : "";
+  })();
   tr.innerHTML = `
     <td class="ps-3 text-muted small font-monospace">${escHtml(entry.ts.slice(11))}</td>
     <td class="font-monospace small">${escHtml(entry.client_ip)}</td>
     <td class="font-monospace small text-truncate" style="max-width:300px" title="${escHtml(entry.domain)}">${escHtml(entry.domain)}</td>
     <td class="small text-muted">${escHtml(entry.qtype)}</td>
-    <td class="pe-3">
-      <span class="badge ${badgeClass}">${escHtml(entry.action)}</span>
-    </td>`;
+    <td class="pe-3"><span class="badge ${meta.cls}">${meta.label}</span>${detail}</td>`;
   tbody.insertBefore(tr, tbody.firstChild);
 
   logCount++;
@@ -206,6 +222,27 @@ async function togglePreset(toggle) {
     showToast(err.message, "danger");
   } finally {
     toggle.disabled = false;
+  }
+}
+
+// ============================================================
+// YouTube auto-blocked CDN nodes
+// ============================================================
+async function loadYTAutoBlocked() {
+  const body = document.getElementById("yt-autoblocked-body");
+  try {
+    const r = await api("GET", "/api/blocklist/yt-autoblocked");
+    if (!r.domains.length) {
+      body.innerHTML = '<div class="text-muted small text-center py-2">No YouTube CDN nodes auto-blocked yet. Browse YouTube on your network — nodes will be detected and blocked automatically.</div>';
+      return;
+    }
+    body.innerHTML = `
+      <div class="text-muted small mb-2">${r.total} node${r.total !== 1 ? "s" : ""} auto-blocked</div>
+      <div class="font-monospace small" style="max-height:160px;overflow-y:auto;background:#0d1117;border-radius:4px;padding:8px">
+        ${r.domains.map(d => `<div class="text-muted">${escHtml(d.domain)}</div>`).join("")}
+      </div>`;
+  } catch (_) {
+    body.innerHTML = '<div class="text-muted small text-center py-2">Could not load YouTube CDN nodes.</div>';
   }
 }
 
@@ -317,6 +354,66 @@ async function saveSettings() {
 }
 
 // ============================================================
+// Security
+// ============================================================
+async function loadSecurityStats() {
+  try {
+    const s = await api("GET", "/api/security/stats");
+    document.getElementById("sec-active-blocks").textContent = s.active_blocks;
+    document.getElementById("sec-ratelimited").textContent = s.ratelimited_24h.toLocaleString();
+    document.getElementById("sec-nxdomain").textContent = s.nxdomain_24h.toLocaleString();
+    document.getElementById("sec-total-blocks").textContent = s.total_blocks.toLocaleString();
+  } catch (_) {}
+}
+
+async function loadSecurityBlocks() {
+  const tbody = document.getElementById("sec-blocks-tbody");
+  const empty = document.getElementById("sec-blocks-empty");
+  try {
+    const blocks = await api("GET", "/api/security/blocks");
+    if (!blocks.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "";
+      return;
+    }
+    empty.style.display = "none";
+    tbody.innerHTML = blocks.map(b => `
+      <tr>
+        <td class="ps-3 font-monospace small">${escHtml(b.ip)}</td>
+        <td><span class="badge bg-danger">${escHtml(b.reason_label)}</span></td>
+        <td class="small text-muted">${b.query_count.toLocaleString()}</td>
+        <td class="small text-muted font-monospace">${escHtml(b.blocked_at)}</td>
+        <td class="small text-muted font-monospace">${escHtml(b.expires_at)}</td>
+        <td class="pe-3 text-end">
+          <button class="btn btn-sm btn-outline-secondary py-0 btn-unblock"
+            data-ip="${escHtml(b.ip)}" style="font-size:0.7rem">Unblock</button>
+        </td>
+      </tr>`).join("");
+    tbody.querySelectorAll(".btn-unblock").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await api("DELETE", `/api/security/blocks/${encodeURIComponent(btn.dataset.ip)}`);
+          showToast(`Unblocked: ${btn.dataset.ip}`, "success");
+          loadSecurityBlocks();
+          loadSecurityStats();
+        } catch (err) {
+          btn.disabled = false;
+          showToast("Unblock failed: " + err.message, "danger");
+        }
+      });
+    });
+  } catch (_) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-muted small text-center py-3">Could not load blocks.</td></tr>`;
+    empty.style.display = "none";
+  }
+}
+
+async function loadSecurity() {
+  await Promise.all([loadSecurityStats(), loadSecurityBlocks()]);
+}
+
+// ============================================================
 // Health check
 // ============================================================
 async function loadHealth() {
@@ -366,12 +463,15 @@ function bindEvents() {
     toggle.addEventListener("change", () => togglePreset(toggle));
   });
 
-  // Tab switch: load updater info + preset status when Blocklist tab is shown
+  // Tab switch: load updater info + preset status + YT auto-blocked when Blocklist tab is shown
   document.getElementById("tab-bl-btn").addEventListener("shown.bs.tab", () => {
     loadUpdaterStatus();
     loadSources();
     loadPresetStatus();
+    loadYTAutoBlocked();
   });
+
+  document.getElementById("btn-refresh-yt").addEventListener("click", loadYTAutoBlocked);
 
   // Update Now button
   document.getElementById("btn-update-now").addEventListener("click", triggerUpdate);
@@ -408,6 +508,10 @@ function bindEvents() {
       btn.textContent = "Add";
     }
   });
+
+  // Security tab
+  document.getElementById("tab-security-btn").addEventListener("shown.bs.tab", loadSecurity);
+  document.getElementById("btn-refresh-security").addEventListener("click", loadSecurity);
 
   // Tab switch: load settings when Settings tab is shown
   document.getElementById("tab-settings-btn").addEventListener("shown.bs.tab", loadSettings);

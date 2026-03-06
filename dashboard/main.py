@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from routers import blocklist, doh, health, logs, qr, settings, stats, updater
+from routers import blocklist, doh, health, logs, qr, security, settings, stats, updater
 
 SINKHOLE_DB = "/data/sinkhole.db"
 BLOCKLIST_DB = "/data/blocklist.db"
@@ -95,6 +95,7 @@ app.include_router(blocklist.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(updater.router, prefix="/api")
 app.include_router(qr.router, prefix="/api")
+app.include_router(security.router, prefix="/api")
 app.include_router(health.router)
 
 app.include_router(doh.router)

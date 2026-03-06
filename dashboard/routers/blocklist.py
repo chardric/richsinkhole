@@ -148,3 +148,20 @@ async def import_blocklist(body: ImportIn):
         await db.commit()
 
     return {"imported": len(domains), "status": "ok"}
+
+
+@router.get("/blocklist/yt-autoblocked")
+async def yt_autoblocked():
+    """Show YouTube CDN nodes auto-blocked by the sinkhole (googlevideo.com + c.youtube.com)."""
+    yt_re = re.compile(
+        r"^rr?\d+(?:---|\.)sn-[a-z0-9][-a-z0-9]*\.(googlevideo|c\.youtube)\.com$",
+        re.IGNORECASE,
+    )
+    async with aiosqlite.connect(BLOCKLIST_DB, timeout=10) as db:
+        rows = await db.execute_fetchall(
+            """SELECT domain, added_at FROM blocked_domains
+               WHERE (domain LIKE '%.googlevideo.com' OR domain LIKE '%.c.youtube.com')
+               ORDER BY added_at DESC LIMIT 200"""
+        )
+    domains = [{"domain": r[0], "added_at": r[1]} for r in rows if yt_re.match(r[0])]
+    return {"domains": domains, "total": len(domains)}

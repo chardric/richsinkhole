@@ -18,8 +18,8 @@ services:
     depends_on:
       - unbound
     ports:
-      - "${HOST_IP:-0.0.0.0}:53:53/udp"
-      - "${HOST_IP:-0.0.0.0}:53:53/tcp"
+      - "0.0.0.0:53:53/udp"
+      - "0.0.0.0:53:53/tcp"
     environment:
       HOST_IP: ${HOST_IP:-}
       TZ: ${TZ:-Asia/Manila}
@@ -80,7 +80,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128m
+          memory: 512m
           cpus: "0.5"
     logging:
       driver: json-file

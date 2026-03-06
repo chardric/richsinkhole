@@ -15,10 +15,10 @@ async def get_stats():
             "SELECT COUNT(*) FROM query_log WHERE action='blocked'"
         ))[0]
         (redirected,) = (await db.execute_fetchall(
-            "SELECT COUNT(*) FROM query_log WHERE action='redirected'"
+            "SELECT COUNT(*) FROM query_log WHERE action IN ('captive','youtube','redirected')"
         ))[0]
         (forwarded,) = (await db.execute_fetchall(
-            "SELECT COUNT(*) FROM query_log WHERE action IN ('forwarded','allowed')"
+            "SELECT COUNT(*) FROM query_log WHERE action IN ('forwarded','allowed','cached')"
         ))[0]
         (clients_seen,) = (await db.execute_fetchall(
             "SELECT COUNT(DISTINCT client_ip) FROM query_log"

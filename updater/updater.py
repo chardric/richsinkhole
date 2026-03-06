@@ -247,15 +247,37 @@ def _write_status(added: int, total: int, status: str) -> None:
 # Main loop
 # ---------------------------------------------------------------------------
 
+def prune_query_log(retain_days: int = 30) -> None:
+    """Delete query log entries older than retain_days and reclaim disk space."""
+    try:
+        with sqlite3.connect(SINKHOLE_DB, timeout=10) as conn:
+            result = conn.execute(
+                "DELETE FROM query_log WHERE ts < datetime('now', ?)",
+                (f"-{retain_days} days",),
+            )
+            deleted = result.rowcount
+            conn.commit()
+        if deleted:
+            with sqlite3.connect(SINKHOLE_DB, timeout=30) as conn:
+                conn.execute("VACUUM")
+            log.info("Query log pruned: %d rows deleted (retain %d days)", deleted, retain_days)
+        else:
+            log.info("Query log prune: nothing to delete (retain %d days)", retain_days)
+    except Exception as exc:
+        log.error("Query log prune failed: %s", exc)
+
+
 def main() -> None:
     log.info("RichSinkhole Updater starting up...")
 
     # Run immediately on startup
     run_update()
+    prune_query_log()
 
     # Schedule daily at 03:00 Asia/Manila (UTC+8)
     schedule.every().day.at("03:00").do(run_update)
-    log.info("Scheduled: daily blocklist update at 03:00 Asia/Manila")
+    schedule.every().day.at("03:05").do(prune_query_log)
+    log.info("Scheduled: daily blocklist update at 03:00, log prune at 03:05 (Asia/Manila)")
 
     while True:
         schedule.run_pending()

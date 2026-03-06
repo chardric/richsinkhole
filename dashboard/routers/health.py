@@ -49,5 +49,7 @@ async def health_check():
     # YouTube proxy
     checks["yt_proxy"] = "ok" if _tcp_ok("youtube-proxy", 8000) else "offline"
 
-    overall = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+    # Only core services determine overall health; updater/yt_proxy are non-critical
+    critical = {k: v for k, v in checks.items() if k in ("dns", "dns_db", "blocklist_db")}
+    overall = "ok" if all(v == "ok" for v in critical.values()) else "degraded"
     return JSONResponse({"status": overall, **checks}, status_code=200)
