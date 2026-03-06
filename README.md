@@ -11,12 +11,24 @@ Built with Python, FastAPI, Unbound, and Docker. Runs on any Linux machine inclu
 - **DNS-level blocking** — blocks ads, trackers, telemetry, and malware domains for every device on your network
 - **841,000+ domains blocked** out of the box via curated blocklist sources
 - **Live query log** — real-time DNS activity stream with SSE
-- **Dashboard** — stats, top blocked domains, top clients, live log
+- **Dashboard** — stats, top blocked domains, top clients, live query log with animated activity bar
 - **YouTube ad redirect** — intercepts YouTube DNS and proxies requests through a local server that strips pre/post-roll ads (per-device via captive portal)
 - **Captive portal** — soft portal that auto-whitelists devices on page visit; no forced blocking
 - **Unbound upstream** — recursive DNS with DNSSEC validation, DNS rebinding protection, and rate limiting (no third-party DNS required)
+- **NTP server** — built-in chrony NTP server (port 123/UDP); serve accurate time to all LAN devices; enable/disable from dashboard
 - **Blocklist auto-updater** — pulls from configurable source URLs, deduplicates, and rebuilds the blocklist daily at 3 AM
-- **Quick Block presets** — one-click toggle for 45 commonly blocked domains across Ads, Tracking, Telemetry, and Social Trackers categories
+- **Threat intel feeds** — automatic integration of URLhaus and ThreatFox malware/phishing domains (refreshed every 6 hours)
+- **Quick Block presets** — one-click toggle for domains across Ads, Tracking, Telemetry, Social Trackers, Malware & Phishing, and Gambling categories
+- **Reverse proxy manager** — define `.lan` hostnames that route to any LAN service (e.g. `nas.lan` → `192.168.1.50:5000`)
+- **Device fingerprinting** — auto-identifies devices by DNS query patterns (Apple, Android, Windows, Samsung TV, Xbox, MikroTik, Xiaomi, and more)
+- **Per-device blocking profiles** — Normal, Strict (extra keyword blocking), or Passthrough (no blocking) per device
+- **Per-device stats** — click any device to see top blocked/forwarded domains and recent queries
+- **Privacy report** — per-device breakdown of forwarded domains grouped by tracker category
+- **Security monitoring** — DNS rebinding detection, DGA suspect flagging, query burst auto-blocking, NXDOMAIN flood detection
+- **Canary tokens** — configure DNS tripwire domains; get notified if any device queries them
+- **Schedule rules** — time-based blocking per device or network-wide (e.g. block social media after midnight)
+- **Webhook notifications** — alerts for blocklist updates, new devices, and daily summaries
+- **DNS-over-HTTPS (DoH)** — built-in DoH endpoint (`/dns-query`) compatible with all major browsers
 - **Backup & restore** — single-command archive of all persistent data
 - **ARM64 / Raspberry Pi ready** — includes a cross-compilation deploy script
 
@@ -51,6 +63,10 @@ Clients (phones, laptops, smart TVs)
   ┌──────────────────┐
   │  YouTube Proxy   │  httpx reverse proxy (port 8000)
   │  (ad stripping)  │
+  └──────────────────┘
+
+  ┌──────────────────┐
+  │  NTP Server      │  chrony (port 123/UDP)
   └──────────────────┘
 
   ┌──────────────────┐
@@ -135,9 +151,14 @@ http://<HOST_IP>/richsinkhole/
 
 | Tab | Description |
 |-----|-------------|
-| **Dashboard** | Query stats (total, forwarded, blocked, block %, YT redirected), top blocked domains, top clients, live query log |
-| **Blocklist** | Auto-update status, blocklist source management, Quick Block presets |
-| **Settings** | YouTube redirect toggle, captive portal toggle, server info |
+| **Dashboard** | Query stats, top blocked domains, top clients, live query log with animated activity bar |
+| **Blocklist** | Auto-update status, blocklist sources, Quick Block presets, YouTube CDN nodes, threat intel status |
+| **Devices** | Fingerprinted devices, per-device blocking profile (Normal/Strict/Passthrough), per-device stats |
+| **Security** | Active blocks, recent security events (rebinding, DGA, query bursts), canary tokens |
+| **Privacy** | Per-device forwarded domain breakdown grouped by tracker category |
+| **Proxy** | Reverse proxy rules — map `.lan` hostnames to LAN services |
+| **Schedules** | Time-based DNS blocking rules per device or network-wide |
+| **Settings** | Service toggles (YouTube redirect, captive portal, NTP server), email/webhook notifications, server info |
 
 ---
 
@@ -179,7 +200,7 @@ Sources are validated before saving:
 
 ### Quick Block presets
 
-45 curated domains organized into 4 categories, toggled with a switch:
+Curated domains organized into 6 categories, toggled with a switch:
 
 | Category | Examples |
 |----------|---------|
@@ -187,6 +208,8 @@ Sources are validated before saving:
 | **Tracking & Analytics** | google-analytics.com, hotjar.com, clarity.ms, mixpanel.com |
 | **Telemetry** | telemetry.mozilla.org, telemetry.microsoft.com, vortex.data.microsoft.com |
 | **Social Trackers** | connect.facebook.net, ads.twitter.com, ads.tiktok.com |
+| **Malware & Phishing** | malware-domain-list.com entries, known phishing domains |
+| **Gambling** | bet365.com, pokerstars.com, draftkings.com and similar |
 
 ---
 
@@ -301,9 +324,13 @@ richsinkhole/
 │   └── sources.yml         # Blocklist source URLs and whitelist
 ├── youtube-proxy/          # YouTube reverse proxy
 │   └── proxy.py            # httpx async proxy with connection pooling
+├── ntp/                    # NTP time server
+│   ├── Dockerfile          # Alpine + chrony
+│   └── chrony.conf         # NTP server config (pool.ntp.org, Cloudflare, Google)
 ├── nginx/                  # Reverse proxy
 │   ├── nginx.conf          # Config for router-level DNS setup
 │   ├── nginx-standalone.conf  # Config for standalone (no router DNS)
+│   ├── conf.d/             # Dynamic per-hostname proxy rule configs
 │   └── certs/              # CA and server TLS certificates
 ├── docker-compose.yml
 ├── .env.example
@@ -321,6 +348,7 @@ richsinkhole/
 |---------|------|-------------|
 | `dns` | `53/udp`, `53/tcp` | DNS sinkhole server |
 | `unbound` | internal | Recursive DNS resolver |
+| `ntp` | `123/udp` | NTP time server (chrony) |
 | `dashboard` | `8080` (internal) | Web UI and API |
 | `youtube-proxy` | `8000` (internal) | YouTube reverse proxy |
 | `nginx` | `80`, `443` | Reverse proxy (public) |
@@ -346,11 +374,14 @@ Use `./backup.sh` to snapshot all of this, and `./restore.sh` to migrate to a ne
 
 ## Security
 
-- No default credentials — all config is via environment variables
+- No default credentials — password set on first run, stored as PBKDF2 hash
+- Session secret auto-generated on first run; stored in `config.yml`
 - Unbound provides DNSSEC validation and DNS rebinding protection
 - Nginx handles TLS termination
 - CA private key is excluded from git (`.gitignore`)
-- All API inputs are validated server-side; no raw errors exposed to clients
+- All API inputs are validated server-side; internal errors are not exposed to clients
+- Auto-blocking: rate limiting, NXDOMAIN flood detection, query burst detection with per-device IoT thresholds
+- DGA detection: high-entropy DNS labels are flagged as potential beaconing
 
 ---
 
