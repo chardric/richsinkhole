@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RichSinkhole — Login</title>
+  <link href="{{ root_path }}/static/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #0d1117; }
+    .login-card { max-width: 380px; }
+  </style>
+</head>
+<body class="d-flex align-items-center justify-content-center min-vh-100">
+  <div class="login-card w-100 px-3">
+    <div class="text-center mb-4">
+      <span class="fs-4 fw-bold text-danger">&#11044; RichSinkhole</span>
+    </div>
+    <div class="card border-secondary">
+      <div class="card-body p-4">
+        {% if setup %}
+        <h6 class="card-title mb-1">Set Admin Password</h6>
+        <p class="text-muted small mb-3">First run — create a password to protect the dashboard.</p>
+        {% else %}
+        <h6 class="card-title mb-3">Sign In</h6>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-danger py-2 small">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="{{ root_path }}/login">
+          <div class="mb-3">
+            <label class="form-label small text-muted">{% if setup %}New Password{% else %}Password{% endif %}</label>
+            <input type="password" name="password" class="form-control" autofocus
+              {% if setup %}placeholder="At least 8 characters"{% endif %}>
+          </div>
+          <button type="submit" class="btn btn-danger w-100">
+            {% if setup %}Set Password & Continue{% else %}Sign In{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

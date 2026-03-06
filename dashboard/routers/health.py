@@ -20,6 +20,20 @@ def _tcp_ok(host: str, port: int) -> bool:
         return False
 
 
+def _ntp_ok(host: str = "ntp", port: int = 123) -> bool:
+    """Send a minimal NTPv3 client packet; return True if a valid response arrives."""
+    try:
+        # 48-byte NTPv3 client request: LI=0, VN=3, Mode=3
+        packet = b"\x1b" + b"\x00" * 47
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(2)
+            s.sendto(packet, (host, port))
+            data, _ = s.recvfrom(1024)
+            return len(data) >= 48
+    except Exception:
+        return False
+
+
 @router.get("/health")
 async def health_check():
     checks: dict[str, str] = {}
@@ -49,7 +63,10 @@ async def health_check():
     # YouTube proxy
     checks["yt_proxy"] = "ok" if _tcp_ok("youtube-proxy", 8000) else "offline"
 
-    # Only core services determine overall health; updater/yt_proxy are non-critical
+    # NTP server (non-blocking UDP probe)
+    checks["ntp"] = "ok" if _ntp_ok() else "offline"
+
+    # Only core services determine overall health; updater/yt_proxy/ntp are non-critical
     critical = {k: v for k, v in checks.items() if k in ("dns", "dns_db", "blocklist_db")}
     overall = "ok" if all(v == "ok" for v in critical.values()) else "degraded"
     return JSONResponse({"status": overall, **checks}, status_code=200)

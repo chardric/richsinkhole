@@ -7,40 +7,82 @@
   <base href="{{ root_path }}/">
   <link href="static/bootstrap.min.css" rel="stylesheet">
   <style>
+    /* ── Base ─────────────────────────────────────────── */
     body { background-color: #0d1117; }
     .navbar-brand { letter-spacing: 0.04em; }
-    .stat-card { transition: transform 0.15s; }
-    .stat-card:hover { transform: translateY(-2px); }
-    .stat-value { font-size: 2.2rem; font-weight: 700; line-height: 1.1; }
+
+    /* ── Custom scrollbar ─────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #58a6ff44; }
+
+    /* ── Activity bar (top of page, flashes on DNS queries) */
+    #activity-bar {
+      position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 9999;
+      background: linear-gradient(90deg, #1f6feb 0%, #6e40c9 40%, #da3633 80%, #e3b341 100%);
+      transform-origin: left; transform: scaleX(0); opacity: 0;
+      transition: opacity 0.4s ease, transform 0.1s ease-out;
+      pointer-events: none;
+    }
+
+    /* ── Stat cards ───────────────────────────────────── */
+    .stat-card {
+      transition: transform 0.15s, box-shadow 0.3s;
+      border-left: 3px solid transparent !important;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,.4); }
+    .stat-card--hot  { box-shadow: 0 0 18px rgba(218,54,51,.3) !important; border-left-color: #da3633 !important; }
+    .stat-value { font-size: 2.2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
     .stat-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8b949e; }
+
+    /* ── Log table ────────────────────────────────────── */
     .log-table-wrap { max-height: 380px; overflow-y: auto; }
-    #log-tbody tr { animation: fadeIn 0.2s ease; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    #log-tbody tr { animation: fadeIn 0.18s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ── Badges ───────────────────────────────────────── */
     .badge-blocked  { background-color: #da3633; }
     .badge-forwarded{ background-color: #1f6feb; }
     .badge-cached   { background-color: #238636; }
     .badge-captive  { background-color: #9e6a03; }
     .badge-youtube  { background-color: #6e40c9; }
     .badge-failed   { background-color: #6e7681; }
+
+    /* ── Misc ─────────────────────────────────────────── */
     .progress { height: 6px; }
-.accordion-button::after { filter: invert(1) opacity(0.5); }
+    .accordion-button::after { filter: invert(1) opacity(0.5); }
     .accordion-button:not(.collapsed) { box-shadow: none; }
     .preset-toggle { cursor: pointer; width: 2.5em; height: 1.25em; }
     .qb-count { font-size: 0.7rem; min-width: 3.5rem; text-align: center; }
     .sse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3fb950; margin-right: 5px; }
     .sse-dot.disconnected { background: #da3633; }
     #toast-container { position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 280px; }
-    .health-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #3fb950; }
-    .health-dot.degraded { background: #da3633; }
-    .health-dot.unknown { background: #6e7681; }
+
+    /* ── Health dot with pulse ────────────────────────── */
+    @keyframes pulse-green { 0%,100% { box-shadow: 0 0 0 0 rgba(63,185,80,.45); } 60% { box-shadow: 0 0 0 5px rgba(63,185,80,0); } }
+    .health-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #3fb950; animation: pulse-green 2.4s infinite; }
+    .health-dot.degraded { background: #da3633; animation: none; }
+    .health-dot.unknown { background: #6e7681; animation: none; }
+
     .qr-box { background: #fff; border-radius: 8px; padding: 6px; display: inline-block; }
   </style>
 </head>
 <body>
 
+<!-- Activity bar: pulses with each live DNS query -->
+<div id="activity-bar"></div>
+
 <!-- Navbar -->
 <nav class="navbar bg-dark border-bottom border-secondary px-3 d-flex justify-content-between">
-  <span class="navbar-brand fw-bold text-danger fs-5">&#11044; RichSinkhole</span>
+  <span class="navbar-brand fw-bold text-danger fs-5" style="letter-spacing:.03em">
+    <svg width="22" height="22" viewBox="0 0 22 22" class="me-1" style="vertical-align:-4px" aria-hidden="true">
+      <circle cx="11" cy="11" r="10" fill="none" stroke="#da3633" stroke-width="1.6"/>
+      <circle cx="11" cy="11" r="6"  fill="none" stroke="#da3633" stroke-width="1.2" opacity=".65"/>
+      <circle cx="11" cy="11" r="2.5" fill="#da3633"/>
+    </svg>
+    RichSinkhole
+  </span>
   <div class="d-flex align-items-center gap-3">
     <span class="text-muted small" id="last-refreshed"></span>
     <span id="health-badge" title="System health">
@@ -48,6 +90,9 @@
       <span class="text-muted small ms-1" id="health-label">checking...</span>
     </span>
     <a href="setup" class="text-muted small text-decoration-none">Setup Guide</a>
+    <form method="post" action="logout" class="mb-0">
+      <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem">Sign Out</button>
+    </form>
   </div>
 </nav>
 
@@ -68,6 +113,18 @@
       <button class="nav-link" id="tab-security-btn" data-bs-toggle="tab" data-bs-target="#tab-security" role="tab">Security</button>
     </li>
     <li class="nav-item">
+      <button class="nav-link" id="tab-devices-btn" data-bs-toggle="tab" data-bs-target="#tab-devices" role="tab">Devices</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-dns-records-btn" data-bs-toggle="tab" data-bs-target="#tab-dns-records" role="tab">Proxy</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-schedules-btn" data-bs-toggle="tab" data-bs-target="#tab-schedules" role="tab">Schedules</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-privacy-btn" data-bs-toggle="tab" data-bs-target="#tab-privacy" role="tab">Privacy</button>
+    </li>
+    <li class="nav-item">
       <button class="nav-link" id="tab-settings-btn" data-bs-toggle="tab" data-bs-target="#tab-settings" role="tab">Settings</button>
     </li>
   </ul>
@@ -80,7 +137,7 @@
     <div class="tab-pane fade show active" id="tab-dashboard" role="tabpanel">
 
       <!-- Stat cards -->
-      <div class="row row-cols-2 row-cols-md-5 g-3 mb-3">
+      <div class="row row-cols-2 row-cols-md-4 g-3 mb-2">
         <div class="col">
           <div class="card stat-card h-100">
             <div class="card-body text-center py-3">
@@ -113,11 +170,37 @@
             </div>
           </div>
         </div>
+      </div>
+      <div class="row row-cols-2 row-cols-md-4 g-3 mb-3">
         <div class="col">
           <div class="card stat-card h-100">
             <div class="card-body text-center py-3">
               <div class="stat-value" style="color:#e3b341" id="stat-redirected">-</div>
               <div class="stat-label mt-1">YT Redirected</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value text-success" id="stat-bandwidth">-</div>
+              <div class="stat-label mt-1">Est. Data Saved</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value" style="color:#58a6ff" id="stat-timesaved">-</div>
+              <div class="stat-label mt-1">Est. Load Time Saved</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value" style="color:#3fb950" id="stat-ad-revenue">-</div>
+              <div class="stat-label mt-1">Ad Revenue Denied</div>
             </div>
           </div>
         </div>
@@ -322,6 +405,58 @@
           </div>
 
           <!-- Social Trackers -->
+          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#qb-malware">
+                <span class="fw-semibold me-2">Malware &amp; Phishing</span>
+                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-malware-count">—</span>
+              </button>
+            </h2>
+            <div id="qb-malware" class="accordion-collapse collapse">
+              <div class="p-0">
+                <table class="table table-sm table-dark table-hover mb-0">
+                  <tbody>
+                    <tr><td class="font-monospace small ps-3">malware.testcategory.com</td><td class="text-muted small">Malware delivery test domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="malware.testcategory.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">phishing.testcategory.com</td><td class="text-muted small">Phishing test domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="phishing.testcategory.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">ransomware.testcategory.com</td><td class="text-muted small">Ransomware C2 test domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="ransomware.testcategory.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">cxlvnkqjv.com</td><td class="text-muted small">Known malware C2 domain (URLhaus)</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="cxlvnkqjv.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">driveway-gate-expert.com</td><td class="text-muted small">Known phishing/scam domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="driveway-gate-expert.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">secure-verification-required.com</td><td class="text-muted small">Phishing credential harvester</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="secure-verification-required.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">account-update-secure.net</td><td class="text-muted small">Bank/account phishing domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="account-update-secure.net"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">emotet-group.com</td><td class="text-muted small">Emotet botnet C2 infrastructure</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="emotet-group.com"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
+                data-bs-toggle="collapse" data-bs-target="#qb-gambling">
+                <span class="fw-semibold me-2">Gambling</span>
+                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-gambling-count">—</span>
+              </button>
+            </h2>
+            <div id="qb-gambling" class="accordion-collapse collapse">
+              <div class="p-0">
+                <table class="table table-sm table-dark table-hover mb-0">
+                  <tbody>
+                    <tr><td class="font-monospace small ps-3">bet365.com</td><td class="text-muted small">Sports betting platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="bet365.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">pokerstars.com</td><td class="text-muted small">Online poker platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="pokerstars.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">draftkings.com</td><td class="text-muted small">Daily fantasy sports &amp; betting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="draftkings.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">fanduel.com</td><td class="text-muted small">Sports betting &amp; fantasy</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="fanduel.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">betway.com</td><td class="text-muted small">Online casino &amp; sports betting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="betway.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">888casino.com</td><td class="text-muted small">Online casino platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="888casino.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">unibet.com</td><td class="text-muted small">Sports betting &amp; casino</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="unibet.com"></div></td></tr>
+                    <tr><td class="font-monospace small ps-3">pinnacle.com</td><td class="text-muted small">Online sports betting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="pinnacle.com"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div class="accordion-item bg-transparent border-0">
             <h2 class="accordion-header">
               <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
@@ -351,12 +486,28 @@
         </div>
       </div>
 
+      <!-- Custom Allowlist -->
+      <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="text-muted small fw-semibold">CUSTOM ALLOWLIST</span>
+          <span class="text-muted small ms-2">— domains always allowed, never blocked</span>
+        </div>
+        <div class="card-body">
+          <form id="form-add-allow" class="d-flex gap-2 mb-3">
+            <input type="text" class="form-control form-control-sm font-monospace" id="input-allow-domain" placeholder="example.com">
+            <input type="text" class="form-control form-control-sm" id="input-allow-note" placeholder="Note (optional)" style="max-width:200px">
+            <button class="btn btn-sm btn-outline-success flex-shrink-0" type="submit">Add</button>
+          </form>
+          <div id="allowlist-body"><div class="text-muted small text-center py-2">Loading…</div></div>
+        </div>
+      </div>
+
       <!-- YouTube CDN auto-blocked nodes -->
       <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
             <span class="text-muted small fw-semibold">YOUTUBE CDN NODES</span>
-            <span class="text-muted small ms-2">— sponsor video servers auto-blocked by the sinkhole</span>
+            <span class="text-muted small ms-2">— YouTube ad delivery nodes detected and blocked</span>
           </div>
           <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-yt">Refresh</button>
         </div>
@@ -374,7 +525,7 @@
     <div class="tab-pane fade" id="tab-security" role="tabpanel">
 
       <!-- Stats row -->
-      <div class="row row-cols-2 row-cols-md-4 g-3 mb-3">
+      <div class="row row-cols-2 row-cols-md-5 g-3 mb-3">
         <div class="col">
           <div class="card stat-card h-100">
             <div class="card-body text-center py-3">
@@ -394,23 +545,90 @@
         <div class="col">
           <div class="card stat-card h-100">
             <div class="card-body text-center py-3">
-              <div class="stat-value text-info" id="sec-nxdomain">-</div>
-              <div class="stat-label mt-1">NXDOMAIN (24h)</div>
+              <div class="stat-value text-danger" id="sec-rebinding">-</div>
+              <div class="stat-label mt-1">Rebinding Attacks (24h)</div>
             </div>
           </div>
         </div>
         <div class="col">
           <div class="card stat-card h-100">
             <div class="card-body text-center py-3">
-              <div class="stat-value" id="sec-total-blocks">-</div>
-              <div class="stat-label mt-1">Total Blocked Ever</div>
+              <div class="stat-value text-warning" id="sec-anomaly">-</div>
+              <div class="stat-label mt-1">Anomalies (24h)</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card stat-card h-100">
+            <div class="card-body text-center py-3">
+              <div class="stat-value" style="color:#f778ba" id="sec-iot-flood">-</div>
+              <div class="stat-label mt-1">IoT Bursts (24h)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <!-- Threat Intel card -->
+        <div class="col-12 col-lg-4">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center">
+              THREAT INTEL FEED
+              <span class="badge bg-secondary" id="ti-status-badge">—</span>
+            </div>
+            <div class="card-body">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="stat-value text-danger fs-3" id="ti-total">—</div>
+                <div class="text-muted small">malware &amp; C2 domains blocked</div>
+              </div>
+              <dl class="row small mb-2">
+                <dt class="col-5 text-muted fw-normal">Last Updated</dt>
+                <dd class="col-7 font-monospace small" id="ti-updated">—</dd>
+                <dt class="col-5 text-muted fw-normal">New Domains</dt>
+                <dd class="col-7 font-monospace small text-success" id="ti-added">—</dd>
+              </dl>
+              <div class="text-muted small fw-semibold mb-1" style="font-size:.7rem;letter-spacing:.06em">SOURCES</div>
+              <div id="ti-feeds" class="font-monospace small text-muted" style="font-size:.72rem;word-break:break-all"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Protection rules -->
+        <div class="col-12 col-lg-8">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold">PROTECTION RULES</div>
+            <div class="card-body p-0">
+              <table class="table table-sm table-borderless mb-0 small align-middle">
+                <tbody>
+                  <tr style="border-bottom:1px solid #30363d">
+                    <td class="ps-3 py-2 text-nowrap"><span class="badge bg-danger">Query Flood</span></td>
+                    <td class="py-2 text-muted">&gt;100 queries/10s → REFUSED. After 3 violations → blocked 5 min.</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid #30363d">
+                    <td class="ps-3 py-2 text-nowrap"><span class="badge bg-warning text-dark">NXDOMAIN Flood</span></td>
+                    <td class="py-2 text-muted">&gt;50 NXDOMAINs/10s → blocked 5 min. Indicates subdomain scanning or malware recon.</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid #30363d">
+                    <td class="ps-3 py-2 text-nowrap"><span class="badge bg-danger">DNS Rebinding</span></td>
+                    <td class="py-2 text-muted">Public domain resolving to private IP → NXDOMAIN returned. Logged as security event.</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid #30363d">
+                    <td class="ps-3 py-2 text-nowrap"><span class="badge bg-warning text-dark">Query Burst</span></td>
+                    <td class="py-2 text-muted">&gt;150 unique domains in 10 min from one client → anomaly event logged.</td>
+                  </tr>
+                  <tr>
+                    <td class="ps-3 py-2 text-nowrap"><span class="badge bg-secondary">DGA Suspect</span></td>
+                    <td class="py-2 text-muted">Domain label ≥20 chars with entropy ≥4.0 bits → potential DGA malware beaconing, logged.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Active blocks -->
-      <div class="card">
+      <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span class="text-muted small fw-semibold">ACTIVE CLIENT BLOCKS</span>
           <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-security">Refresh</button>
@@ -429,84 +647,431 @@
             </thead>
             <tbody id="sec-blocks-tbody"></tbody>
           </table>
-          <div id="sec-blocks-empty" class="text-center text-muted py-4 small">No active blocks — all clients are behaving.</div>
+          <div id="sec-blocks-empty" class="text-center text-muted py-4 small">No active blocks — no clients have triggered flood or NXDOMAIN thresholds.</div>
         </div>
       </div>
 
-      <!-- Info card -->
-      <div class="card mt-3">
-        <div class="card-header text-muted small fw-semibold">PROTECTION RULES</div>
-        <div class="card-body">
-          <dl class="row small mb-0">
-            <dt class="col-md-4 text-muted">Query flood</dt>
-            <dd class="col-md-8">Client sending &gt;100 queries in 10 seconds — REFUSED. After 3 consecutive violations → blocked for 5 minutes.</dd>
-            <dt class="col-md-4 text-muted">DNS recon (NXDOMAIN flood)</dt>
-            <dd class="col-md-8">Client generating &gt;50 NXDOMAIN responses in 10 seconds — blocked immediately for 5 minutes. Indicates subdomain scanning or malware.</dd>
-            <dt class="col-md-4 text-muted">Block response</dt>
-            <dd class="col-md-8">Blocked clients receive <code>REFUSED</code> (rcode 5) for all queries. Blocks auto-expire and persist across server restarts.</dd>
-          </dl>
+      <!-- Security events -->
+      <div class="card mb-3">
+        <div class="card-header text-muted small fw-semibold">RECENT SECURITY EVENTS</div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+            <thead class="sticky-top bg-dark">
+              <tr class="text-muted small">
+                <th class="ps-3">Time</th>
+                <th>Type</th>
+                <th>Client IP</th>
+                <th>Domain</th>
+                <th class="pe-3">Detail</th>
+              </tr>
+            </thead>
+            <tbody id="sec-events-tbody"></tbody>
+          </table>
+          <div id="sec-events-empty" class="text-center text-muted py-4 small">No security events yet.</div>
+        </div>
+      </div>
+
+      <!-- DNS Canary Tokens -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <span class="text-muted small fw-semibold">DNS CANARY TOKENS</span>
+            <span class="text-muted small ms-2">— hidden tripwire domains that alert when queried</span>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-canary">Refresh</button>
+            <button class="btn btn-sm btn-warning py-0" id="btn-add-canary">+ New Token</button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+            <thead class="sticky-top bg-dark">
+              <tr class="text-muted small">
+                <th class="ps-3">Label</th>
+                <th>Canary Domain</th>
+                <th>Triggers</th>
+                <th>Last Triggered</th>
+                <th>Created</th>
+                <th class="pe-3"></th>
+              </tr>
+            </thead>
+            <tbody id="canary-tbody"></tbody>
+          </table>
+          <div id="canary-empty" class="text-center text-muted py-4 small">No canary tokens yet — create one and embed the domain in files, emails, or scripts to detect when they are accessed.</div>
         </div>
       </div>
 
     </div>
 
     <!-- ================================================================ -->
+    <!-- DEVICES TAB                                                        -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-devices" role="tabpanel">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <span class="text-muted small fw-semibold">FINGERPRINTED DEVICES</span>
+            <span class="text-muted small ms-2">— auto-identified by DNS query patterns</span>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-devices">Refresh</button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+            <thead class="sticky-top bg-dark">
+              <tr class="text-muted small">
+                <th class="ps-3">IP Address</th>
+                <th>Label</th>
+                <th>Device Type</th>
+                <th>Profile</th>
+                <th>Confidence</th>
+                <th>First Seen</th>
+                <th>Last Seen</th>
+                <th class="pe-3"></th>
+              </tr>
+            </thead>
+            <tbody id="devices-tbody"></tbody>
+          </table>
+          <div id="devices-empty" class="text-center text-muted py-4 small">No devices fingerprinted yet — devices are identified as they make DNS queries.</div>
+        </div>
+      </div>
+      <div class="card mt-3">
+        <div class="card-header text-muted small fw-semibold">BLOCKING PROFILES</div>
+        <div class="card-body small">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="d-flex align-items-start gap-2">
+                <span class="badge bg-secondary mt-1" style="min-width:80px;text-align:center">Normal</span>
+                <div class="text-muted">
+                  Default behavior. All blocklist rules apply. Captive portal detection and schedule rules are enforced.
+                  Suitable for most devices.
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="d-flex align-items-start gap-2">
+                <span class="badge bg-danger mt-1" style="min-width:80px;text-align:center">Strict</span>
+                <div class="text-muted">
+                  Normal rules <strong class="text-light">plus</strong> extra keyword-based blocking of analytics,
+                  tracking, metrics, and telemetry subdomains — even if they are not in the blocklist.
+                  Good for children's devices or privacy-sensitive users.
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="d-flex align-items-start gap-2">
+                <span class="badge bg-success mt-1" style="min-width:80px;text-align:center">Passthrough</span>
+                <div class="text-muted">
+                  No blocking at all — all DNS queries are forwarded without inspection.
+                  Use for trusted servers, admin workstations, or devices that need unrestricted DNS.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card mt-3">
+        <div class="card-header text-muted small fw-semibold">HOW FINGERPRINTING WORKS</div>
+        <div class="card-body small text-muted">
+          Devices are identified by the DNS domains they query. Each OS and device type queries specific domains in characteristic patterns —
+          for example, Xbox queries <code>xboxlive.com</code>, Samsung TVs query <code>samsungcloudsolution.com</code>,
+          and iOS devices query <code>*.mzstatic.com</code>. No packet inspection or MAC address lookup is required.
+          Click a label to rename a device. Confidence increases as more signature queries are observed.
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- PROXY TAB                                                          -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-dns-records" role="tabpanel">
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="text-muted small fw-semibold">REVERSE PROXY RULES</span>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-proxy">Refresh</button>
+            <button class="btn btn-sm btn-success py-0" id="btn-add-proxy">+ Add Rule</button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+            <thead class="sticky-top bg-dark">
+              <tr class="text-muted small">
+                <th class="ps-3">Name</th>
+                <th>Target (IP:port)</th>
+                <th>Status</th>
+                <th class="pe-3"></th>
+              </tr>
+            </thead>
+            <tbody id="proxy-tbody"></tbody>
+          </table>
+          <div id="proxy-empty" class="text-center text-muted py-4 small">
+            No rules yet — add one and access any service by name instead of IP:port.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header text-muted small fw-semibold">HOW IT WORKS</div>
+        <div class="card-body small text-muted">
+          Type a name (e.g. <code>smartscreen</code>) and the target IP:port (e.g. <code>http://10.0.0.5:8080</code>).
+          Every device on your network can then open <code>http://smartscreen.lan</code> in a browser — no port number needed.
+          DNS is configured automatically.
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- SCHEDULES TAB                                                      -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-schedules" role="tabpanel">
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="text-muted small fw-semibold">SCHEDULE RULES</span>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-schedules">Refresh</button>
+            <button class="btn btn-sm btn-success py-0" id="btn-add-schedule">+ Add Rule</button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+            <thead class="sticky-top bg-dark">
+              <tr class="text-muted small">
+                <th class="ps-3">Label</th>
+                <th>Device / IP</th>
+                <th>Days</th>
+                <th>Time Window</th>
+                <th>Status</th>
+                <th class="pe-3"></th>
+              </tr>
+            </thead>
+            <tbody id="schedules-tbody"></tbody>
+          </table>
+          <div id="schedules-empty" class="text-center text-muted py-4 small">No schedule rules yet — add a rule to block a device during specific hours.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header text-muted small fw-semibold">HOW SCHEDULING WORKS</div>
+        <div class="card-body small text-muted">
+          Schedule rules block all DNS queries from a device during the specified window — effectively cutting off internet access. Use <code>*</code> as the device IP to apply a rule to all devices.
+          Times use 24-hour format. Overnight ranges (e.g. <code>22:00 → 07:00</code>) are supported. Rules take effect within 30 seconds of being saved.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- PRIVACY TAB                                                        -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-privacy" role="tabpanel">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <span class="text-muted small fw-semibold">IOT PRIVACY LEAK REPORT</span>
+            <span class="text-muted small ms-2">— which companies each device is talking to</span>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-privacy">Refresh</button>
+        </div>
+        <div class="card-body" id="privacy-report-body">
+          <div class="text-muted small text-center py-4">Loading…</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header text-muted small fw-semibold">ABOUT THIS REPORT</div>
+        <div class="card-body small text-muted">
+          This report maps each device's forwarded DNS queries to their parent company. It shows which services your devices are actively contacting — a useful indicator of telemetry, cloud dependencies, and data leakage. Only forwarded (non-blocked) queries are counted.
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS TAB                                                       -->
     <!-- ================================================================ -->
     <div class="tab-pane fade" id="tab-settings" role="tabpanel">
       <div class="row g-3">
 
-        <!-- YouTube Redirect + Captive Portal -->
-        <div class="col-12 col-lg-6">
-          <div class="card">
-            <div class="card-header text-muted small fw-semibold">TRANSPARENT PROXY &amp; CAPTIVE PORTAL</div>
-            <div class="card-body">
-              <form id="form-settings">
-                <div class="mb-3">
-                  <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="yt-enabled" role="switch">
-                    <label class="form-check-label fw-semibold" for="yt-enabled">Enable YouTube Transparent Proxy</label>
-                  </div>
-                  <div class="form-text text-muted">
-                    Redirects YouTube DNS to this server. nginx intercepts HTTPS, strips ads, and forwards to real YouTube.
-                    Devices must have the CA certificate installed first.
-                  </div>
+        <!-- Row 1: Toggles + Server Info -->
+        <div class="col-12 col-lg-7">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center">
+              SERVICES &amp; FEATURES
+              <span class="text-success small fw-normal" id="settings-save-status" style="font-size:0.75rem"></span>
+            </div>
+            <div class="card-body d-flex flex-column gap-3">
+
+              <!-- YouTube toggle -->
+              <div class="d-flex align-items-start gap-3 p-3 rounded" style="background:#161b22;border:1px solid #30363d">
+                <div class="form-check form-switch mb-0 mt-1">
+                  <input class="form-check-input" type="checkbox" id="yt-enabled" role="switch" style="width:2.5em;height:1.25em">
                 </div>
-                <div class="mb-3">
-                  <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="cp-enabled" role="switch">
-                    <label class="form-check-label fw-semibold" for="cp-enabled">Enable Captive Portal</label>
-                  </div>
-                  <div class="form-text text-muted">
-                    Shows a certificate install page to new devices. OS captive portal detection domains resolve to this server.
-                  </div>
+                <div>
+                  <div class="fw-semibold">YouTube Transparent Proxy</div>
+                  <div class="text-muted small mt-1">Redirects YouTube DNS to this server. nginx intercepts HTTPS, blocks ad requests, and forwards video traffic to real YouTube. Requires CA certificate on devices.</div>
                 </div>
-                <div class="mb-3">
-                  <div class="form-label small text-muted">Server IP Address</div>
-                  <div class="font-monospace fw-bold text-success fs-5" id="yt-ip-display">—</div>
-                  <div class="form-text text-muted">Auto-detected from server environment. Used for YouTube redirect and captive portal DNS responses. Hot-reloaded within 30 seconds.</div>
+              </div>
+
+              <!-- Captive portal toggle -->
+              <div class="d-flex align-items-start gap-3 p-3 rounded" style="background:#161b22;border:1px solid #30363d">
+                <div class="form-check form-switch mb-0 mt-1">
+                  <input class="form-check-input" type="checkbox" id="cp-enabled" role="switch" style="width:2.5em;height:1.25em">
                 </div>
-                <button type="submit" class="btn btn-primary" id="btn-save-settings">Save Settings</button>
-                <span class="ms-2 text-muted small" id="settings-save-status"></span>
-              </form>
+                <div>
+                  <div class="fw-semibold">Captive Portal</div>
+                  <div class="text-muted small mt-1">Shows a certificate install page to new devices. OS captive portal detection domains are resolved to this server.</div>
+                </div>
+              </div>
+
+              <!-- NTP toggle -->
+              <div class="d-flex align-items-start gap-3 p-3 rounded" style="background:#161b22;border:1px solid #30363d">
+                <div class="form-check form-switch mb-0 mt-1">
+                  <input class="form-check-input" type="checkbox" id="ntp-enabled" role="switch" style="width:2.5em;height:1.25em">
+                </div>
+                <div>
+                  <div class="fw-semibold">NTP Server <span class="badge bg-secondary ms-1" style="font-size:.65rem;vertical-align:middle">port 123/UDP</span></div>
+                  <div class="text-muted small mt-1">Serves accurate time to all LAN devices. Syncs from <code>pool.ntp.org</code>, <code>time.cloudflare.com</code>, and <code>time.google.com</code>. Point your router or devices' NTP setting to this server's IP.</div>
+                </div>
+              </div>
+
+              <div class="text-muted small">Changes apply automatically — no save needed. DNS hot-reloads within 30 seconds.</div>
             </div>
           </div>
         </div>
 
-        <!-- DNS info (minimal) -->
-        <div class="col-12 col-lg-6">
-          <div class="card">
-            <div class="card-header text-muted small fw-semibold">DNS INFO</div>
+        <div class="col-12 col-lg-5">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold">SERVER INFO</div>
             <div class="card-body">
               <dl class="row mb-0 small">
-                <dt class="col-5 text-muted">Server IP</dt>
-                <dd class="col-7 font-monospace text-success fw-bold" id="info-server-ip">-</dd>
-                <dt class="col-5 text-muted">Upstream DNS</dt>
-                <dd class="col-7 font-monospace" id="info-upstream-dns">-</dd>
-                <dt class="col-5 text-muted">Blocked Domains</dt>
-                <dd class="col-7 font-monospace" id="settings-bl-count">-</dd>
+                <dt class="col-5 text-muted fw-normal">Server IP</dt>
+                <dd class="col-7 font-monospace text-success fw-bold mb-2" id="info-server-ip">—</dd>
+                <dt class="col-5 text-muted fw-normal">Redirect IP</dt>
+                <dd class="col-7 font-monospace fw-bold mb-2" id="yt-ip-display">—</dd>
+                <dt class="col-5 text-muted fw-normal">Upstream DNS</dt>
+                <dd class="col-7 font-monospace mb-2" id="info-upstream-dns">—</dd>
+                <dt class="col-5 text-muted fw-normal">Blocked Domains</dt>
+                <dd class="col-7 font-monospace mb-0" id="settings-bl-count">—</dd>
               </dl>
-              <a href="setup" class="btn btn-sm btn-outline-secondary mt-3">Setup Guide &rarr;</a>
+              <hr class="border-secondary my-3">
+              <a href="setup" class="btn btn-sm btn-outline-secondary w-100">Setup &amp; Install Guide &rarr;</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Email Notifications -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center">
+              EMAIL NOTIFICATIONS
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="email-enabled" role="switch">
+                <label class="form-check-label small text-muted" for="email-enabled">Enabled</label>
+              </div>
+            </div>
+            <div class="card-body">
+              <form id="form-email-settings">
+                <div class="row g-3">
+
+                  <!-- SMTP connection -->
+                  <div class="col-12">
+                    <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">SMTP Connection</div>
+                    <div class="row g-2">
+                      <div class="col-md-5">
+                        <label class="form-label small text-muted mb-1">Host</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="email-host" placeholder="smtp.gmail.com">
+                      </div>
+                      <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Port</label>
+                        <input type="number" class="form-control form-control-sm font-monospace" id="email-port" value="587">
+                      </div>
+                      <div class="col-md-5 d-flex align-items-end pb-1">
+                        <div class="form-check form-switch mb-0">
+                          <input class="form-check-input" type="checkbox" id="email-tls" checked>
+                          <label class="form-check-label small" for="email-tls">Use STARTTLS / SSL</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Credentials -->
+                  <div class="col-12">
+                    <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">Credentials</div>
+                    <div class="row g-2">
+                      <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">Username</label>
+                        <input type="text" class="form-control form-control-sm" id="email-user" placeholder="you@gmail.com" autocomplete="username">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">Password / App Password</label>
+                        <div class="input-group input-group-sm">
+                          <input type="password" class="form-control form-control-sm" id="email-password" placeholder="Leave blank to keep existing" autocomplete="current-password">
+                          <button type="button" class="btn btn-outline-secondary" id="btn-clear-email-password">Clear</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Routing -->
+                  <div class="col-12">
+                    <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">Routing</div>
+                    <div class="row g-2">
+                      <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">From</label>
+                        <input type="text" class="form-control form-control-sm" id="email-from" placeholder="Same as username if blank">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">To</label>
+                        <input type="text" class="form-control form-control-sm" id="email-to" placeholder="recipient@gmail.com">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- What to notify -->
+                  <div class="col-12">
+                    <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">Notify me when</div>
+                    <div class="row g-2">
+                      <div class="col-md-4">
+                        <div class="p-3 rounded d-flex gap-2" style="background:#161b22;border:1px solid #30363d">
+                          <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" id="email-notify-security">
+                          <label class="form-check-label small" for="email-notify-security">
+                            <span class="fw-semibold d-block">Security Alert</span>
+                            <span class="text-muted">Client auto-blocked (max 1/hr)</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="p-3 rounded d-flex gap-2" style="background:#161b22;border:1px solid #30363d">
+                          <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" id="email-notify-update">
+                          <label class="form-check-label small" for="email-notify-update">
+                            <span class="fw-semibold d-block">Blocklist Update</span>
+                            <span class="text-muted">Daily refresh at 3AM</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="p-3 rounded d-flex gap-2" style="background:#161b22;border:1px solid #30363d">
+                          <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" id="email-notify-daily">
+                          <label class="form-check-label small" for="email-notify-daily">
+                            <span class="fw-semibold d-block">Daily Digest</span>
+                            <span class="text-muted d-flex align-items-center gap-1">Send at hour
+                              <input type="number" class="form-control form-control-sm font-monospace d-inline-block"
+                                id="email-daily-hour" value="8" min="0" max="23" style="width:4rem">
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="col-12 d-flex gap-2 align-items-center pt-2 border-top border-secondary">
+                    <button type="submit" class="btn btn-primary btn-sm px-4">Save</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-test-email">Send Test Email</button>
+                    <span class="text-muted small ms-1" id="email-save-status"></span>
+                  </div>
+
+                </div>
+              </form>
             </div>
           </div>
         </div>

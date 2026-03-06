@@ -41,6 +41,13 @@ def init_blocklist_db():
                 added_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS allowed_domains (
+                domain   TEXT PRIMARY KEY,
+                note     TEXT DEFAULT '',
+                added_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
         # Migration: add enabled column if upgrading from older schema
         try:
             conn.execute("ALTER TABLE blocked_patterns ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
@@ -89,15 +96,34 @@ def seed_from_file(filepath: str):
     logger.info("Seeded %d domains from %s", len(domains), filepath)
 
 
+def is_allowed(domain: str) -> bool:
+    """Return True if domain is on the custom allowlist (never block)."""
+    domain = domain.lower().rstrip(".")
+    parts = domain.split(".")
+    with get_connection() as conn:
+        for i in range(len(parts) - 1):
+            candidate = ".".join(parts[i:])
+            row = conn.execute(
+                "SELECT 1 FROM allowed_domains WHERE domain = ? LIMIT 1",
+                (candidate,),
+            ).fetchone()
+            if row:
+                return True
+    return False
+
+
 def is_blocked(domain: str) -> bool:
     """
     Check if a domain is blocked by:
+    0. Allowlist override — if allowed, never block
     1. Exact match or parent-domain match in blocked_domains
     2. Wildcard pattern match in blocked_patterns
     """
     domain = domain.lower().rstrip(".")
-    parts = domain.split(".")
+    if is_allowed(domain):
+        return False
 
+    parts = domain.split(".")
     with get_connection() as conn:
         for i in range(len(parts) - 1):
             candidate = ".".join(parts[i:])

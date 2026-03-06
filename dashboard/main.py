@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 import sqlite3
@@ -12,7 +13,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from routers import blocklist, doh, health, logs, qr, security, settings, stats, updater
+import notifier
+from routers import allowlist, blocklist, canary, device_stats, devices, dns_records, doh, health, logs, metrics, ntp, privacy_report, proxy_rules, qr, schedules, security, settings, stats, updater
+import auth
 
 SINKHOLE_DB = "/data/sinkhole.db"
 BLOCKLIST_DB = "/data/blocklist.db"
@@ -61,6 +64,7 @@ def _whitelist_ip(ip: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    auth.ensure_session_secret()
     for db_path in (SINKHOLE_DB, BLOCKLIST_DB):
         async with aiosqlite.connect(db_path) as db:
             await db.execute("PRAGMA journal_mode=WAL")
@@ -74,6 +78,7 @@ async def lifespan(app: FastAPI):
             )
         """)
         await db.commit()
+    asyncio.create_task(notifier.run_notifier())
     yield
 
 
@@ -86,6 +91,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from starlette.middleware.base import BaseHTTPMiddleware
+app.add_middleware(BaseHTTPMiddleware, dispatch=auth.auth_middleware)
+
 app.mount("/static", StaticFiles(directory="/dashboard/static"), name="static")
 templates = Jinja2Templates(directory="/dashboard/templates")
 
@@ -96,6 +104,16 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(updater.router, prefix="/api")
 app.include_router(qr.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
+app.include_router(devices.router, prefix="/api")
+app.include_router(device_stats.router, prefix="/api")
+app.include_router(schedules.router, prefix="/api")
+app.include_router(allowlist.router, prefix="/api")
+app.include_router(dns_records.router, prefix="/api")
+app.include_router(canary.router, prefix="/api")
+app.include_router(privacy_report.router, prefix="/api")
+app.include_router(proxy_rules.router, prefix="/api")
+app.include_router(ntp.router, prefix="/api")
+app.include_router(metrics.router)
 app.include_router(health.router)
 
 app.include_router(doh.router)
@@ -286,6 +304,41 @@ async def ca_mobileconfig():
         media_type="application/x-apple-aspen-config",
         headers={"Content-Disposition": 'attachment; filename="richsinkhole.mobileconfig"'},
     )
+
+
+# ─── Auth ─────────────────────────────────────────────────────────────────────
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: str = ""):
+    return templates.TemplateResponse("login.html", {"request": request, "error": error, "root_path": ROOT_PATH})
+
+
+@app.post("/login")
+async def login_submit(request: Request):
+    form = await request.form()
+    password = form.get("password", "")
+    if not auth.is_password_set():
+        # First-run: set password
+        if len(str(password)) < 8:
+            return templates.TemplateResponse("login.html", {
+                "request": request, "error": "Password must be at least 8 characters.", "setup": True, "root_path": ROOT_PATH,
+            })
+        auth.set_password(str(password))
+    elif not auth.check_password(str(password)):
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Incorrect password.", "root_path": ROOT_PATH,
+        })
+    token = auth.make_session_token()
+    resp = RedirectResponse(url="/", status_code=302)
+    resp.set_cookie("rs_session", token, httponly=True, samesite="lax", max_age=86400 * 7)
+    return resp
+
+
+@app.post("/logout")
+async def logout():
+    resp = RedirectResponse(url="/login", status_code=302)
+    resp.delete_cookie("rs_session")
+    return resp
 
 
 # ─── Main pages ───────────────────────────────────────────────────────────────

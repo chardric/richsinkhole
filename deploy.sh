@@ -21,7 +21,7 @@ SERVICES=("${@}")
 
 # Default: all services
 if [ ${#SERVICES[@]} -eq 0 ]; then
-  SERVICES=(dashboard dns updater youtube-proxy unbound)
+  SERVICES=(dashboard dns updater youtube-proxy unbound ntp)
 fi
 
 echo "==> Target: $REMOTE ($PLATFORM)"

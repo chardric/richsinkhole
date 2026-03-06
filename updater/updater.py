@@ -16,13 +16,21 @@ import httpx
 import schedule
 import yaml
 
-SOURCES_PATH = "/updater/sources.yml"
-BLOCKLIST_DB = "/data/blocklist.db"
-SINKHOLE_DB = "/data/sinkhole.db"
-STATUS_PATH = "/data/updater_status.json"
-FORCE_UPDATE_PATH = "/data/force_update"
-KNOWN_CLIENTS_PATH = "/data/known_clients.json"
-LAST_SUMMARY_PATH = "/data/last_summary_date.txt"
+SOURCES_PATH           = "/updater/sources.yml"
+BLOCKLIST_DB           = "/data/blocklist.db"
+SINKHOLE_DB            = "/data/sinkhole.db"
+STATUS_PATH            = "/data/updater_status.json"
+THREAT_INTEL_STATUS    = "/data/threat_intel_status.json"
+FORCE_UPDATE_PATH      = "/data/force_update"
+KNOWN_CLIENTS_PATH     = "/data/known_clients.json"
+LAST_SUMMARY_PATH      = "/data/last_summary_date.txt"
+
+# Threat intel feeds: (url, format)
+# format: "hosts" = standard hosts-file, "threatfox_csv" = ThreatFox CSV export
+THREAT_INTEL_FEEDS = [
+    ("https://urlhaus.abuse.ch/downloads/hostfile/",        "hosts"),
+    ("https://threatfox.abuse.ch/export/csv/recent/",       "threatfox_csv"),
+]
 
 DOMAIN_RE = re.compile(
     r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
@@ -204,6 +212,7 @@ def run_update() -> None:
     try:
         with sqlite3.connect(BLOCKLIST_DB) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bd_domain ON blocked_domains(domain)")
             (count_before,) = conn.execute(
                 "SELECT COUNT(*) FROM blocked_domains"
             ).fetchone()
@@ -247,6 +256,108 @@ def _write_status(added: int, total: int, status: str) -> None:
 # Main loop
 # ---------------------------------------------------------------------------
 
+def fetch_threatfox_domains(url: str) -> list[str]:
+    """Parse ThreatFox CSV export — extract domain-type IOCs only."""
+    log.info("Fetching (ThreatFox CSV) %s", url)
+    try:
+        with httpx.Client(timeout=30, follow_redirects=True) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            text = resp.text
+    except httpx.HTTPError as exc:
+        log.error("Failed to fetch ThreatFox: %s", exc)
+        return []
+
+    import csv, io
+    domains: list[str] = []
+    for row in csv.reader(io.StringIO(text)):
+        if not row or row[0].startswith("#"):
+            continue
+        # CSV columns: date, id, ioc, ioc_type, ...
+        if len(row) < 4:
+            continue
+        ioc      = row[2].strip().strip('"')
+        ioc_type = row[3].strip().strip('"')
+        if ioc_type != "domain":
+            continue
+        candidate = ioc.lower().rstrip(".")
+        if candidate not in _SKIP_HOSTS and DOMAIN_RE.match(candidate):
+            domains.append(candidate)
+
+    log.info("  -> %d valid domains from ThreatFox", len(domains))
+    return domains
+
+
+def _migrate_blocklist_source_col() -> None:
+    """Add source column to blocked_domains if upgrading from older schema."""
+    try:
+        with sqlite3.connect(BLOCKLIST_DB) as conn:
+            conn.execute("ALTER TABLE blocked_domains ADD COLUMN source TEXT DEFAULT 'blocklist'")
+            conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+
+def run_threat_intel() -> None:
+    """Fetch threat intel feeds and insert into blocklist.db with source='threat_intel'."""
+    log.info("=== Threat intel update starting ===")
+    _migrate_blocklist_source_col()
+
+    all_domains: set[str] = set()
+    for url, fmt in THREAT_INTEL_FEEDS:
+        if fmt == "threatfox_csv":
+            domains = fetch_threatfox_domains(url)
+        else:
+            domains = fetch_domains(url, set())
+        all_domains.update(domains)
+        log.info("Threat intel: %d domains from %s", len(domains), url)
+
+    if not all_domains:
+        log.warning("Threat intel: no domains fetched — skipping")
+        _write_threat_intel_status(0, 0, "no_domains")
+        return
+
+    try:
+        with sqlite3.connect(BLOCKLIST_DB) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            (before,) = conn.execute(
+                "SELECT COUNT(*) FROM blocked_domains WHERE source='threat_intel'"
+            ).fetchone()
+            conn.executemany(
+                """INSERT INTO blocked_domains (domain, source)
+                   VALUES (?, 'threat_intel')
+                   ON CONFLICT(domain) DO UPDATE SET source='threat_intel'""",
+                [(d,) for d in all_domains],
+            )
+            conn.commit()
+            (after,) = conn.execute(
+                "SELECT COUNT(*) FROM blocked_domains WHERE source='threat_intel'"
+            ).fetchone()
+    except Exception as exc:
+        log.error("Threat intel DB error: %s", exc)
+        _write_threat_intel_status(0, 0, "db_error")
+        return
+
+    added = after - before
+    log.info("=== Threat intel done: +%d new, %d total threat domains ===", added, after)
+    _write_threat_intel_status(added, after, "ok")
+
+
+def _write_threat_intel_status(added: int, total: int, status: str) -> None:
+    data = {
+        "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "domains_added": added,
+        "total_domains": total,
+        "status": status,
+        "feeds": [url for url, _ in THREAT_INTEL_FEEDS],
+    }
+    try:
+        with open(THREAT_INTEL_STATUS, "w") as f:
+            json.dump(data, f)
+    except Exception as exc:
+        log.error("Failed to write threat intel status: %s", exc)
+
+
 def prune_query_log(retain_days: int = 30) -> None:
     """Delete query log entries older than retain_days and reclaim disk space."""
     try:
@@ -272,12 +383,15 @@ def main() -> None:
 
     # Run immediately on startup
     run_update()
+    run_threat_intel()
     prune_query_log()
 
     # Schedule daily at 03:00 Asia/Manila (UTC+8)
     schedule.every().day.at("03:00").do(run_update)
     schedule.every().day.at("03:05").do(prune_query_log)
-    log.info("Scheduled: daily blocklist update at 03:00, log prune at 03:05 (Asia/Manila)")
+    # Threat intel refreshes every 6 hours
+    schedule.every(6).hours.do(run_threat_intel)
+    log.info("Scheduled: blocklist at 03:00, prune at 03:05, threat intel every 6h")
 
     while True:
         schedule.run_pending()

@@ -1,4 +1,5 @@
 import re
+import time
 
 import aiosqlite
 import httpx
@@ -13,6 +14,10 @@ DOMAIN_RE = re.compile(
 )
 
 router = APIRouter()
+
+_yt_cache: dict | None = None
+_yt_cache_ts: float = 0.0
+_YT_TTL = 300.0  # 5 minutes — YT CDN nodes only change on updater runs
 
 
 def _validate(domain: str) -> str:
@@ -150,18 +155,29 @@ async def import_blocklist(body: ImportIn):
     return {"imported": len(domains), "status": "ok"}
 
 
+_YT_RE = re.compile(
+    r"^rr?\d+(?:---|\.)sn-[a-z0-9][-a-z0-9]*\.(googlevideo|c\.youtube)\.com$",
+    re.IGNORECASE,
+)
+
+
 @router.get("/blocklist/yt-autoblocked")
 async def yt_autoblocked():
     """Show YouTube CDN nodes auto-blocked by the sinkhole (googlevideo.com + c.youtube.com)."""
-    yt_re = re.compile(
-        r"^rr?\d+(?:---|\.)sn-[a-z0-9][-a-z0-9]*\.(googlevideo|c\.youtube)\.com$",
-        re.IGNORECASE,
-    )
+    global _yt_cache, _yt_cache_ts
+    if _yt_cache is not None and time.monotonic() - _yt_cache_ts < _YT_TTL:
+        return _yt_cache
+
     async with aiosqlite.connect(BLOCKLIST_DB, timeout=10) as db:
+        # YT CDN nodes all start with 'r' — narrow the index range scan before LIKE
         rows = await db.execute_fetchall(
             """SELECT domain, added_at FROM blocked_domains
-               WHERE (domain LIKE '%.googlevideo.com' OR domain LIKE '%.c.youtube.com')
+               WHERE domain >= 'r' AND domain < 's'
+                 AND (domain LIKE '%.googlevideo.com' OR domain LIKE '%.c.youtube.com')
                ORDER BY added_at DESC LIMIT 200"""
         )
-    domains = [{"domain": r[0], "added_at": r[1]} for r in rows if yt_re.match(r[0])]
-    return {"domains": domains, "total": len(domains)}
+    domains = [{"domain": r[0], "added_at": r[1]} for r in rows if _YT_RE.match(r[0])]
+    result = {"domains": domains, "total": len(domains)}
+    _yt_cache = result
+    _yt_cache_ts = time.monotonic()
+    return result
