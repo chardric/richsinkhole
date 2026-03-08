@@ -10,3 +10,8 @@ youtube_domains:
   - m.youtube.com
 captive_portal_enabled: false
 captive_portal_ip: ""
+rate_window: 10
+rate_max: 100
+burst_max_normal: 30
+burst_max_iot: 10
+block_duration: 300

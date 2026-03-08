@@ -21,7 +21,8 @@ CONFIG_PATH = "/config/config.yml"
 
 # Paths that don't require auth
 _PUBLIC = {"/login", "/health", "/static", "/captive", "/captive-portal",
-           "/ca.crt", "/ca.mobileconfig", "/install-cert.sh", "/dns-query"}
+           "/ca.crt", "/ca.mobileconfig", "/install-cert.sh", "/dns-query",
+           "/parental-block", "/api/parental/snooze"}
 
 
 def _cfg() -> dict:

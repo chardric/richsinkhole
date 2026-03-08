@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screen Time Limit Reached</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <style>
+    body {
+      background: #0d1117;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 16px;
+      max-width: 460px;
+      width: 100%;
+    }
+    .icon {
+      font-size: 4rem;
+      animation: bounce 1.8s ease-in-out infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-12px); }
+    }
+    .cat-badge {
+      background: #21262d;
+      color: #f0883e;
+      border: 1px solid rgba(240,136,62,.35);
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+    .domain { color: #58a6ff; font-family: monospace; word-break: break-all; }
+    .btn-snooze {
+      background: #f0883e;
+      border: none;
+      color: #0d1117;
+      font-weight: 700;
+      padding: 12px 0;
+      border-radius: 8px;
+      width: 100%;
+    }
+    .btn-snooze:hover:not(:disabled) { background: #d9762f; color: #0d1117; }
+    .btn-snooze:disabled { opacity: .6; }
+    .btn-back {
+      background: transparent;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      width: 100%;
+      border-radius: 8px;
+      padding: 10px 0;
+    }
+    .btn-back:hover { border-color: #8b949e; color: #c9d1d9; }
+    .tip { font-size: .72rem; color: #6e7681; }
+    #status-msg { min-height: 1.4em; font-size: .85rem; }
+  </style>
+</head>
+<body>
+<div class="card p-4 text-center shadow-lg">
+  <div class="icon mb-3">⏰</div>
+  <span class="cat-badge mb-3 d-inline-block">
+    {% if category == "social" %}📱 Social Media{% else %}🎮 Gaming &amp; Streaming{% endif %}
+  </span>
+  <h5 class="text-warning mt-2 mb-2">Daily Screen Time Limit Reached</h5>
+  <p class="text-secondary mb-1">
+    You've used up your daily
+    <strong class="text-light">{% if category == "social" %}social media{% else %}gaming{% endif %}</strong>
+    screen time.
+  </p>
+  <p class="text-secondary mb-4">
+    Site: <span class="domain">{{ blocked_host }}</span>
+  </p>
+
+  <div id="status-msg" class="text-muted mb-3"></div>
+
+  <button class="btn-snooze mb-3" id="btn-snooze">
+    Continue for 30 minutes
+  </button>
+  <button class="btn-back mb-3" onclick="history.back()">Go Back</button>
+
+  <p class="tip">Talk to a parent or guardian to adjust your screen time settings.</p>
+</div>
+
+<script>
+  var CLIENT_IP = {{ client_ip | tojson }};
+  var CATEGORY  = {{ category  | tojson }};
+
+  document.getElementById('btn-snooze').addEventListener('click', function () {
+    var btn = this;
+    var msg = document.getElementById('status-msg');
+    btn.disabled = true;
+    btn.textContent = 'Setting snooze…';
+    msg.textContent = '';
+
+    fetch('/api/parental/snooze/' + encodeURIComponent(CLIENT_IP) + '/' + CATEGORY, {
+      method: 'POST'
+    })
+    .then(function (r) { return r.json(); })
+    .then(function () {
+      btn.textContent = 'Snooze set!';
+      msg.innerHTML = '<span class="text-success">✓ 30-minute snooze granted.</span><br>'
+        + '<span class="text-muted">DNS refreshes in ~30 seconds. Then navigate to the site.</span>';
+    })
+    .catch(function () {
+      btn.disabled = false;
+      btn.textContent = 'Continue for 30 minutes';
+      msg.innerHTML = '<span class="text-danger">Could not set snooze. Try again.</span>';
+    });
+  });
+</script>
+</body>
+</html>

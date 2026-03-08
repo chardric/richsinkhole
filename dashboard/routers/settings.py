@@ -151,3 +151,55 @@ async def clear_email_password():
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
     return {"status": "cleared"}
+
+
+# ── Rate limit settings ───────────────────────────────────────────────────────
+
+_RL_DEFAULTS = {
+    "rate_window":      10,
+    "rate_max":         100,
+    "burst_max_normal": 30,
+    "burst_max_iot":    10,
+    "block_duration":   300,
+}
+
+
+@router.get("/settings/rate-limits")
+async def get_rate_limits():
+    cfg = _read_cfg()
+    return {k: int(cfg.get(k, v)) for k, v in _RL_DEFAULTS.items()}
+
+
+class RateLimitsIn(BaseModel):
+    rate_window:      int = 10
+    rate_max:         int = 100
+    burst_max_normal: int = 30
+    burst_max_iot:    int = 10
+    block_duration:   int = 300
+
+
+@router.post("/settings/rate-limits")
+async def save_rate_limits(body: RateLimitsIn):
+    # Validate ranges
+    if not (1 <= body.rate_window <= 60):
+        raise HTTPException(status_code=400, detail="rate_window must be 1–60 seconds")
+    if not (10 <= body.rate_max <= 1000):
+        raise HTTPException(status_code=400, detail="rate_max must be 10–1000")
+    if not (5 <= body.burst_max_normal <= 500):
+        raise HTTPException(status_code=400, detail="burst_max_normal must be 5–500")
+    if not (2 <= body.burst_max_iot <= 100):
+        raise HTTPException(status_code=400, detail="burst_max_iot must be 2–100")
+    if not (30 <= body.block_duration <= 86400):
+        raise HTTPException(status_code=400, detail="block_duration must be 30–86400 seconds")
+
+    cfg = _read_cfg()
+    cfg.update({
+        "rate_window":      body.rate_window,
+        "rate_max":         body.rate_max,
+        "burst_max_normal": body.burst_max_normal,
+        "burst_max_iot":    body.burst_max_iot,
+        "block_duration":   body.block_duration,
+    })
+    with open(CONFIG_PATH, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+    return {"status": "saved"}

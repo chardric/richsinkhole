@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import notifier
-from routers import allowlist, blocklist, canary, device_stats, devices, dns_records, doh, health, logs, metrics, ntp, privacy_report, proxy_rules, qr, schedules, security, settings, stats, updater
+from routers import allowlist, blocklist, canary, device_stats, devices, dns_records, doh, health, logs, metrics, ntp, parental, privacy_report, proxy_rules, qr, schedules, security, settings, stats, updater
 import auth
 
 SINKHOLE_DB = "/data/sinkhole.db"
@@ -83,6 +83,9 @@ async def lifespan(app: FastAPI):
             )
         """)
         await db.commit()
+    # Parental control tables + column migrations
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        await parental.ensure_tables(db)
     asyncio.create_task(notifier.run_notifier())
     yield
 
@@ -118,6 +121,7 @@ app.include_router(canary.router, prefix="/api")
 app.include_router(privacy_report.router, prefix="/api")
 app.include_router(proxy_rules.router, prefix="/api")
 app.include_router(ntp.router, prefix="/api")
+app.include_router(parental.router)
 app.include_router(metrics.router)
 app.include_router(health.router)
 

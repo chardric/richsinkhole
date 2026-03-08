@@ -663,6 +663,191 @@ _iot_ips_lock       = threading.Lock()
 _iot_ips_last_load: float    = 0.0
 _IOT_IPS_RELOAD     = 60     # seconds between DB refreshes
 
+# ---------------------------------------------------------------------------
+# Parental control state (reloaded every 30s)
+# ---------------------------------------------------------------------------
+_parental_devices:      dict[str, dict] = {}  # ip → {social, gaming, social_limit, gaming_limit}
+_parental_social:       set[str] = set()
+_parental_gaming:       set[str] = set()
+_parental_lock          = threading.Lock()
+_parental_last_load:    float = 0.0
+_PARENTAL_RELOAD        = 30.0
+
+# Screen time usage tracking (write-behind queue)
+_usage_today:  dict[tuple, int] = {}   # (ip, category) → today's query count (in-memory)
+_usage_queue:  dict[tuple, int] = {}   # pending DB increments
+_usage_lock    = threading.Lock()
+_usage_date:   str = ""                # YYYY-MM-DD, reset at midnight
+_snooze_cache: dict[tuple, float] = {} # (ip, category) → monotonic expiry
+
+
+def _load_parental() -> None:
+    global _parental_devices, _parental_social, _parental_gaming, _parental_last_load
+    global _usage_today, _usage_date, _snooze_cache
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
+            device_rows = conn.execute(
+                """SELECT ip, parental_block_social, parental_block_gaming,
+                          COALESCE(parental_social_limit, 0),
+                          COALESCE(parental_gaming_limit, 0)
+                   FROM device_fingerprints
+                   WHERE parental_enabled = 1"""
+            ).fetchall()
+            domain_rows = conn.execute(
+                "SELECT domain, category FROM parental_domains"
+            ).fetchall()
+            try:
+                usage_rows = conn.execute(
+                    "SELECT ip, category, query_count FROM parental_usage WHERE date = ?",
+                    (today,),
+                ).fetchall()
+            except Exception:
+                usage_rows = []
+            try:
+                now_wall = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                snooze_rows = conn.execute(
+                    "SELECT ip, category, expires_at FROM parental_snooze WHERE expires_at > ?",
+                    (now_wall,),
+                ).fetchall()
+            except Exception:
+                snooze_rows = []
+
+        devices = {
+            r[0]: {
+                "social":        bool(r[1]),
+                "gaming":        bool(r[2]),
+                "social_limit":  int(r[3]),
+                "gaming_limit":  int(r[4]),
+            }
+            for r in device_rows
+        }
+        social = {r[0] for r in domain_rows if r[1] == "social"}
+        gaming = {r[0] for r in domain_rows if r[1] == "gaming"}
+
+        # Build snooze monotonic cache
+        now_mono = time.monotonic()
+        now_wall_ts = time.time()
+        new_snooze: dict = {}
+        for ip, cat, expires_str in snooze_rows:
+            try:
+                expires_wall = datetime.strptime(expires_str, "%Y-%m-%d %H:%M:%S").timestamp()
+                expires_mono = now_mono + (expires_wall - now_wall_ts)
+                if expires_mono > now_mono:
+                    new_snooze[(ip, cat)] = expires_mono
+            except Exception:
+                pass
+
+        with _parental_lock:
+            _parental_devices   = devices
+            _parental_social    = social
+            _parental_gaming    = gaming
+            _parental_last_load = time.monotonic()
+
+        with _usage_lock:
+            if _usage_date != today:
+                _usage_today.clear()
+                _usage_queue.clear()
+                _usage_date = today
+            # Merge DB values (take max to not lose pending in-memory increments)
+            for r in usage_rows:
+                key = (r[0], r[1])
+                db_count = int(r[2])
+                if db_count > _usage_today.get(key, 0):
+                    _usage_today[key] = db_count
+            _snooze_cache = new_snooze
+
+    except Exception:
+        pass
+
+
+def _track_usage(ip: str, category: str) -> None:
+    """Increment in-memory usage counter; background writer flushes to DB every 30s."""
+    with _usage_lock:
+        key = (ip, category)
+        _usage_today[key] = _usage_today.get(key, 0) + 1
+        _usage_queue[key] = _usage_queue.get(key, 0) + 1
+
+
+def _usage_writer() -> None:
+    """Background thread: flush screen time increments to SQLite every 30s."""
+    log = logging.getLogger("usage")
+    while True:
+        time.sleep(30)
+        with _usage_lock:
+            if not _usage_queue:
+                continue
+            batch = dict(_usage_queue)
+            _usage_queue.clear()
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            with sqlite3.connect(SINKHOLE_DB, timeout=30) as conn:
+                for (ip, category), delta in batch.items():
+                    conn.execute(
+                        """INSERT INTO parental_usage (ip, category, date, query_count)
+                           VALUES (?, ?, ?, ?)
+                           ON CONFLICT(ip, category, date)
+                           DO UPDATE SET query_count = query_count + excluded.query_count""",
+                        (ip, category, today, delta),
+                    )
+                conn.commit()
+        except Exception as exc:
+            log.error("Usage writer failed: %s", exc)
+            with _usage_lock:
+                for key, delta in batch.items():
+                    _usage_queue[key] = _usage_queue.get(key, 0) + delta
+
+
+def _parental_check(client_ip: str, domain: str) -> str | None:
+    """
+    Return 'block', 'warn', or None based on parental controls.
+    - 'block': hard block (category blocked, or adult content)
+    - 'warn':  screen time limit exceeded (soft intercept)
+    - None:    allow
+    """
+    now = time.monotonic()
+    if now - _parental_last_load > _PARENTAL_RELOAD:
+        _load_parental()
+    with _parental_lock:
+        device = _parental_devices.get(client_ip)
+        if not device:
+            return None
+        social = _parental_social
+        gaming = _parental_gaming
+
+    # Determine category from domain suffixes
+    category = None
+    parts = domain.split(".")
+    for i in range(len(parts) - 1):
+        suffix = ".".join(parts[i:])
+        if suffix in social:
+            category = "social"
+            break
+        if suffix in gaming:
+            category = "gaming"
+            break
+
+    if category:
+        if device[category]:
+            # Hard-blocked category
+            _track_usage(client_ip, category)
+            return "block"
+        # Not hard-blocked: check screen time limit
+        limit = device[f"{category}_limit"]
+        if limit > 0:
+            _track_usage(client_ip, category)
+            with _usage_lock:
+                today_count = _usage_today.get((client_ip, category), 0)
+                snoozed     = _snooze_cache.get((client_ip, category), 0) > now
+            if today_count >= limit and not snoozed:
+                return "warn"
+        return None
+
+    # Adult/other: domain is in the main blocklist → parental page
+    if blocker.is_blocked(domain):
+        return "block"
+    return None
+
 
 def _load_iot_ips() -> None:
     global _iot_ips, _iot_ips_last_load
@@ -706,7 +891,8 @@ def _burst_check(client_ip: str) -> tuple[bool, str]:
     if now - _burst_start_time < _BURST_GRACE:
         return False, ""
 
-    threshold = _BURST_MAX_IOT if is_iot else _BURST_MAX_NORMAL
+    rl = _rl_cfg()
+    threshold = rl["burst_max_iot"] if is_iot else rl["burst_max_normal"]
     if burst_count > threshold:
         kind = "IoT device" if is_iot else "device"
         detail = f"{kind} DNS burst: {burst_count} queries/s (threshold: {threshold})"
@@ -940,6 +1126,18 @@ _NXDOMAIN_MAX   = 50    # max NXDOMAINs per window before recon block
 _BLOCK_AFTER    = 3     # consecutive over-limit windows before temp block
 _BLOCK_DURATION = 300   # block duration in seconds (5 min)
 
+
+def _rl_cfg() -> dict:
+    """Return current rate limit thresholds from live config (hot-reloaded every 30s)."""
+    cfg = get_config()
+    return {
+        "rate_window":      int(cfg.get("rate_window",      _RATE_WINDOW)),
+        "rate_max":         int(cfg.get("rate_max",          _RATE_MAX)),
+        "block_duration":   int(cfg.get("block_duration",    _BLOCK_DURATION)),
+        "burst_max_normal": int(cfg.get("burst_max_normal",  _BURST_MAX_NORMAL)),
+        "burst_max_iot":    int(cfg.get("burst_max_iot",     _BURST_MAX_IOT)),
+    }
+
 _rate_counters:    dict[str, tuple[int, float]] = {}  # ip → (count, window_start)
 _nxdomain_counters: dict[str, tuple[int, float]] = {} # ip → (count, window_start)
 _rate_violations:  dict[str, int] = {}                # ip → consecutive violation count
@@ -954,6 +1152,7 @@ def _rate_check(client_ip: str) -> tuple[bool, str]:
     Called in the hot path — lock is held only for dict ops.
     """
     now = time.monotonic()
+    rl = _rl_cfg()
     with _rl_lock:
         # Already blocked?
         if client_ip in _client_blocks:
@@ -963,7 +1162,7 @@ def _rate_check(client_ip: str) -> tuple[bool, str]:
 
         # Sliding window query counter
         count, ws = _rate_counters.get(client_ip, (0, now))
-        if now - ws > _RATE_WINDOW:
+        if now - ws > rl["rate_window"]:
             count, ws = 0, now
             # Decay violations on a clean new window
             if client_ip in _rate_violations:
@@ -971,11 +1170,11 @@ def _rate_check(client_ip: str) -> tuple[bool, str]:
         count += 1
         _rate_counters[client_ip] = (count, ws)
 
-        if count > _RATE_MAX:
+        if count > rl["rate_max"]:
             v = _rate_violations.get(client_ip, 0) + 1
             _rate_violations[client_ip] = v
             if v >= _BLOCK_AFTER:
-                _do_block(client_ip, "rate_limit", count)
+                _do_block(client_ip, "rate_limit", count, rl["block_duration"])
                 _rate_violations[client_ip] = 0
             return True, "rate_limit"
 
@@ -997,9 +1196,9 @@ def _nxdomain_update(client_ip: str) -> None:
             _do_block(client_ip, "nxdomain_flood", nc)
 
 
-def _do_block(client_ip: str, reason: str, query_count: int) -> None:
+def _do_block(client_ip: str, reason: str, query_count: int, duration: int = _BLOCK_DURATION) -> None:
     """Add to in-memory block dict and write queue. Must be called under _rl_lock."""
-    _client_blocks[client_ip] = time.monotonic() + _BLOCK_DURATION
+    _client_blocks[client_ip] = time.monotonic() + duration
     _block_write_queue[client_ip] = {"reason": reason, "query_count": query_count}
 
 
@@ -1088,7 +1287,8 @@ class SinkholeResolver(BaseResolver):
             block_reason = "iot_flood" if is_iot_block else "burst_limit"
             with _rl_lock:
                 if client_ip not in _client_blocks:
-                    _do_block(client_ip, block_reason, _burst_counters.get(client_ip, (0,))[0])
+                    _do_block(client_ip, block_reason, _burst_counters.get(client_ip, (0,))[0],
+                              _rl_cfg()["block_duration"])
             _log_security_event(client_ip, domain, block_reason, burst_detail)
             log_query(client_ip, domain, qtype_str, "ratelimited")
             reply = request.reply()
@@ -1138,6 +1338,18 @@ class SinkholeResolver(BaseResolver):
                 return self._redirect_response(request, yt_ip)
             else:
                 self.logger.debug("YT-SKIP %s  cert not installed  (client=%s)", domain, client_ip)
+
+        # 2b. Parental controls — redirect to block/warning page on the server
+        if not passthrough:
+            parental_action = _parental_check(client_ip, domain)
+            if parental_action:
+                host_ip = cfg.get("captive_portal_ip") or cfg.get("youtube_redirect_ip", "")
+                if host_ip:
+                    action_str = "parental" if parental_action == "block" else "parental_warn"
+                    self.logger.info("PARENTAL[%s] %s -> %s  (client=%s)",
+                                     parental_action, domain, host_ip, client_ip)
+                    log_query(client_ip, domain, qtype_str, action_str)
+                    return self._redirect_response(request, host_ip)
 
         # 3. Blocklist check (allowlist takes precedence inside is_blocked; skipped for passthrough)
         if not passthrough and blocker.is_blocked(domain):
@@ -1359,6 +1571,11 @@ def main():
     bw.start()
     _load_existing_blocks()
     log.info("Block writer started; existing blocks restored")
+
+    # Start screen time usage writer
+    uw = threading.Thread(target=_usage_writer, daemon=True, name="usage-writer")
+    uw.start()
+    log.info("Usage writer started (flush every 30s)")
 
     dns_logger = DnsLibLogger(prefix=False)
     resolver = SinkholeResolver()

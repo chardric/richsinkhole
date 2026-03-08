@@ -33,19 +33,21 @@ async def list_devices():
         await db.execute(_ENSURE_TABLE)
         rows = await db.execute_fetchall(
             """SELECT ip, device_type, confidence, first_seen, last_seen, label,
-                      COALESCE(profile, 'normal')
+                      COALESCE(profile, 'normal'),
+                      COALESCE(parental_enabled, 0)
                FROM device_fingerprints
                ORDER BY last_seen DESC"""
         )
     return [
         {
-            "ip":          r[0],
-            "device_type": r[1],
-            "confidence":  r[2],
-            "first_seen":  r[3],
-            "last_seen":   r[4],
-            "label":       r[5] or "",
-            "profile":     r[6],
+            "ip":              r[0],
+            "device_type":     r[1],
+            "confidence":      r[2],
+            "first_seen":      r[3],
+            "last_seen":       r[4],
+            "label":           r[5] or "",
+            "profile":         r[6],
+            "parental_enabled": bool(r[7]),
         }
         for r in rows
     ]

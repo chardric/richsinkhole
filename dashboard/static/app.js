@@ -12,6 +12,30 @@
 const BASE = (window.BASE_PATH || "").replace(/\/$/, "");
 
 // ============================================================
+// Generic sortable table
+// ============================================================
+function initSortable(thead) {
+  thead.querySelectorAll("th[data-col]").forEach(th => {
+    th.addEventListener("click", () => {
+      const tbody = thead.closest("table").querySelector("tbody");
+      const col   = parseInt(th.dataset.col);
+      const asc   = !th.classList.contains("sort-asc");
+      thead.querySelectorAll("th[data-col]").forEach(t => t.classList.remove("sort-asc", "sort-desc"));
+      th.classList.add(asc ? "sort-asc" : "sort-desc");
+      Array.from(tbody.querySelectorAll("tr"))
+        .sort((a, b) => {
+          const av = a.cells[col]?.dataset.sort ?? a.cells[col]?.textContent.trim() ?? "";
+          const bv = b.cells[col]?.dataset.sort ?? b.cells[col]?.textContent.trim() ?? "";
+          const an = parseFloat(av), bn = parseFloat(bv);
+          if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+          return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+        })
+        .forEach(r => tbody.appendChild(r));
+    });
+  });
+}
+
+// ============================================================
 // API helper
 // ============================================================
 async function api(method, path, body) {
@@ -602,6 +626,46 @@ async function saveEmailSettings() {
 }
 
 // ============================================================
+// Rate limit settings
+// ============================================================
+async function loadRateLimits() {
+  try {
+    const cfg = await api("GET", "/api/settings/rate-limits");
+    document.getElementById("rl-rate-window").value   = cfg.rate_window;
+    document.getElementById("rl-rate-max").value      = cfg.rate_max;
+    document.getElementById("rl-block-duration").value = cfg.block_duration;
+    document.getElementById("rl-burst-normal").value  = cfg.burst_max_normal;
+    document.getElementById("rl-burst-iot").value     = cfg.burst_max_iot;
+  } catch (e) {
+    showToast("Failed to load rate limit settings: " + e.message, "danger");
+  }
+}
+
+async function saveRateLimits() {
+  const btn    = document.getElementById("btn-save-rate-limits");
+  const status = document.getElementById("rl-save-status");
+  btn.disabled = true;
+  status.textContent = "Saving…";
+  try {
+    await api("POST", "/api/settings/rate-limits", {
+      rate_window:      parseInt(document.getElementById("rl-rate-window").value, 10),
+      rate_max:         parseInt(document.getElementById("rl-rate-max").value, 10),
+      block_duration:   parseInt(document.getElementById("rl-block-duration").value, 10),
+      burst_max_normal: parseInt(document.getElementById("rl-burst-normal").value, 10),
+      burst_max_iot:    parseInt(document.getElementById("rl-burst-iot").value, 10),
+    });
+    status.textContent = "Saved ✓";
+    setTimeout(() => { status.textContent = ""; }, 3000);
+  } catch (e) {
+    status.textContent = "Failed";
+    showToast("Save failed: " + e.message, "danger");
+    setTimeout(() => { status.textContent = ""; }, 4000);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
 // Security
 // ============================================================
 async function loadSecurityStats() {
@@ -766,19 +830,22 @@ async function loadDevices() {
       const confBar = `<div class="progress" style="height:5px;min-width:60px">
         <div class="progress-bar bg-info" style="width:${Math.min(100, d.confidence)}%"></div>
       </div>`;
-      const profileColors = { normal: "bg-secondary", strict: "bg-danger", passthrough: "bg-success" };
       const profileSelect = `<select class="form-select form-select-sm py-0 profile-select" data-ip="${escHtml(d.ip)}"
         style="font-size:.7rem;width:auto;min-width:100px;background:#161b22;border-color:#30363d">
         <option value="normal"      ${d.profile === "normal"      ? "selected" : ""}>Normal</option>
         <option value="strict"      ${d.profile === "strict"      ? "selected" : ""}>Strict</option>
         <option value="passthrough" ${d.profile === "passthrough" ? "selected" : ""}>Passthrough</option>
       </select>`;
+      const parentalBtn = d.parental_enabled
+        ? `<button class="btn btn-sm btn-warning py-0 btn-parental" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">🛡️ On</button>`
+        : `<button class="btn btn-sm btn-outline-secondary py-0 btn-parental" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">🛡️ Off</button>`;
       return `<tr>
         <td class="ps-3 font-monospace small">${escHtml(d.ip)}</td>
         <td class="small">${label}</td>
         <td>${deviceBadge(d.device_type)}</td>
         <td>${profileSelect}</td>
-        <td style="min-width:80px">${confBar}</td>
+        <td>${parentalBtn}</td>
+        <td style="min-width:80px" data-sort="${d.confidence}">${confBar}</td>
         <td class="small text-muted font-monospace">${escHtml((d.first_seen || "").slice(0, 16))}</td>
         <td class="small text-muted font-monospace">${escHtml((d.last_seen || "").slice(0, 16))}</td>
         <td class="pe-3 text-end"><button class="btn btn-sm btn-outline-info py-0 btn-device-stats" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">Stats</button></td>
@@ -804,6 +871,11 @@ async function loadDevices() {
       });
     });
 
+    // Parental controls button
+    tbody.querySelectorAll(".btn-parental").forEach(btn => {
+      btn.addEventListener("click", () => openParentalModal(btn.dataset.ip));
+    });
+
     // Inline label editing
     tbody.querySelectorAll(".device-label").forEach(el => {
       el.addEventListener("click", async () => {
@@ -824,6 +896,63 @@ async function loadDevices() {
     empty.style.display = "none";
   }
 }
+
+// ============================================================
+// Parental controls modal
+// ============================================================
+let _parentalModalIp = null;
+
+async function openParentalModal(ip) {
+  _parentalModalIp = ip;
+  document.getElementById("parental-modal-ip").textContent = ip;
+  document.getElementById("parental-save-status").textContent = "";
+  try {
+    const s = await api("GET", `/api/parental/settings/${encodeURIComponent(ip)}`);
+    document.getElementById("parental-enabled").checked      = s.parental_enabled;
+    document.getElementById("parental-social").checked       = s.parental_block_social;
+    document.getElementById("parental-gaming").checked       = s.parental_block_gaming;
+    document.getElementById("parental-social-limit").value   = s.parental_social_limit ?? 500;
+    document.getElementById("parental-gaming-limit").value   = s.parental_gaming_limit ?? 500;
+    _updateParentalCategoryState(s.parental_enabled);
+  } catch (e) {
+    showToast("Could not load parental settings: " + e.message, "danger");
+    return;
+  }
+  new bootstrap.Modal(document.getElementById("modal-parental")).show();
+}
+
+function _updateParentalCategoryState(enabled) {
+  const cats = document.getElementById("parental-categories");
+  cats.style.opacity       = enabled ? "1"    : "0.4";
+  cats.style.pointerEvents = enabled ? "auto" : "none";
+}
+
+document.getElementById("parental-enabled").addEventListener("change", e => {
+  _updateParentalCategoryState(e.target.checked);
+});
+
+document.getElementById("btn-save-parental").addEventListener("click", async () => {
+  if (!_parentalModalIp) return;
+  const status = document.getElementById("parental-save-status");
+  status.textContent = "Saving…";
+  try {
+    await api("POST", `/api/parental/settings/${encodeURIComponent(_parentalModalIp)}`, {
+      parental_enabled:      document.getElementById("parental-enabled").checked,
+      parental_block_social: document.getElementById("parental-social").checked,
+      parental_block_gaming: document.getElementById("parental-gaming").checked,
+      parental_social_limit: parseInt(document.getElementById("parental-social-limit").value) || 0,
+      parental_gaming_limit: parseInt(document.getElementById("parental-gaming-limit").value) || 0,
+    });
+    status.textContent = "Saved ✓";
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(document.getElementById("modal-parental"))?.hide();
+      loadDevices();
+    }, 800);
+  } catch (e) {
+    status.textContent = "Failed";
+    showToast("Save failed: " + e.message, "danger");
+  }
+});
 
 // ============================================================
 // Schedules
@@ -1681,7 +1810,9 @@ function bindEvents() {
   document.getElementById("tab-settings-btn").addEventListener("shown.bs.tab", () => {
     loadSettings();
     loadEmailSettings();
+    loadRateLimits();
   });
+  document.getElementById("btn-save-rate-limits").addEventListener("click", saveRateLimits);
 
   // Auto-save proxy/captive toggles on change
   document.getElementById("yt-enabled").addEventListener("change", saveSettings);
@@ -1744,6 +1875,7 @@ function bindEvents() {
 // Init
 // ============================================================
 document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("thead").forEach(initSortable);
   bindEvents();
   connectSSE();
 

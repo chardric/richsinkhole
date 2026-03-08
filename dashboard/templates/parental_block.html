@@ -1,0 +1,167 @@
+<!--
+  Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+  Developed by: Richard R. Ayuyang, PhD
+                Professor II, CSU
+  All rights reserved.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Site Blocked</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 20px;
+      padding: 3rem 2.5rem 2.5rem;
+      max-width: 460px;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* Animated shield */
+    .shield-wrap {
+      margin-bottom: 1.75rem;
+    }
+    .shield {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+      border: 2px solid #374151;
+      font-size: 2.4rem;
+      animation: pulse-shield 3s ease-in-out infinite;
+    }
+    @keyframes pulse-shield {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.3); }
+      50%       { box-shadow: 0 0 0 12px rgba(249, 115, 22, 0); }
+    }
+
+    h1 {
+      color: #e6edf3;
+      font-size: 1.55rem;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: #8b949e;
+      font-size: 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .domain-badge {
+      display: inline-block;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      color: #f0883e;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 8px;
+      margin-bottom: 1.75rem;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message-box {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.75rem;
+      text-align: left;
+    }
+    .message-box p {
+      color: #8b949e;
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+    .message-box p + p {
+      margin-top: 0.75rem;
+    }
+    .message-box strong {
+      color: #c9d1d9;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #1c2128;
+      border: 1px solid #373e47;
+      color: #f0883e;
+      border-radius: 20px;
+      padding: 0.4rem 1.1rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+    }
+
+    .footer {
+      border-top: 1px solid #21262d;
+      padding-top: 1.25rem;
+      color: #484f58;
+      font-size: 0.75rem;
+    }
+    .footer a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+
+    <div class="shield-wrap">
+      <div class="shield">🛡️</div>
+    </div>
+
+    <h1>This site is not available</h1>
+    <p class="subtitle">Access has been restricted by your network administrator.</p>
+
+    {% if blocked_host and blocked_host != 'this site' %}
+    <div class="domain-badge">{{ blocked_host }}</div>
+    {% endif %}
+
+    <div class="message-box">
+      <p>This website has been <strong>blocked by your family's network protection settings</strong>.</p>
+      <p>If you believe this is a mistake or need access, please speak with a <strong>parent or guardian</strong> who can adjust the settings.</p>
+    </div>
+
+    <div class="status-badge">
+      <span>&#x1F512;</span> Blocked by Family Settings
+    </div>
+
+    <div class="footer">
+      Protected by <a href="/richsinkhole/" target="_blank">RichSinkhole</a> &mdash; Family Network Security
+    </div>
+
+  </div>
+</body>
+</html>
