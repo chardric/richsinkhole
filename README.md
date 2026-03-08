@@ -1,8 +1,6 @@
 # RichSinkhole
 
-A self-hosted DNS sinkhole and ad blocker for your home network. Blocks ads, trackers, telemetry, and malicious domains at the DNS level — network-wide, no per-device software needed.
-
-Built with Python, FastAPI, Unbound, and Docker. Runs on any Linux machine including a Raspberry Pi.
+A self-hosted DNS sinkhole and ad blocker for your home network, built with Python, FastAPI, Unbound, and Docker. Blocks ads, trackers, telemetry, and malicious domains at the DNS level — network-wide, no per-device software needed. Runs on any Linux machine including a Raspberry Pi.
 
 ---
 
@@ -31,6 +29,21 @@ Built with Python, FastAPI, Unbound, and Docker. Runs on any Linux machine inclu
 - **DNS-over-HTTPS (DoH)** — built-in DoH endpoint (`/dns-query`) compatible with all major browsers
 - **Backup & restore** — single-command archive of all persistent data
 - **ARM64 / Raspberry Pi ready** — includes a cross-compilation deploy script
+
+---
+
+## Tech Stack
+
+| Service | Technology | Purpose |
+|---------|------------|---------|
+| DNS Sinkhole | Python, dnslib | DNS blocking, device fingerprinting, query logging |
+| Dashboard | Python, FastAPI, Jinja2 | Web UI, REST API, SSE live log |
+| Recursive Resolver | Unbound | DNSSEC validation, DNS rebinding protection |
+| Blocklist Updater | Python | Scheduled fetch, dedup, SQLite writer |
+| YouTube Proxy | Python, httpx | Ad-stripping reverse proxy |
+| NTP Server | chrony (Alpine) | Network time server |
+| Reverse Proxy | Nginx | TLS, routing, static files |
+| Infrastructure | Docker Compose | Container orchestration |
 
 ---
 
@@ -93,14 +106,14 @@ All services run in Docker containers orchestrated by Docker Compose.
 
 ## Quick Start
 
-### 1. Clone the repo
+1. Clone the repo:
 
 ```bash
 git clone https://github.com/chardric/richsinkhole.git
 cd richsinkhole
 ```
 
-### 2. Configure environment
+2. Configure environment:
 
 ```bash
 cp .env.example .env
@@ -119,7 +132,7 @@ HTTP_PORT=80
 TZ=Asia/Manila
 ```
 
-### 3. Install and start
+3. Install and start:
 
 ```bash
 chmod +x install.sh
@@ -133,13 +146,9 @@ The installer will:
 - Start all services
 - Verify health
 
-### 4. Point your router's DNS to this machine
+4. Point your router's **primary DNS** to the `HOST_IP` you configured. All devices on your network will now have ads and trackers blocked at the DNS level.
 
-Set the **primary DNS** on your router (or per-device) to the `HOST_IP` you configured.
-
-All devices on your network will now have ads and trackers blocked at the DNS level.
-
-### 5. Open the dashboard
+5. Open the dashboard:
 
 ```
 http://<HOST_IP>/richsinkhole/
@@ -385,12 +394,4 @@ Use `./backup.sh` to snapshot all of this, and `./restore.sh` to migrate to a ne
 
 ---
 
-## License
-
-MIT
-
----
-
-## Copyright
-
-Copyright &copy; [DownStreamTech](https://downstreamtech.net). All rights reserved.
+© [DownStreamTech](https://downstreamtech.net) — Licensed under the [MIT License](LICENSE)
