@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiDelete, apiGet } from '../api/client'
-import type { SecurityBlock, SecurityEvent } from '../api/types'
+import type { SecurityBlock, SecurityEvent, SecurityStats } from '../api/types'
 import { LoadingSpinner, FullPageSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
 import { useInterval } from '../hooks/useInterval'
@@ -41,17 +41,20 @@ export function SecurityScreen() {
   const { showToast } = useToast()
   const [blocks,   setBlocks]   = useState<SecurityBlock[]>([])
   const [events,   setEvents]   = useState<SecurityEvent[]>([])
+  const [secStats, setSecStats] = useState<SecurityStats | null>(null)
   const [loading,  setLoading]  = useState(true)
   const [unblockg, setUnblockg] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
-      const [b, e] = await Promise.all([
+      const [b, e, s] = await Promise.allSettled([
         apiGet<SecurityBlock[]>('/api/security/blocks'),
         apiGet<SecurityEvent[]>('/api/security/events?limit=100'),
+        apiGet<SecurityStats>('/api/security/stats'),
       ])
-      setBlocks(b)
-      setEvents(e)
+      if (b.status === 'fulfilled') setBlocks(b.value)
+      if (e.status === 'fulfilled') setEvents(e.value)
+      if (s.status === 'fulfilled') setSecStats(s.value)
     } catch {
       // silent — keep last data
     } finally {
@@ -80,6 +83,28 @@ export function SecurityScreen() {
   return (
     <div className="h-full scroll-area">
       <div className="p-4 space-y-5 max-w-2xl mx-auto md:py-6">
+
+        {/* Security Stats */}
+        {secStats && (
+          <section>
+            <h2 className="text-sm font-semibold text-[#e6edf3] mb-2">24-Hour Summary</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Active Blocks', value: secStats.active_blocks, cls: 'text-danger' },
+                { label: 'Total Blocks', value: secStats.total_blocks, cls: 'text-orange-400' },
+                { label: 'Rate Limited', value: secStats.ratelimited_24h, cls: 'text-yellow-400' },
+                { label: 'NXDOMAIN', value: secStats.nxdomain_24h, cls: 'text-muted' },
+                { label: 'Rebinding', value: secStats.rebinding_24h, cls: 'text-red-400' },
+                { label: 'IoT Flood', value: secStats.iot_flood_24h, cls: 'text-yellow-400' },
+              ].map(s => (
+                <div key={s.label} className="bg-surface border border-border rounded-lg p-3">
+                  <p className="text-xs text-muted">{s.label}</p>
+                  <p className={`text-lg font-bold tabular-nums ${s.cls}`}>{s.value.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Active blocks */}
         <section>

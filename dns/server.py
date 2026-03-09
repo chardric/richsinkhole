@@ -308,17 +308,11 @@ def _log_writer() -> None:
 # Domains matching these patterns are automatically added to the blocklist
 # the first time they are forwarded (allow on first query, block all subsequent).
 #
-# YouTube CDN node naming format:
-#   r[N]---sn-[id].googlevideo.com   (triple-dash, single-r prefix)
-#   r[N].sn-[id].googlevideo.com     (dot-separator, single-r prefix)
-#   rr[N]---sn-[id].googlevideo.com  (triple-dash, double-r prefix)
-#   rr[N].sn-[id].googlevideo.com    (dot-separator, double-r prefix)
-# Also via c.youtube.com (ISP/peering cache, same node naming convention).
+# NOTE: YouTube CDN nodes (googlevideo.com, c.youtube.com) are NOT auto-blocked
+# because the same CDN edge serves both video content and ads. DNS-level blocking
+# breaks video playback. Ad removal is handled by the YouTube proxy layer instead.
 _AUTO_BLOCK_PATTERNS: list[re.Pattern] = [
-    # Primary YouTube CDN delivery nodes — googlevideo.com
-    re.compile(r"^rr?\d+(?:---|\.)sn-[a-z0-9][-a-z0-9]*\.googlevideo\.com$", re.IGNORECASE),
-    # ISP/peering cache format — c.youtube.com (same node naming, different TLD)
-    re.compile(r"^rr?\d+(?:---|\.)sn-[a-z0-9][-a-z0-9]*\.c\.youtube\.com$", re.IGNORECASE),
+    # (reserved for future auto-block patterns — YouTube CDN removed)
 ]
 
 _auto_block_queue: set[str] = set()   # domains pending DB write
@@ -1268,32 +1262,37 @@ class SinkholeResolver(BaseResolver):
         client_ip = handler.client_address[0]
         domain = qname.lower().rstrip(".")
 
-        # 0. Rate limit / flood protection (10-second window, sustained floods)
-        refuse, rl_reason = _rate_check(client_ip)
-        if refuse:
-            self.logger.warning("REFUSED  %s  [%s]  (client=%s)", domain, rl_reason, client_ip)
-            log_query(client_ip, domain, qtype_str, "ratelimited")
-            reply = request.reply()
-            reply.header.rcode = 5  # REFUSED
-            return reply
+        # Determine device blocking profile (early — needed by burst/rate checks)
+        profile = _get_device_profile(client_ip)
+        passthrough = (profile == "passthrough")
 
-        # 0a. IoT / device burst detection (1-second window, sudden spikes)
-        burst, burst_detail = _burst_check(client_ip)
-        if burst:
-            self.logger.warning("BURST    %s  (client=%s) %s", domain, client_ip, burst_detail)
-            # Trigger immediate auto-block via the existing block engine
-            with _iot_ips_lock:
-                is_iot_block = client_ip in _iot_ips
-            block_reason = "iot_flood" if is_iot_block else "burst_limit"
-            with _rl_lock:
-                if client_ip not in _client_blocks:
-                    _do_block(client_ip, block_reason, _burst_counters.get(client_ip, (0,))[0],
-                              _rl_cfg()["block_duration"])
-            _log_security_event(client_ip, domain, block_reason, burst_detail)
-            log_query(client_ip, domain, qtype_str, "ratelimited")
-            reply = request.reply()
-            reply.header.rcode = 5  # REFUSED
-            return reply
+        # 0. Rate limit / flood protection (skipped for passthrough)
+        if not passthrough:
+            refuse, rl_reason = _rate_check(client_ip)
+            if refuse:
+                self.logger.warning("REFUSED  %s  [%s]  (client=%s)", domain, rl_reason, client_ip)
+                log_query(client_ip, domain, qtype_str, "ratelimited")
+                reply = request.reply()
+                reply.header.rcode = 5  # REFUSED
+                return reply
+
+        # 0a. IoT / device burst detection (skipped for passthrough)
+        if not passthrough:
+            burst, burst_detail = _burst_check(client_ip)
+            if burst:
+                self.logger.warning("BURST    %s  (client=%s) %s", domain, client_ip, burst_detail)
+                with _iot_ips_lock:
+                    is_iot_block = client_ip in _iot_ips
+                block_reason = "iot_flood" if is_iot_block else "burst_limit"
+                with _rl_lock:
+                    if client_ip not in _client_blocks:
+                        _do_block(client_ip, block_reason, _burst_counters.get(client_ip, (0,))[0],
+                                  _rl_cfg()["block_duration"])
+                _log_security_event(client_ip, domain, block_reason, burst_detail)
+                log_query(client_ip, domain, qtype_str, "ratelimited")
+                reply = request.reply()
+                reply.header.rcode = 5  # REFUSED
+                return reply
 
         # 0c. Canary token check (always — security tripwire, runs for all profiles)
         if _check_canary(client_ip, domain):
@@ -1302,10 +1301,6 @@ class SinkholeResolver(BaseResolver):
             reply = request.reply()
             reply.header.rcode = 3  # NXDOMAIN
             return reply
-
-        # Determine device blocking profile
-        profile = _get_device_profile(client_ip)
-        passthrough = (profile == "passthrough")
 
         # 0b. Schedule / bedtime block (skipped for passthrough)
         if not passthrough and _is_scheduled_block(client_ip):

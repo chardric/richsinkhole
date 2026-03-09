@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiGet, apiPost, getServerUrl } from '../api/client'
-import type { AppSettings, NtpStatus } from '../api/types'
+import type { AppSettings, NtpStatus, ServicesStatus } from '../api/types'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
@@ -164,6 +164,8 @@ export function SettingsScreen() {
 
   const [settings,     setSettings]     = useState<AppSettings | null>(null)
   const [ntpRunning,   setNtpRunning]   = useState<boolean | null>(null)
+  const [services,     setServices]     = useState<ServicesStatus | null>(null)
+  const [restarting,   setRestarting]   = useState<string | null>(null)
   const [loading,      setLoading]      = useState(true)
   const [togglingNtp,  setTogglingNtp]  = useState(false)
   const [togglingYt,   setTogglingYt]   = useState(false)
@@ -172,12 +174,14 @@ export function SettingsScreen() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [cfg, ntp] = await Promise.allSettled([
+      const [cfg, ntp, svc] = await Promise.allSettled([
         apiGet<AppSettings>('/api/settings'),
         apiGet<NtpStatus>('/api/ntp/status'),
+        apiGet<ServicesStatus>('/api/services/status'),
       ])
       if (cfg.status === 'fulfilled') setSettings(cfg.value)
       if (ntp.status === 'fulfilled') setNtpRunning(ntp.value.running)
+      if (svc.status === 'fulfilled') setServices(svc.value)
     } catch {
       // silent
     } finally {
@@ -233,6 +237,25 @@ export function SettingsScreen() {
       showToast('error', err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
       setTogglingCap(false)
+    }
+  }
+
+  async function restartService(name: string) {
+    setRestarting(name)
+    try {
+      await apiPost(`/api/services/restart/${name}`)
+      showToast('success', `${name} restarted`)
+      // Refresh status after a delay (nginx needs more time)
+      setTimeout(async () => {
+        try {
+          const svc = await apiGet<ServicesStatus>('/api/services/status')
+          setServices(svc)
+        } catch { /* silent */ }
+        setRestarting(null)
+      }, name === 'nginx' ? 4000 : 2000)
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : `Failed to restart ${name}`)
+      setRestarting(null)
     }
   }
 
@@ -310,6 +333,42 @@ export function SettingsScreen() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           </button>
+        </SectionCard>
+
+        {/* Service Controls */}
+        <SectionCard title="Service Controls">
+          {(['dns', 'unbound', 'nginx'] as const).map(svc => {
+            const info = services?.[svc]
+            const labels: Record<string, [string, string]> = {
+              dns:     ['DNS Server',  'Port 53 · Blocklist enforcement'],
+              unbound: ['Unbound',     'Upstream resolver · DNSSEC'],
+              nginx:   ['Nginx',       'Port 80/443 · Reverse proxy'],
+            }
+            const [label, sub] = labels[svc]
+            return (
+              <div key={svc} className="flex items-center justify-between gap-3 px-4 py-3 min-h-[56px]">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-[#e6edf3]">{label}</p>
+                    {info && (
+                      <span className={`pill text-xs ${info.running ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
+                        {info.status || (info.running ? 'running' : 'stopped')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted mt-0.5">{sub}</p>
+                </div>
+                <button
+                  onClick={() => restartService(svc)}
+                  disabled={restarting === svc}
+                  className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+                >
+                  {restarting === svc ? <LoadingSpinner size={12} /> : null}
+                  Restart
+                </button>
+              </div>
+            )
+          })}
         </SectionCard>
 
         {/* About */}

@@ -440,26 +440,6 @@ async function togglePreset(toggle) {
 }
 
 // ============================================================
-// YouTube auto-blocked CDN nodes
-// ============================================================
-async function loadYTAutoBlocked() {
-  const body = document.getElementById("yt-autoblocked-body");
-  try {
-    const r = await api("GET", "/api/blocklist/yt-autoblocked");
-    if (!r.domains.length) {
-      body.innerHTML = '<div class="text-muted small text-center py-2">No YouTube ad CDN nodes detected yet. Browse YouTube on your network — ad delivery nodes will be identified and blocked automatically.</div>';
-      return;
-    }
-    body.innerHTML = `
-      <div class="text-muted small mb-2">${r.total} node${r.total !== 1 ? "s" : ""} auto-blocked</div>
-      <div class="font-monospace small" style="max-height:160px;overflow-y:auto;background:#0d1117;border-radius:4px;padding:8px">
-        ${r.domains.map(d => `<div class="text-muted">${escHtml(d.domain)}</div>`).join("")}
-      </div>`;
-  } catch (_) {
-    body.innerHTML = '<div class="text-muted small text-center py-2">Could not load YouTube CDN nodes.</div>';
-  }
-}
-
 // ============================================================
 // Updater
 // ============================================================
@@ -536,6 +516,53 @@ async function loadNtpStatus() {
     const d = await api("GET", "/api/ntp/status");
     document.getElementById("ntp-enabled").checked = d.running;
   } catch (_) {}
+}
+
+// ── Service Controls ──
+function _svcBadge(key, info) {
+  const el = document.getElementById(`svc-${key}-badge`);
+  if (!el) return;
+  if (info.running) {
+    el.textContent = info.status || "running";
+    el.className = "badge rounded-pill bg-success";
+  } else {
+    el.textContent = info.status || "stopped";
+    el.className = "badge rounded-pill bg-danger";
+  }
+}
+
+async function loadServiceStatus() {
+  try {
+    const d = await api("GET", "/api/services/status");
+    for (const [k, v] of Object.entries(d)) _svcBadge(k, v);
+  } catch (_) {}
+}
+
+async function restartService(service, btn) {
+  const spinner = btn.querySelector(".spinner-border");
+  btn.disabled = true;
+  spinner.classList.remove("d-none");
+  const msg = document.getElementById("svc-status-msg");
+  try {
+    await api("POST", `/api/services/restart/${service}`);
+    msg.textContent = `${service} restarted`;
+    msg.className = "text-success small fw-normal";
+    showToast(`${service} restarted successfully`, "success");
+    // If nginx was restarted, wait for reconnect then refresh status
+    if (service === "nginx") {
+      setTimeout(() => loadServiceStatus(), 4000);
+    } else {
+      setTimeout(() => loadServiceStatus(), 2000);
+    }
+  } catch (e) {
+    msg.textContent = `Failed to restart ${service}`;
+    msg.className = "text-danger small fw-normal";
+    showToast(`Restart failed: ${e.message}`, "danger");
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add("d-none");
+    setTimeout(() => { msg.textContent = ""; }, 5000);
+  }
 }
 
 async function loadSettings() {
@@ -746,8 +773,6 @@ async function loadSecurityBlocks() {
       <tr>
         <td class="ps-3 font-monospace small">${escHtml(b.ip)}</td>
         <td><span class="badge bg-danger">${escHtml(b.reason_label)}</span></td>
-        <td class="small text-muted">${b.query_count.toLocaleString()}</td>
-        <td class="small text-muted font-monospace">${escHtml(b.blocked_at)}</td>
         <td class="small text-muted font-monospace">${escHtml(b.expires_at)}</td>
         <td class="pe-3 text-end">
           <button class="btn btn-sm btn-outline-secondary py-0 btn-unblock"
@@ -769,7 +794,7 @@ async function loadSecurityBlocks() {
       });
     });
   } catch (_) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-muted small text-center py-3">Could not load blocks.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-muted small text-center py-3">Could not load blocks.</td></tr>`;
     empty.style.display = "none";
   }
 }
@@ -808,7 +833,7 @@ const DEVICE_META = {
 function deviceBadge(type) {
   const m = DEVICE_META[type];
   if (!m) return `<span class="badge bg-secondary" style="font-size:.72rem">${escHtml(type)}</span>`;
-  const img = `<img src="/static/icons/${m.svg}.svg" width="13" height="13" style="filter:invert(${m.fg==='#fff'?1:0});margin-right:4px;vertical-align:middle;position:relative;top:-1px">`;
+  const img = `<img src="${BASE}/static/icons/${m.svg}.svg" width="13" height="13" style="filter:invert(${m.fg==='#fff'?1:0});margin-right:4px;vertical-align:middle;position:relative;top:-1px">`;
   return `<span class="badge d-inline-flex align-items-center gap-1" style="font-size:.72rem;background:${m.bg};color:${m.fg}">${img}${escHtml(type)}</span>`;
 }
 
@@ -848,12 +873,30 @@ async function loadDevices() {
         <td style="min-width:80px" data-sort="${d.confidence}">${confBar}</td>
         <td class="small text-muted font-monospace">${escHtml((d.first_seen || "").slice(0, 16))}</td>
         <td class="small text-muted font-monospace">${escHtml((d.last_seen || "").slice(0, 16))}</td>
-        <td class="pe-3 text-end"><button class="btn btn-sm btn-outline-info py-0 btn-device-stats" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">Stats</button></td>
+        <td class="pe-3 text-end">
+          <button class="btn btn-sm btn-outline-info py-0 btn-device-stats" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">Stats</button>
+          <button class="btn btn-sm btn-outline-danger py-0 btn-device-delete" data-ip="${escHtml(d.ip)}" style="font-size:.7rem" title="Delete device and all records">Del</button>
+        </td>
       </tr>`;
     }).join("");
 
     tbody.querySelectorAll(".btn-device-stats").forEach(btn => {
       btn.addEventListener("click", () => openDeviceStats(btn.dataset.ip));
+    });
+
+    // Delete device
+    tbody.querySelectorAll(".btn-device-delete").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const ip = btn.dataset.ip;
+        if (!confirm(`Delete device ${ip} and ALL its records?\n\nThis removes query logs, security events, parental data, schedules, and blocks for this device. This cannot be undone.`)) return;
+        try {
+          await api("DELETE", `/api/devices/${encodeURIComponent(ip)}`);
+          showToast(`Device ${ip} deleted`, "success");
+          loadDevices();
+        } catch (e) {
+          showToast("Delete failed: " + e.message, "danger");
+        }
+      });
     });
 
     // Profile change
@@ -1644,47 +1687,235 @@ function openProxyModal(rule = {}) {
 // ============================================================
 // Privacy Report
 // ============================================================
+let _privacyDevices = [];
+
+const _COMPANY_COLORS = {
+  "Google": "#4285f4", "Meta": "#0082fb", "Amazon": "#ff9900",
+  "Apple": "#888", "Microsoft": "#0078d4", "Samsung": "#1428a0",
+  "ByteDance": "#010101", "Netflix": "#e50914", "Cloudflare": "#f48120",
+  "Akamai": "#009bde", "Alibaba": "#ff6a00", "X (Twitter)": "#1da1f2",
+  "Snap": "#fffc00", "Spotify": "#1db954", "MikroTik": "#293239",
+  "Tuya": "#ff6600", "Fastly": "#ff282d", "Amazon CDN": "#ff9900",
+};
+
+function _ipToNum(ip) {
+  return ip.split(".").reduce((a, o) => (a << 8) + parseInt(o, 10), 0) >>> 0;
+}
+
+function _sortPrivacy(devices, key) {
+  const sorted = [...devices];
+  switch (key) {
+    case "queries-desc":    return sorted.sort((a, b) => b.total_forwarded - a.total_forwarded);
+    case "queries-asc":     return sorted.sort((a, b) => a.total_forwarded - b.total_forwarded);
+    case "ip-asc":          return sorted.sort((a, b) => _ipToNum(a.ip) - _ipToNum(b.ip));
+    case "ip-desc":         return sorted.sort((a, b) => _ipToNum(b.ip) - _ipToNum(a.ip));
+    case "diversity-desc":  return sorted.sort((a, b) => b.companies.length - a.companies.length);
+    default:                return sorted;
+  }
+}
+
+function renderPrivacyReport() {
+  const el = document.getElementById("privacy-report-body");
+  const sortKey = document.getElementById("privacy-sort").value;
+  const devices = _sortPrivacy(_privacyDevices, sortKey);
+
+  if (!devices.length) {
+    el.innerHTML = '<div class="text-muted small text-center py-4">No forwarded query data yet — browse the internet on your devices first.</div>';
+    return;
+  }
+
+  el.innerHTML = `<div class="row g-3">${devices.map(d => {
+    const bars = d.companies.slice(0, 6).map(c => {
+      const color = _COMPANY_COLORS[c.company] || "#6e7681";
+      return `<div class="d-flex align-items-center gap-1" style="margin-bottom:2px">
+        <span style="width:72px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.68rem;color:#8b949e" title="${escHtml(c.company)}">${escHtml(c.company)}</span>
+        <div class="progress flex-grow-1" style="height:8px">
+          <div class="progress-bar" style="width:${c.pct}%;background:${color}"
+            title="${escHtml(c.company)}: ${c.count.toLocaleString()} queries (${c.pct}%)"></div>
+        </div>
+        <span style="width:30px;text-align:right;font-size:.65rem;color:#8b949e">${c.pct}%</span>
+      </div>`;
+    }).join("");
+    return `<div class="col-12 col-md-6 col-xl-4">
+      <div class="p-2 rounded" style="background:#161b22;border:1px solid #30363d">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div style="min-width:0">
+            <span class="font-monospace fw-semibold" style="font-size:.78rem">${escHtml(d.ip)}</span>
+            ${d.label ? `<span class="text-info ms-1" style="font-size:.68rem">${escHtml(d.label)}</span>` : ""}
+            ${d.device_type ? `<span class="text-muted" style="font-size:.6rem;display:block">${escHtml(d.device_type)}</span>` : ""}
+          </div>
+          <span style="font-size:.65rem;color:#8b949e;white-space:nowrap">${d.total_forwarded.toLocaleString()} fwd</span>
+        </div>
+        ${bars}
+      </div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
 async function loadPrivacyReport() {
   const el = document.getElementById("privacy-report-body");
   try {
-    const devices = await api("GET", "/api/privacy-report");
-    if (!devices.length) {
-      el.innerHTML = '<div class="text-muted small text-center py-4">No forwarded query data yet — browse the internet on your devices first.</div>';
-      return;
-    }
-
-    const COMPANY_COLORS = {
-      "Google": "#4285f4", "Meta": "#0082fb", "Amazon": "#ff9900",
-      "Apple": "#888", "Microsoft": "#0078d4", "Samsung": "#1428a0",
-      "ByteDance": "#010101", "Netflix": "#e50914", "Cloudflare": "#f48120",
-      "Akamai": "#009bde", "Alibaba": "#ff6a00", "X (Twitter)": "#1da1f2",
-      "Snap": "#fffc00", "Spotify": "#1db954", "MikroTik": "#293239",
-      "Tuya": "#ff6600", "Fastly": "#ff282d", "Amazon CDN": "#ff9900",
-    };
-
-    el.innerHTML = devices.map(d => {
-      const bars = d.companies.slice(0, 8).map(c => {
-        const color = COMPANY_COLORS[c.company] || "#6e7681";
-        return `<div class="d-flex align-items-center gap-2 mb-1">
-          <span class="small text-muted" style="width:110px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escHtml(c.company)}">${escHtml(c.company)}</span>
-          <div class="progress flex-grow-1" style="height:12px">
-            <div class="progress-bar" style="width:${c.pct}%;background:${color}"
-              title="${escHtml(c.company)}: ${c.count} queries (${c.pct}%)"></div>
-          </div>
-          <span class="small text-muted" style="width:36px;text-align:right">${c.pct}%</span>
-        </div>`;
-      }).join("");
-      return `<div class="mb-4 pb-3 border-bottom border-secondary">
-        <div class="d-flex justify-content-between align-items-baseline mb-2">
-          <span class="font-monospace fw-semibold">${escHtml(d.ip)}</span>
-          <span class="text-muted small">${d.total_forwarded.toLocaleString()} forwarded queries</span>
-        </div>
-        ${bars}
-      </div>`;
-    }).join("");
+    _privacyDevices = await api("GET", "/api/privacy-report");
+    renderPrivacyReport();
   } catch (_) {
     el.innerHTML = '<div class="text-muted small text-center py-4">Could not load privacy report.</div>';
   }
+}
+
+// ============================================================
+// Network Health Score
+// ============================================================
+async function loadNetworkScore() {
+  try {
+    const data = await api("GET", "/api/network-score");
+    const arc = document.getElementById("score-arc");
+    const val = document.getElementById("score-value");
+    const bd  = document.getElementById("score-breakdown");
+
+    val.textContent = data.score;
+
+    // Color by grade
+    const colors = { A: "#3fb950", B: "#58a6ff", C: "#e3b341", D: "#f78166", F: "#da3633" };
+    const color = colors[data.grade] || "#8b949e";
+    arc.style.stroke = color;
+    val.style.color = color;
+
+    // Animate arc (264 = full circumference)
+    const offset = 264 - (264 * data.score / 100);
+    arc.style.strokeDashoffset = offset;
+
+    // Breakdown bars
+    const b = data.breakdown;
+    bd.innerHTML = Object.entries(b).map(([k, v]) => `
+      <div class="d-flex align-items-center gap-1 mb-1">
+        <span style="width:62px;text-transform:capitalize;color:#8b949e">${k}</span>
+        <div class="progress flex-grow-1" style="height:4px">
+          <div class="progress-bar" style="width:${v.score/v.max*100}%;background:${color}"></div>
+        </div>
+        <span style="color:#8b949e">${v.score}/${v.max}</span>
+      </div>`).join("");
+  } catch (_) {}
+}
+
+// ============================================================
+// Query Activity Heatmap
+// ============================================================
+async function loadHeatmap() {
+  const el = document.getElementById("heatmap-body");
+  try {
+    const data = await api("GET", "/api/heatmap");
+    const grid = data.grid;  // [7][24] — dow 0=Sun..6=Sat
+    const peak = data.peak || 1;
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    // Reorder: Mon-Sun (1,2,3,4,5,6,0)
+    const order = [1, 2, 3, 4, 5, 6, 0];
+
+    let html = '<div style="display:grid;grid-template-columns:28px repeat(24,1fr);gap:2px;font-size:.58rem">';
+    // Hour labels
+    html += '<div></div>';
+    for (let h = 0; h < 24; h++) {
+      html += `<div style="text-align:center;color:#484f58">${h % 3 === 0 ? h : ""}</div>`;
+    }
+    // Rows
+    for (const dow of order) {
+      html += `<div style="color:#8b949e;line-height:14px;text-align:right;padding-right:4px">${days[dow]}</div>`;
+      for (let h = 0; h < 24; h++) {
+        const v = grid[dow][h];
+        const intensity = v / peak;
+        let bg;
+        if (intensity === 0) bg = "#161b22";
+        else if (intensity < 0.25) bg = "#0e4429";
+        else if (intensity < 0.5) bg = "#006d32";
+        else if (intensity < 0.75) bg = "#26a641";
+        else bg = "#39d353";
+        html += `<div style="background:${bg};border-radius:2px;height:14px;cursor:default" title="${days[dow]} ${h}:00 — ${v.toLocaleString()} queries"></div>`;
+      }
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  } catch (_) {
+    el.innerHTML = '<div class="text-muted small text-center py-3">Could not load heatmap.</div>';
+  }
+}
+
+// ============================================================
+// Unbound DNS Settings
+// ============================================================
+async function loadUnboundSettings() {
+  try {
+    const data = await api("GET", "/api/unbound/settings");
+    document.getElementById("unbound-upstreams").value = data.upstreams.join("\n");
+    document.getElementById("unbound-dnssec").checked = data.dnssec;
+    document.getElementById("unbound-prefetch").checked = data.prefetch;
+    document.getElementById("unbound-qname").checked = data.qname_minimisation;
+    document.getElementById("unbound-threads").value = data.num_threads;
+    document.getElementById("unbound-cache-min").value = data.cache_min_ttl;
+    document.getElementById("unbound-cache-max").value = data.cache_max_ttl;
+    document.getElementById("unbound-msg-cache").value = data.msg_cache_mb;
+    document.getElementById("unbound-rrset-cache").value = data.rrset_cache_mb;
+
+    // Render preset buttons
+    const presets = document.getElementById("unbound-presets");
+    presets.innerHTML = Object.entries(data.presets).map(([k, v]) =>
+      `<button class="btn btn-sm btn-outline-secondary py-0 unbound-preset" data-addrs='${JSON.stringify(v.addrs)}'
+        style="font-size:.65rem">${escHtml(v.name)}</button>`
+    ).join("");
+    presets.querySelectorAll(".unbound-preset").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.getElementById("unbound-upstreams").value = JSON.parse(btn.dataset.addrs).join("\n");
+      });
+    });
+  } catch (_) {}
+}
+
+async function saveUnboundSettings() {
+  const status = document.getElementById("unbound-save-status");
+  status.textContent = "Saving…";
+  status.classList.remove("text-success", "text-danger");
+  status.classList.add("text-warning");
+  try {
+    const upstreams = document.getElementById("unbound-upstreams").value
+      .split("\n").map(s => s.trim()).filter(Boolean);
+    const res = await api("POST", "/api/unbound/settings", {
+      upstreams,
+      dnssec: document.getElementById("unbound-dnssec").checked,
+      prefetch: document.getElementById("unbound-prefetch").checked,
+      qname_minimisation: document.getElementById("unbound-qname").checked,
+      num_threads: parseInt(document.getElementById("unbound-threads").value) || 2,
+      cache_min_ttl: parseInt(document.getElementById("unbound-cache-min").value) || 60,
+      cache_max_ttl: parseInt(document.getElementById("unbound-cache-max").value) || 86400,
+      msg_cache_mb: parseInt(document.getElementById("unbound-msg-cache").value) || 64,
+      rrset_cache_mb: parseInt(document.getElementById("unbound-rrset-cache").value) || 128,
+    });
+    status.textContent = res.reloaded ? "Saved & Reloaded" : "Saved (restart needed)";
+    status.classList.remove("text-warning");
+    status.classList.add("text-success");
+    showToast(res.message, "success");
+    setTimeout(() => { status.textContent = ""; }, 3000);
+  } catch (e) {
+    status.textContent = "Failed";
+    status.classList.remove("text-warning");
+    status.classList.add("text-danger");
+    showToast("Unbound save failed: " + e.message, "danger");
+  }
+}
+
+function resetUnboundDefaults() {
+  document.getElementById("unbound-upstreams").value = "9.9.9.9\n149.112.112.112\n1.1.1.1\n1.0.0.1";
+  document.getElementById("unbound-dnssec").checked = true;
+  document.getElementById("unbound-prefetch").checked = true;
+  document.getElementById("unbound-qname").checked = true;
+  document.getElementById("unbound-threads").value = 2;
+  document.getElementById("unbound-cache-min").value = 60;
+  document.getElementById("unbound-cache-max").value = 86400;
+  document.getElementById("unbound-msg-cache").value = 64;
+  document.getElementById("unbound-rrset-cache").value = 128;
+  const status = document.getElementById("unbound-save-status");
+  status.textContent = "Defaults restored — click Save & Reload to apply";
+  status.classList.remove("text-success", "text-danger");
+  status.classList.add("text-warning");
+  setTimeout(() => { status.textContent = ""; }, 4000);
 }
 
 // ============================================================
@@ -1717,11 +1948,8 @@ function bindEvents() {
     loadUpdaterStatus();
     loadSources();
     loadPresetStatus();
-    loadYTAutoBlocked();
     loadAllowlist();
   });
-
-  document.getElementById("btn-refresh-yt").addEventListener("click", loadYTAutoBlocked);
 
   // Update Now button
   document.getElementById("btn-update-now").addEventListener("click", triggerUpdate);
@@ -1805,14 +2033,19 @@ function bindEvents() {
   // Privacy tab
   document.getElementById("tab-privacy-btn").addEventListener("shown.bs.tab", loadPrivacyReport);
   document.getElementById("btn-refresh-privacy").addEventListener("click", loadPrivacyReport);
+  document.getElementById("privacy-sort").addEventListener("change", renderPrivacyReport);
 
   // Tab switch: load settings when Settings tab is shown
   document.getElementById("tab-settings-btn").addEventListener("shown.bs.tab", () => {
     loadSettings();
     loadEmailSettings();
     loadRateLimits();
+    loadUnboundSettings();
+    loadServiceStatus();
   });
   document.getElementById("btn-save-rate-limits").addEventListener("click", saveRateLimits);
+  document.getElementById("btn-save-unbound").addEventListener("click", saveUnboundSettings);
+  document.getElementById("btn-reset-unbound").addEventListener("click", resetUnboundDefaults);
 
   // Auto-save proxy/captive toggles on change
   document.getElementById("yt-enabled").addEventListener("change", saveSettings);
@@ -1831,6 +2064,11 @@ function bindEvents() {
     } finally {
       this.disabled = false;
     }
+  });
+
+  // Service restart buttons
+  document.querySelectorAll(".svc-restart-btn").forEach(btn => {
+    btn.addEventListener("click", () => restartService(btn.dataset.service, btn));
   });
 
   // Email settings form save
@@ -1877,6 +2115,13 @@ function bindEvents() {
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("thead").forEach(initSortable);
   bindEvents();
+
+  // Initialize Bootstrap tooltips on info icons
+  document.querySelectorAll(".info-i[title], [title]").forEach(el => {
+    if (el.title && el.classList.contains("info-i")) {
+      new bootstrap.Tooltip(el, { placement: "top", trigger: "hover focus", delay: { show: 150, hide: 100 } });
+    }
+  });
   connectSSE();
 
   // Fire all startup fetches in parallel — nothing blocks anything else
@@ -1884,9 +2129,12 @@ document.addEventListener("DOMContentLoaded", () => {
     loadStats(),
     loadHealth(),
     preloadLog(),
+    loadNetworkScore(),
+    loadHeatmap(),
     _initCurrency().then(() => loadStats()), // re-render stats with local currency once rate is ready
   ]);
 
   statsTimer = setInterval(loadStats, 30000);
   setInterval(loadHealth, 30000);
+  setInterval(loadNetworkScore, 120000);  // refresh score every 2 min
 });

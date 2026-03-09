@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiGet } from '../api/client'
-import type { Health, QueryLog, Stats } from '../api/types'
+import type { Health, NetworkScore, QueryLog, Stats } from '../api/types'
 import { StatCard } from '../components/StatCard'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useInterval } from '../hooks/useInterval'
@@ -28,7 +28,7 @@ function actionClass(action: string): string {
 
 function HealthDot({ status }: { status: string }) {
   const color =
-    status === 'healthy'  ? 'bg-success' :
+    (status === 'healthy' || status === 'ok') ? 'bg-success' :
     status === 'degraded' ? 'bg-warning' :
     'bg-danger'
 
@@ -40,23 +40,25 @@ function HealthDot({ status }: { status: string }) {
 export function DashboardScreen() {
   const [stats,     setStats]     = useState<Stats | null>(null)
   const [health,    setHealth]    = useState<Health | null>(null)
+  const [score,     setScore]     = useState<NetworkScore | null>(null)
   const [recentLog, setRecentLog] = useState<QueryLog[]>([])
   const [loading,   setLoading]   = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
-      const [s, h, logs] = await Promise.all([
+      const [s, h, logs, ns] = await Promise.allSettled([
         apiGet<Stats>('/api/stats'),
         apiGet<Health>('/health'),
         apiGet<QueryLog[]>('/api/logs?limit=10'),
+        apiGet<NetworkScore>('/api/network-score'),
       ])
-      setStats(s)
-      setHealth(h)
-      setRecentLog(logs)
+      if (s.status === 'fulfilled') setStats(s.value)
+      if (h.status === 'fulfilled') setHealth(h.value)
+      if (logs.status === 'fulfilled') setRecentLog(logs.value)
+      if (ns.status === 'fulfilled') setScore(ns.value)
       setLastUpdated(new Date())
     } catch {
-      // If we can't reach the server, show degraded state
       if (!stats) setHealth({ status: 'offline', components: {} })
     } finally {
       setLoading(false)
@@ -91,7 +93,7 @@ export function DashboardScreen() {
   }
 
   const statusText =
-    health?.status === 'healthy'  ? 'Healthy' :
+    (health?.status === 'healthy' || health?.status === 'ok') ? 'Healthy' :
     health?.status === 'degraded' ? 'Degraded' :
     'Offline'
 
@@ -109,6 +111,43 @@ export function DashboardScreen() {
           )}
         </div>
 
+        {/* Network Score + Health */}
+        {score && (
+          <div className="bg-surface border border-border rounded-xl p-4">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col items-center">
+                <span className={`text-3xl font-bold tabular-nums ${
+                  score.grade === 'A' ? 'text-success' :
+                  score.grade === 'B' ? 'text-primary' :
+                  score.grade === 'C' ? 'text-yellow-400' :
+                  score.grade === 'D' ? 'text-orange-400' : 'text-danger'
+                }`}>{score.score}</span>
+                <span className={`pill mt-1 text-xs font-bold ${
+                  score.grade === 'A' ? 'bg-green-900/50 text-green-300' :
+                  score.grade === 'B' ? 'bg-blue-900/50 text-blue-300' :
+                  score.grade === 'C' ? 'bg-yellow-900/50 text-yellow-300' :
+                  score.grade === 'D' ? 'bg-orange-900/50 text-orange-300' :
+                  'bg-red-900/50 text-red-300'
+                }`}>Grade {score.grade}</span>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {Object.entries(score.breakdown).map(([key, val]) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <span className="text-xs text-muted w-20 capitalize">{key}</span>
+                    <div className="flex-1 h-1.5 bg-[#21262d] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${(val.score / val.max) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-muted tabular-nums w-8 text-right">{val.score}/{val.max}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stat cards 2×2 grid */}
         <div className="grid grid-cols-2 gap-3">
           <StatCard
@@ -121,8 +160,8 @@ export function DashboardScreen() {
             color="red"
           />
           <StatCard
-            title="Block Rate"
-            value={stats ? `${stats.block_pct.toFixed(1)}%` : '0%'}
+            title="Forwarded"
+            value={stats?.forwarded ?? 0}
             color="blue"
           />
           <StatCard
@@ -170,6 +209,21 @@ export function DashboardScreen() {
                 <div key={item.domain} className="flex items-center justify-between px-3 py-2.5">
                   <span className="text-sm text-[#e6edf3] truncate flex-1 mr-3">{item.domain}</span>
                   <span className="pill pill-blocked">{item.count.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Top clients */}
+        {stats && stats.top_clients && stats.top_clients.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-[#e6edf3] mb-2">Top Clients</h2>
+            <div className="bg-surface border border-border rounded-xl divide-y divide-border overflow-hidden">
+              {stats.top_clients.slice(0, 5).map(item => (
+                <div key={item.ip} className="flex items-center justify-between px-3 py-2.5">
+                  <span className="text-sm text-[#e6edf3] font-mono truncate flex-1 mr-3">{item.ip}</span>
+                  <span className="pill bg-[#21262d] text-muted">{item.count.toLocaleString()}</span>
                 </div>
               ))}
             </div>

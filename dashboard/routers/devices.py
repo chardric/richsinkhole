@@ -89,3 +89,41 @@ async def update_device_profile(ip: str, body: ProfileIn):
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Device not found")
     return {"ip": ip, "profile": body.profile}
+
+
+@router.delete("/devices/{ip}")
+async def delete_device(ip: str):
+    """Delete a device and all associated records (logs, parental, blocks, etc.)."""
+    async with aiosqlite.connect(SINKHOLE_DB, timeout=120) as db:
+        # Verify device exists
+        row = await db.execute_fetchall(
+            "SELECT ip FROM device_fingerprints WHERE ip=?", (ip,)
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Device not found")
+
+        # Purge all related records (query_log can be large, do it in batches)
+        while True:
+            cur = await db.execute(
+                "DELETE FROM query_log WHERE rowid IN "
+                "(SELECT rowid FROM query_log WHERE client_ip=? LIMIT 50000)",
+                (ip,),
+            )
+            await db.commit()
+            if cur.rowcount == 0:
+                break
+
+        for tbl, col in [
+            ("security_events", "client_ip"),
+            ("client_blocks", "ip"),
+            ("parental_usage", "ip"),
+            ("parental_snooze", "ip"),
+            ("captive_whitelist", "ip"),
+            ("schedule_rules", "client_ip"),
+        ]:
+            await db.execute(f"DELETE FROM {tbl} WHERE {col}=?", (ip,))
+
+        await db.execute("DELETE FROM device_fingerprints WHERE ip=?", (ip,))
+        await db.commit()
+
+    return {"ip": ip, "status": "deleted"}

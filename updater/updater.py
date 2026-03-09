@@ -14,6 +14,7 @@ import logging
 import re
 import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,6 +45,19 @@ _SKIP_HOSTS = {
     "localhost", "localhost.localdomain", "broadcasthost",
     "local", "ip6-localhost", "ip6-loopback",
 }
+
+# Parent domains that must NEVER be in the blocklist.
+# Any subdomain of these is stripped during blocklist fetch.
+# YouTube CDN uses googlevideo.com / c.youtube.com for video delivery —
+# blocking them breaks playback. Ad removal is done at the proxy layer.
+_ALWAYS_ALLOW_PARENTS = (
+    "googlevideo.com",
+    "c.youtube.com",
+    "youtube-ui.l.google.com",
+    "ytimg.com",
+    "ggpht.com",
+    "gstatic.com",
+)
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -177,6 +191,9 @@ def fetch_domains(url: str, whiteset: set[str]) -> list[str]:
         candidate = (parts[1] if len(parts) >= 2 else parts[0]).lower().rstrip(".")
         if candidate in _SKIP_HOSTS or candidate in whiteset:
             continue
+        # Never block subdomains of protected parent domains (e.g. YouTube CDN)
+        if any(candidate == p or candidate.endswith("." + p) for p in _ALWAYS_ALLOW_PARENTS):
+            continue
         if DOMAIN_RE.match(candidate):
             domains.append(candidate)
 
@@ -190,6 +207,7 @@ def fetch_domains(url: str, whiteset: set[str]) -> list[str]:
 
 def run_update() -> None:
     log.info("=== Blocklist update starting ===")
+    t_start = time.monotonic()
     try:
         cfg = load_sources()
     except Exception as exc:
@@ -205,26 +223,43 @@ def run_update() -> None:
         _write_status(0, 0, "no_sources")
         return
 
-    # Fetch per-URL to track per-feed domain counts
+    # ── Phase 1: Parallel fetch ──────────────────────────────────────────
     per_url: dict[str, list[str]] = {}
     all_domains: set[str] = set()
-    for url in urls:
-        domains = fetch_domains(url, whiteset)
-        per_url[url] = domains
-        all_domains.update(domains)
+
+    def _fetch_one(url: str) -> tuple[str, list[str]]:
+        return url, fetch_domains(url, whiteset)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_fetch_one, u): u for u in urls}
+        for future in as_completed(futures):
+            try:
+                url, domains = future.result()
+                per_url[url] = domains
+                all_domains.update(domains)
+            except Exception as exc:
+                log.error("Fetch failed for %s: %s", futures[future], exc)
+
+    t_fetch = time.monotonic()
+    log.info("Fetched %d unique domains from %d sources in %.1fs",
+             len(all_domains), len(urls), t_fetch - t_start)
 
     if not all_domains:
         log.warning("No domains fetched from any source — skipping DB update")
         _write_status(0, 0, "no_domains")
         return
 
+    # ── Phase 2: Table-swap (Pi-hole gravity style) ──────────────────────
+    # Build new table without index → bulk insert → add index → swap.
+    # This avoids 2.2M INSERT OR IGNORE against an indexed table.
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     try:
-        with sqlite3.connect(BLOCKLIST_DB) as conn:
+        with sqlite3.connect(BLOCKLIST_DB, timeout=120) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bd_domain ON blocked_domains(domain)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_bd_source ON blocked_domains(source)")
-            # Ensure feeds table and source column exist
+            conn.execute("PRAGMA synchronous=OFF")
+            conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+
+            # Ensure schema for feeds table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS blocklist_feeds (
                     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -237,20 +272,71 @@ def run_update() -> None:
                     created_at   TEXT    DEFAULT (datetime('now'))
                 )
             """)
-            try:
-                conn.execute("ALTER TABLE blocked_domains ADD COLUMN source TEXT")
-            except Exception:
-                pass
 
             (count_before,) = conn.execute(
                 "SELECT COUNT(*) FROM blocked_domains"
             ).fetchone()
 
-            conn.executemany(
-                "INSERT OR IGNORE INTO blocked_domains (domain) VALUES (?)",
-                [(d,) for d in all_domains],
-            )
+            # Preserve custom/feed/threat_intel domains (user-added, not from sources.yml)
+            custom_rows = conn.execute(
+                "SELECT domain, source, added_at FROM blocked_domains WHERE source IS NOT NULL AND source != 'blocklist'"
+            ).fetchall()
+
+            log.info("DB swap: creating new table, inserting %d domains...", len(all_domains))
+            t_db = time.monotonic()
+
+            # Build new table with NO indexes/constraints — pure sequential writes
+            conn.execute("DROP TABLE IF EXISTS blocked_domains_new")
+            conn.execute("""
+                CREATE TABLE blocked_domains_new (
+                    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    domain   TEXT NOT NULL,
+                    source   TEXT,
+                    added_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+
+            # Bulk insert in chunks to avoid massive WAL growth
+            # all_domains is already a set — no duplicates
+            domain_list = list(all_domains)
+            CHUNK = 50_000
+            for i in range(0, len(domain_list), CHUNK):
+                chunk = [(d,) for d in domain_list[i:i + CHUNK]]
+                conn.executemany(
+                    "INSERT INTO blocked_domains_new (domain, source) VALUES (?, 'blocklist')",
+                    chunk,
+                )
+                if (i + CHUNK) % 200_000 == 0 or i + CHUNK >= len(domain_list):
+                    log.info("DB swap: inserted %d / %d domains (%.1fs)",
+                             min(i + CHUNK, len(domain_list)), len(domain_list),
+                             time.monotonic() - t_db)
+
+            log.info("DB swap: building indexes...")
+            # Add unique index on fully populated table (single sort pass)
+            conn.execute("CREATE UNIQUE INDEX idx_bdn_domain ON blocked_domains_new(domain)")
+
+            # Re-insert preserved custom/feed/threat_intel domains (few rows, index exists)
+            if custom_rows:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO blocked_domains_new (domain, source, added_at) VALUES (?, ?, ?)",
+                    custom_rows,
+                )
+
+            conn.execute("CREATE INDEX idx_bdn_source ON blocked_domains_new(source)")
+
+            log.info("DB swap: renaming tables...")
+            # Atomic swap
+            conn.execute("DROP TABLE IF EXISTS blocked_domains_old")
+            conn.execute("ALTER TABLE blocked_domains RENAME TO blocked_domains_old")
+            conn.execute("ALTER TABLE blocked_domains_new RENAME TO blocked_domains")
+            conn.execute("DROP TABLE IF EXISTS blocked_domains_old")
             conn.commit()
+            # Restore normal sync after bulk work is committed
+            conn.execute("PRAGMA synchronous=NORMAL")
+
+            (count_after,) = conn.execute(
+                "SELECT COUNT(*) FROM blocked_domains"
+            ).fetchone()
 
             # Update blocklist_feeds metadata for each built-in source URL
             for url, domains in per_url.items():
@@ -264,16 +350,15 @@ def run_update() -> None:
                 """, (url, len(domains), now))
             conn.commit()
 
-            (count_after,) = conn.execute(
-                "SELECT COUNT(*) FROM blocked_domains"
-            ).fetchone()
     except Exception as exc:
         log.error("DB error during update: %s", exc)
         _write_status(0, 0, "db_error")
         return
 
+    t_db = time.monotonic()
     added = count_after - count_before
-    log.info("=== Update complete: +%d new domains, %d total ===", added, count_after)
+    log.info("=== Update complete: %d total (fetch %.1fs, DB swap %.1fs, total %.1fs) ===",
+             count_after, t_fetch - t_start, t_db - t_fetch, t_db - t_start)
     _write_status(added, count_after, "ok")
     notify_blocklist_updated(cfg, added, count_after)
     notify_daily_summary(cfg)
@@ -332,7 +417,7 @@ def fetch_threatfox_domains(url: str) -> list[str]:
 def _migrate_blocklist_source_col() -> None:
     """Add source column to blocked_domains if upgrading from older schema."""
     try:
-        with sqlite3.connect(BLOCKLIST_DB) as conn:
+        with sqlite3.connect(BLOCKLIST_DB, timeout=120) as conn:
             conn.execute("ALTER TABLE blocked_domains ADD COLUMN source TEXT DEFAULT 'blocklist'")
             conn.commit()
     except sqlite3.OperationalError:
@@ -359,7 +444,7 @@ def run_threat_intel() -> None:
         return
 
     try:
-        with sqlite3.connect(BLOCKLIST_DB) as conn:
+        with sqlite3.connect(BLOCKLIST_DB, timeout=120) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             (before,) = conn.execute(
                 "SELECT COUNT(*) FROM blocked_domains WHERE source='threat_intel'"

@@ -10,6 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RichSinkhole</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='10' fill='none' stroke='%23da3633' stroke-width='1.6'/%3E%3Ccircle cx='11' cy='11' r='6' fill='none' stroke='%23da3633' stroke-width='1.2' opacity='.65'/%3E%3Ccircle cx='11' cy='11' r='2.5' fill='%23da3633'/%3E%3C/svg%3E">
   <base href="{{ root_path }}/">
   <link href="static/bootstrap.min.css" rel="stylesheet">
   <style>
@@ -51,6 +52,8 @@
 
     /* ── Log table ────────────────────────────────────── */
     .log-table-wrap { max-height: 380px; overflow-y: auto; }
+    .scroll-table-sm { max-height: 260px; overflow-y: auto; }
+    .scroll-table-md { max-height: 380px; overflow-y: auto; }
     #log-tbody tr { animation: fadeIn 0.18s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -79,6 +82,17 @@
     .health-dot.unknown { background: #6e7681; animation: none; }
 
     .qr-box { background: #fff; border-radius: 8px; padding: 6px; display: inline-block; }
+
+    /* ── Info tooltips ───────────────────────────────── */
+    .info-i {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 14px; height: 14px; border-radius: 50%; font-size: 9px;
+      font-weight: 700; font-style: normal; cursor: help; user-select: none;
+      color: #8b949e; border: 1px solid #30363d; background: #161b22;
+      vertical-align: middle; margin-left: 4px; line-height: 1;
+      flex-shrink: 0;
+    }
+    .info-i:hover { color: #58a6ff; border-color: #58a6ff; }
   </style>
 </head>
 <body>
@@ -219,6 +233,38 @@
         </div>
       </div>
 
+      <!-- Health Score + Activity Heatmap -->
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-3">
+          <div class="card h-100">
+            <div class="card-body d-flex flex-column align-items-center justify-content-center py-3">
+              <div id="score-ring" style="position:relative;width:100px;height:100px">
+                <svg viewBox="0 0 100 100" style="transform:rotate(-90deg)">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#21262d" stroke-width="8"/>
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#3fb950" stroke-width="8"
+                    stroke-dasharray="264" stroke-dashoffset="264" stroke-linecap="round"
+                    id="score-arc" style="transition:stroke-dashoffset .8s ease,stroke .3s"/>
+                </svg>
+                <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column">
+                  <span class="fw-bold" style="font-size:1.6rem;line-height:1" id="score-value">—</span>
+                  <span style="font-size:.6rem;color:#8b949e;letter-spacing:.08em">/ 100</span>
+                </div>
+              </div>
+              <div class="fw-semibold mt-2" style="font-size:.8rem">Network Health</div>
+              <div id="score-breakdown" class="w-100 mt-2" style="font-size:.62rem"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md-9">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold py-2">QUERY ACTIVITY <span class="fw-normal">(last 7 days)</span></div>
+            <div class="card-body py-2 px-3" id="heatmap-body">
+              <div class="text-muted small text-center py-3">Loading…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Top blocked + top clients -->
       <div class="row g-3 mb-3">
         <div class="col-md-6">
@@ -310,7 +356,7 @@
               <div id="sources-list"><div class="text-muted small">Loading...</div></div>
               <form id="form-add-source" class="d-flex gap-2 mt-auto pt-2 border-top border-secondary">
                 <input type="url" class="form-control form-control-sm font-monospace" id="input-source-url"
-                  placeholder="https://example.com/hosts.txt">
+                  placeholder="https://example.com/hosts.txt" title="URL to a hosts-format blocklist (one domain per line). Updated daily at 3:00 AM.">
                 <button class="btn btn-sm btn-outline-success flex-shrink-0" type="submit">Add</button>
               </form>
             </div>
@@ -507,26 +553,24 @@
         </div>
         <div class="card-body">
           <form id="form-add-allow" class="d-flex gap-2 mb-3">
-            <input type="text" class="form-control form-control-sm font-monospace" id="input-allow-domain" placeholder="example.com">
-            <input type="text" class="form-control form-control-sm" id="input-allow-note" placeholder="Note (optional)" style="max-width:200px">
+            <input type="text" class="form-control form-control-sm font-monospace" id="input-allow-domain" placeholder="example.com" title="Domain to always allow, even if it appears in blocklists. Subdomains are also allowed.">
+            <input type="text" class="form-control form-control-sm" id="input-allow-note" placeholder="Note (optional)" style="max-width:200px" title="Optional note to remind you why this domain was allowlisted.">
             <button class="btn btn-sm btn-outline-success flex-shrink-0" type="submit">Add</button>
           </form>
           <div id="allowlist-body"><div class="text-muted small text-center py-2">Loading…</div></div>
         </div>
       </div>
 
-      <!-- YouTube CDN auto-blocked nodes -->
+      <!-- YouTube ad blocking info -->
       <div class="card mt-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <div>
-            <span class="text-muted small fw-semibold">YOUTUBE CDN NODES</span>
-            <span class="text-muted small ms-2">— YouTube ad delivery nodes detected and blocked</span>
-          </div>
-          <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-yt">Refresh</button>
+        <div class="card-header">
+          <span class="text-muted small fw-semibold">YOUTUBE AD BLOCKING</span>
+          <span class="text-muted small ms-2">— ads stripped at the proxy layer</span>
         </div>
         <div class="card-body">
-          <div id="yt-autoblocked-body">
-            <div class="text-muted small text-center py-2">Loading…</div>
+          <div class="text-muted small">
+            YouTube ads (pre-roll, mid-roll, overlays) are removed by the transparent proxy which strips ad metadata from YouTube API responses.
+            Video CDN nodes (<code>googlevideo.com</code>) are allowlisted to ensure uninterrupted playback.
           </div>
         </div>
       </div>
@@ -640,47 +684,53 @@
         </div>
       </div>
 
-      <!-- Active blocks -->
-      <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="text-muted small fw-semibold">ACTIVE CLIENT BLOCKS</span>
-          <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-security">Refresh</button>
+      <!-- Active blocks + Security events side by side -->
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-5">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span class="text-muted small fw-semibold">ACTIVE CLIENT BLOCKS</span>
+              <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-security">Refresh</button>
+            </div>
+            <div class="card-body p-0">
+              <div class="scroll-table-sm">
+                <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+                  <thead class="sticky-top bg-dark">
+                    <tr class="text-muted small">
+                      <th class="ps-3" data-col="0">Client IP</th>
+                      <th data-col="1">Reason</th>
+                      <th data-col="2">Expires At</th>
+                      <th class="pe-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="sec-blocks-tbody"></tbody>
+                </table>
+              </div>
+              <div id="sec-blocks-empty" class="text-center text-muted py-3 small">No active blocks.</div>
+            </div>
+          </div>
         </div>
-        <div class="card-body p-0">
-          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
-            <thead class="sticky-top bg-dark">
-              <tr class="text-muted small">
-                <th class="ps-3" data-col="0">Client IP</th>
-                <th data-col="1">Reason</th>
-                <th data-col="2">Queries</th>
-                <th data-col="3">Blocked At</th>
-                <th data-col="4">Expires At</th>
-                <th class="pe-3"></th>
-              </tr>
-            </thead>
-            <tbody id="sec-blocks-tbody"></tbody>
-          </table>
-          <div id="sec-blocks-empty" class="text-center text-muted py-4 small">No active blocks — no clients have triggered flood or NXDOMAIN thresholds.</div>
-        </div>
-      </div>
-
-      <!-- Security events -->
-      <div class="card mb-3">
-        <div class="card-header text-muted small fw-semibold">RECENT SECURITY EVENTS</div>
-        <div class="card-body p-0">
-          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
-            <thead class="sticky-top bg-dark">
-              <tr class="text-muted small">
-                <th class="ps-3" data-col="0">Time</th>
-                <th data-col="1">Type</th>
-                <th data-col="2">Client IP</th>
-                <th data-col="3">Domain</th>
-                <th class="pe-3" data-col="4">Detail</th>
-              </tr>
-            </thead>
-            <tbody id="sec-events-tbody"></tbody>
-          </table>
-          <div id="sec-events-empty" class="text-center text-muted py-4 small">No security events yet.</div>
+        <div class="col-12 col-xl-7">
+          <div class="card h-100">
+            <div class="card-header text-muted small fw-semibold">RECENT SECURITY EVENTS</div>
+            <div class="card-body p-0">
+              <div class="scroll-table-sm">
+                <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+                  <thead class="sticky-top bg-dark">
+                    <tr class="text-muted small">
+                      <th class="ps-3" data-col="0">Time</th>
+                      <th data-col="1">Type</th>
+                      <th data-col="2">Client IP</th>
+                      <th data-col="3">Domain</th>
+                      <th class="pe-3" data-col="4">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sec-events-tbody"></tbody>
+                </table>
+              </div>
+              <div id="sec-events-empty" class="text-center text-muted py-3 small">No security events yet.</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -729,67 +779,43 @@
           <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-devices">Refresh</button>
         </div>
         <div class="card-body p-0">
-          <table class="table table-sm table-hover table-borderless mb-0 align-middle">
-            <thead class="sticky-top bg-dark">
-              <tr class="text-muted small">
-                <th class="ps-3" data-col="0">IP Address</th>
-                <th data-col="1">Label</th>
-                <th data-col="2">Device Type</th>
-                <th data-col="3">Profile</th>
-                <th data-col="4">Parental</th>
-                <th data-col="5">Confidence</th>
-                <th data-col="6">First Seen</th>
-                <th data-col="7">Last Seen</th>
-                <th class="pe-3"></th>
-              </tr>
-            </thead>
-            <tbody id="devices-tbody"></tbody>
-          </table>
+          <div class="scroll-table-md">
+            <table class="table table-sm table-hover table-borderless mb-0 align-middle">
+              <thead class="sticky-top bg-dark">
+                <tr class="text-muted small">
+                  <th class="ps-3" data-col="0">IP Address</th>
+                  <th data-col="1">Label</th>
+                  <th data-col="2">Device Type</th>
+                  <th data-col="3">Profile</th>
+                  <th data-col="4">Parental</th>
+                  <th data-col="5">Confidence</th>
+                  <th data-col="6">First Seen</th>
+                  <th data-col="7">Last Seen</th>
+                  <th class="pe-3"></th>
+                </tr>
+              </thead>
+              <tbody id="devices-tbody"></tbody>
+            </table>
+          </div>
           <div id="devices-empty" class="text-center text-muted py-4 small">No devices fingerprinted yet — devices are identified as they make DNS queries.</div>
         </div>
       </div>
-      <div class="card mt-3">
-        <div class="card-header text-muted small fw-semibold">BLOCKING PROFILES</div>
-        <div class="card-body small">
-          <div class="row g-3">
-            <div class="col-md-4">
-              <div class="d-flex align-items-start gap-2">
-                <span class="badge bg-secondary mt-1" style="min-width:80px;text-align:center">Normal</span>
-                <div class="text-muted">
-                  Default behavior. All blocklist rules apply. Captive portal detection and schedule rules are enforced.
-                  Suitable for most devices.
-                </div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="d-flex align-items-start gap-2">
-                <span class="badge bg-danger mt-1" style="min-width:80px;text-align:center">Strict</span>
-                <div class="text-muted">
-                  Normal rules <strong class="text-light">plus</strong> extra keyword-based blocking of analytics,
-                  tracking, metrics, and telemetry subdomains — even if they are not in the blocklist.
-                  Good for children's devices or privacy-sensitive users.
-                </div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="d-flex align-items-start gap-2">
-                <span class="badge bg-success mt-1" style="min-width:80px;text-align:center">Passthrough</span>
-                <div class="text-muted">
-                  No blocking at all — all DNS queries are forwarded without inspection.
-                  Use for trusted servers, admin workstations, or devices that need unrestricted DNS.
-                </div>
-              </div>
+      <div class="row g-3 mt-0">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body small text-muted py-2 px-3">
+              <span class="badge bg-secondary me-1">Normal</span> Default blocking &nbsp;
+              <span class="badge bg-danger me-1">Strict</span> Extra keyword blocking &nbsp;
+              <span class="badge bg-success me-1">Passthrough</span> No blocking
             </div>
           </div>
         </div>
-      </div>
-      <div class="card mt-3">
-        <div class="card-header text-muted small fw-semibold">HOW FINGERPRINTING WORKS</div>
-        <div class="card-body small text-muted">
-          Devices are identified by the DNS domains they query. Each OS and device type queries specific domains in characteristic patterns —
-          for example, Xbox queries <code>xboxlive.com</code>, Samsung TVs query <code>samsungcloudsolution.com</code>,
-          and iOS devices query <code>*.mzstatic.com</code>. No packet inspection or MAC address lookup is required.
-          Click a label to rename a device. Confidence increases as more signature queries are observed.
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body small text-muted py-2 px-3">
+              Devices auto-identified by DNS query patterns. Click a label to rename. Confidence grows as more signatures match.
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -880,22 +906,25 @@
     <!-- PRIVACY TAB                                                        -->
     <!-- ================================================================ -->
     <div class="tab-pane fade" id="tab-privacy" role="tabpanel">
-      <div class="card mb-3">
+      <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
             <span class="text-muted small fw-semibold">IOT PRIVACY LEAK REPORT</span>
             <span class="text-muted small ms-2">— which companies each device is talking to</span>
           </div>
-          <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-privacy">Refresh</button>
+          <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm py-0" id="privacy-sort" style="font-size:.7rem;width:auto;min-width:130px;background:#161b22;border-color:#30363d" title="Sort devices by total query count, IP address, or number of unique companies contacted.">
+              <option value="queries-desc">Most Queries</option>
+              <option value="queries-asc">Least Queries</option>
+              <option value="ip-asc">IP Address (A-Z)</option>
+              <option value="ip-desc">IP Address (Z-A)</option>
+              <option value="diversity-desc">Most Companies</option>
+            </select>
+            <button class="btn btn-sm btn-outline-secondary py-0" id="btn-refresh-privacy">Refresh</button>
+          </div>
         </div>
         <div class="card-body" id="privacy-report-body">
           <div class="text-muted small text-center py-4">Loading…</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header text-muted small fw-semibold">ABOUT THIS REPORT</div>
-        <div class="card-body small text-muted">
-          This report maps each device's forwarded DNS queries to their parent company. It shows which services your devices are actively contacting — a useful indicator of telemetry, cloud dependencies, and data leakage. Only forwarded (non-blocked) queries are counted.
         </div>
       </div>
     </div>
@@ -972,16 +1001,88 @@
           </div>
         </div>
 
-        <!-- Row 2: Email Notifications -->
+        <!-- Row 2: Unbound DNS Settings (collapsible) -->
         <div class="col-12">
           <div class="card">
-            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center">
-              EMAIL NOTIFICATIONS
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" id="email-enabled" role="switch">
-                <label class="form-check-label small text-muted" for="email-enabled">Enabled</label>
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#unbound-collapse">
+              UPSTREAM DNS (UNBOUND)
+              <span class="text-success small fw-normal" id="unbound-save-status" style="font-size:0.75rem" onclick="event.stopPropagation()"></span>
+            </div>
+            <div class="collapse" id="unbound-collapse">
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12">
+                  <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">UPSTREAM RESOLVERS <span class="info-i" title="These are the external DNS servers that Unbound sends queries to when it doesn't have the answer cached. Use the preset buttons to quickly fill in popular providers, or type custom IPs.">i</span></div>
+                  <div class="d-flex flex-wrap gap-1 mb-2" id="unbound-presets"></div>
+                  <textarea class="form-control form-control-sm font-monospace" id="unbound-upstreams" rows="3"
+                    placeholder="One IP per line (e.g. 9.9.9.9)" style="font-size:.78rem"></textarea>
+                  <div class="form-text">One IP per line. Click a preset above to auto-fill.</div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="unbound-dnssec" checked>
+                    <label class="form-check-label small" for="unbound-dnssec">DNSSEC Validation</label>
+                    <span class="info-i" title="Verifies DNS responses are authentic and haven't been tampered with. Protects against DNS spoofing and cache poisoning. Recommended: ON.">i</span>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="unbound-prefetch" checked>
+                    <label class="form-check-label small" for="unbound-prefetch">Prefetch</label>
+                    <span class="info-i" title="Automatically refreshes popular cached DNS entries before they expire, so lookups stay fast. Slightly increases upstream traffic. Recommended: ON.">i</span>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="unbound-qname" checked>
+                    <label class="form-check-label small" for="unbound-qname">QNAME Minimisation</label>
+                    <span class="info-i" title="Sends only the minimum necessary part of a domain name to each upstream server, improving privacy. Upstream servers see less of your browsing. Recommended: ON.">i</span>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small text-muted mb-1">Threads <span class="info-i" title="Number of CPU threads Unbound uses. More threads = better performance on multi-core systems but uses more memory. Default: 2.">i</span></label>
+                  <input type="number" class="form-control form-control-sm font-monospace" id="unbound-threads" min="1" max="4" value="2">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small text-muted mb-1">Min Cache TTL (s) <span class="info-i" title="Minimum time (in seconds) a DNS answer stays cached, even if the domain's own TTL is shorter. Higher values = fewer upstream queries but slower updates. Default: 60.">i</span></label>
+                  <input type="number" class="form-control form-control-sm font-monospace" id="unbound-cache-min" min="0" max="3600" value="60">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small text-muted mb-1">Max Cache TTL (s) <span class="info-i" title="Maximum time (in seconds) a DNS answer stays cached, even if the domain's own TTL is longer. Prevents stale data. Default: 86400 (24 hours).">i</span></label>
+                  <input type="number" class="form-control form-control-sm font-monospace" id="unbound-cache-max" min="60" max="604800" value="86400">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small text-muted mb-1">Msg Cache (MB) <span class="info-i" title="Memory allocated for caching DNS message responses. Larger cache = more domains remembered = fewer upstream queries. Default: 64 MB.">i</span></label>
+                  <input type="number" class="form-control form-control-sm font-monospace" id="unbound-msg-cache" min="4" max="512" value="64">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small text-muted mb-1">RRSet Cache (MB) <span class="info-i" title="Memory for caching individual DNS resource records (A, AAAA, MX, etc.). Should be about 2x the Msg Cache for optimal performance. Default: 128 MB.">i</span></label>
+                  <input type="number" class="form-control form-control-sm font-monospace" id="unbound-rrset-cache" min="4" max="512" value="128">
+                </div>
+                <div class="col-12 d-flex gap-2 align-items-center pt-2 border-top border-secondary">
+                  <button type="button" class="btn btn-primary btn-sm px-4" id="btn-save-unbound">Save &amp; Reload</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-reset-unbound">Reset Defaults</button>
+                  <span class="text-muted small">Writes unbound.conf and reloads Unbound.</span>
+                </div>
               </div>
             </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Email Notifications (collapsible) -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#email-collapse">
+              EMAIL NOTIFICATIONS
+              <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch mb-0" onclick="event.stopPropagation()">
+                  <input class="form-check-input" type="checkbox" id="email-enabled" role="switch">
+                  <label class="form-check-label small text-muted" for="email-enabled">Enabled</label>
+                </div>
+              </div>
+            </div>
+            <div class="collapse" id="email-collapse">
             <div class="card-body">
               <form id="form-email-settings">
                 <div class="row g-3">
@@ -991,17 +1092,18 @@
                     <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">SMTP Connection</div>
                     <div class="row g-2">
                       <div class="col-md-5">
-                        <label class="form-label small text-muted mb-1">Host</label>
+                        <label class="form-label small text-muted mb-1">Host <span class="info-i" title="The SMTP server address for your email provider. For Gmail: smtp.gmail.com, for Outlook: smtp.office365.com.">i</span></label>
                         <input type="text" class="form-control form-control-sm font-monospace" id="email-host" placeholder="smtp.gmail.com">
                       </div>
                       <div class="col-md-2">
-                        <label class="form-label small text-muted mb-1">Port</label>
+                        <label class="form-label small text-muted mb-1">Port <span class="info-i" title="SMTP port. Use 587 for STARTTLS (most providers) or 465 for SSL. Default: 587.">i</span></label>
                         <input type="number" class="form-control form-control-sm font-monospace" id="email-port" value="587">
                       </div>
                       <div class="col-md-5 d-flex align-items-end pb-1">
                         <div class="form-check form-switch mb-0">
                           <input class="form-check-input" type="checkbox" id="email-tls" checked>
                           <label class="form-check-label small" for="email-tls">Use STARTTLS / SSL</label>
+                          <span class="info-i" title="Encrypts the connection to the mail server. Should be ON for almost all providers. Turn OFF only for internal/local mail servers.">i</span>
                         </div>
                       </div>
                     </div>
@@ -1012,11 +1114,11 @@
                     <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">Credentials</div>
                     <div class="row g-2">
                       <div class="col-md-6">
-                        <label class="form-label small text-muted mb-1">Username</label>
+                        <label class="form-label small text-muted mb-1">Username <span class="info-i" title="Your email address or SMTP username used to authenticate with the mail server.">i</span></label>
                         <input type="text" class="form-control form-control-sm" id="email-user" placeholder="you@gmail.com" autocomplete="username">
                       </div>
                       <div class="col-md-6">
-                        <label class="form-label small text-muted mb-1">Password / App Password</label>
+                        <label class="form-label small text-muted mb-1">Password / App Password <span class="info-i" title="For Gmail with 2FA enabled, use an App Password (Google Account → Security → App Passwords). Regular passwords won't work with 2FA.">i</span></label>
                         <div class="input-group input-group-sm">
                           <input type="password" class="form-control form-control-sm" id="email-password" placeholder="Leave blank to keep existing" autocomplete="current-password">
                           <button type="button" class="btn btn-outline-secondary" id="btn-clear-email-password">Clear</button>
@@ -1030,11 +1132,11 @@
                     <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">Routing</div>
                     <div class="row g-2">
                       <div class="col-md-6">
-                        <label class="form-label small text-muted mb-1">From</label>
+                        <label class="form-label small text-muted mb-1">From <span class="info-i" title="The sender email address shown in notifications. Leave blank to use the same address as the username.">i</span></label>
                         <input type="text" class="form-control form-control-sm" id="email-from" placeholder="Same as username if blank">
                       </div>
                       <div class="col-md-6">
-                        <label class="form-label small text-muted mb-1">To</label>
+                        <label class="form-label small text-muted mb-1">To <span class="info-i" title="The email address where notifications will be delivered. Can be the same as the sender.">i</span></label>
                         <input type="text" class="form-control form-control-sm" id="email-to" placeholder="recipient@gmail.com">
                       </div>
                     </div>
@@ -1069,7 +1171,7 @@
                             <span class="fw-semibold d-block">Daily Digest</span>
                             <span class="text-muted d-flex align-items-center gap-1">Send at hour
                               <input type="number" class="form-control form-control-sm font-monospace d-inline-block"
-                                id="email-daily-hour" value="8" min="0" max="23" style="width:4rem">
+                                id="email-daily-hour" value="8" min="0" max="23" style="width:4rem" title="Hour of day (0-23) when the daily digest email is sent. Default: 8 (8:00 AM).">
                             </span>
                           </label>
                         </div>
@@ -1087,47 +1189,44 @@
                 </div>
               </form>
             </div>
+            </div>
           </div>
         </div>
 
-        <!-- Row 3: Rate Limits -->
+        <!-- Row 3: Rate Limits (collapsible) -->
         <div class="col-12">
           <div class="card">
-            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#ratelimits-collapse">
               RATE LIMITS
-              <span class="text-success small fw-normal" id="rl-save-status" style="font-size:0.75rem"></span>
+              <span class="text-success small fw-normal" id="rl-save-status" style="font-size:0.75rem" onclick="event.stopPropagation()"></span>
             </div>
+            <div class="collapse" id="ratelimits-collapse">
             <div class="card-body">
               <div class="row g-3">
 
                 <div class="col-md-4">
-                  <label class="form-label small text-muted mb-1">Query Window <span class="text-muted fw-normal">(seconds)</span></label>
+                  <label class="form-label small text-muted mb-1">Query Window (s) <span class="info-i" title="Time window (in seconds) used to count how many DNS queries each client sends. If a client exceeds the max within this window, they get rate-limited. Default: 10s.">i</span></label>
                   <input type="number" class="form-control form-control-sm font-monospace" id="rl-rate-window" min="1" max="60" value="10">
-                  <div class="form-text">Sliding window for counting queries per client.</div>
                 </div>
 
                 <div class="col-md-4">
-                  <label class="form-label small text-muted mb-1">Max Queries / Window</label>
+                  <label class="form-label small text-muted mb-1">Max Queries / Window <span class="info-i" title="Maximum number of DNS queries a single client can make within the query window before rate-limiting kicks in and blocks the client temporarily. Default: 100.">i</span></label>
                   <input type="number" class="form-control form-control-sm font-monospace" id="rl-rate-max" min="10" max="1000" value="100">
-                  <div class="form-text">Queries per window before rate-limiting triggers.</div>
                 </div>
 
                 <div class="col-md-4">
-                  <label class="form-label small text-muted mb-1">Block Duration <span class="text-muted fw-normal">(seconds)</span></label>
+                  <label class="form-label small text-muted mb-1">Block Duration (s) <span class="info-i" title="How long (in seconds) a client stays blocked after being rate-limited. During this time, all DNS queries from the client are refused. Default: 300 (5 minutes).">i</span></label>
                   <input type="number" class="form-control form-control-sm font-monospace" id="rl-block-duration" min="30" max="86400" value="300">
-                  <div class="form-text">How long auto-blocked IPs stay blocked.</div>
                 </div>
 
                 <div class="col-md-4">
-                  <label class="form-label small text-muted mb-1">Burst Limit — Normal Device <span class="text-muted fw-normal">(queries/s)</span></label>
+                  <label class="form-label small text-muted mb-1">Burst — Normal (q/s) <span class="info-i" title="Maximum queries per second for regular devices (PCs, phones, tablets). Phones can burst 30+ queries on wake-up. Set too low and devices get falsely blocked. Default: 100.">i</span></label>
                   <input type="number" class="form-control form-control-sm font-monospace" id="rl-burst-normal" min="5" max="500" value="30">
-                  <div class="form-text">1-second burst ceiling for PCs, phones, servers.</div>
                 </div>
 
                 <div class="col-md-4">
-                  <label class="form-label small text-muted mb-1">Burst Limit — IoT Device <span class="text-muted fw-normal">(queries/s)</span></label>
+                  <label class="form-label small text-muted mb-1">Burst — IoT (q/s) <span class="info-i" title="Maximum queries per second for fingerprinted IoT devices (smart bulbs, cameras, etc.). IoT devices rarely need high burst rates, so this limit is tighter to catch compromised devices. Default: 10.">i</span></label>
                   <input type="number" class="form-control form-control-sm font-monospace" id="rl-burst-iot" min="2" max="100" value="10">
-                  <div class="form-text">Tighter 1-second burst limit for fingerprinted IoT devices.</div>
                 </div>
 
                 <div class="col-12 d-flex gap-2 align-items-center pt-2 border-top border-secondary">
@@ -1137,10 +1236,80 @@
 
               </div>
             </div>
+            </div>
           </div>
         </div>
 
-        <!-- Row 4: About -->
+        <!-- Row 4: Service Controls -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#services-collapse">
+              SERVICE CONTROLS
+              <span class="text-success small fw-normal" id="svc-status-msg" style="font-size:0.75rem" onclick="event.stopPropagation()"></span>
+            </div>
+            <div class="collapse" id="services-collapse">
+            <div class="card-body">
+              <div class="row g-3">
+
+                <!-- DNS Server -->
+                <div class="col-12 col-md-4">
+                  <div class="p-3 rounded d-flex flex-column gap-2" style="background:#161b22;border:1px solid #30363d">
+                    <div class="d-flex align-items-center justify-content-between">
+                      <div>
+                        <span class="fw-semibold">DNS Server</span>
+                        <span class="info-i" title="The core DNS resolver that intercepts queries, applies blocklists, and enforces parental/security rules. Restarting causes a brief DNS blip (~2s) for your network.">i</span>
+                      </div>
+                      <span class="badge rounded-pill" id="svc-dns-badge" style="font-size:.65rem">--</span>
+                    </div>
+                    <div class="text-muted small">Port 53 &middot; Blocklist enforcement</div>
+                    <button class="btn btn-outline-warning btn-sm mt-1 svc-restart-btn" data-service="dns">
+                      <span class="spinner-border spinner-border-sm d-none me-1"></span>Restart
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Unbound -->
+                <div class="col-12 col-md-4">
+                  <div class="p-3 rounded d-flex flex-column gap-2" style="background:#161b22;border:1px solid #30363d">
+                    <div class="d-flex align-items-center justify-content-between">
+                      <div>
+                        <span class="fw-semibold">Unbound</span>
+                        <span class="info-i" title="Recursive DNS resolver that forwards queries to upstream providers (Quad9, Cloudflare, etc.) with DNSSEC validation and caching. Restarting flushes the DNS cache.">i</span>
+                      </div>
+                      <span class="badge rounded-pill" id="svc-unbound-badge" style="font-size:.65rem">--</span>
+                    </div>
+                    <div class="text-muted small">Upstream resolver &middot; DNSSEC</div>
+                    <button class="btn btn-outline-warning btn-sm mt-1 svc-restart-btn" data-service="unbound">
+                      <span class="spinner-border spinner-border-sm d-none me-1"></span>Restart
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Nginx -->
+                <div class="col-12 col-md-4">
+                  <div class="p-3 rounded d-flex flex-column gap-2" style="background:#161b22;border:1px solid #30363d">
+                    <div class="d-flex align-items-center justify-content-between">
+                      <div>
+                        <span class="fw-semibold">Nginx</span>
+                        <span class="info-i" title="Reverse proxy serving the dashboard UI, proxy rules, and HTTPS. Restarting causes a brief page disconnect (~2s) — the page will auto-reconnect.">i</span>
+                      </div>
+                      <span class="badge rounded-pill" id="svc-nginx-badge" style="font-size:.65rem">--</span>
+                    </div>
+                    <div class="text-muted small">Port 80/443 &middot; Reverse proxy</div>
+                    <button class="btn btn-outline-warning btn-sm mt-1 svc-restart-btn" data-service="nginx">
+                      <span class="spinner-border spinner-border-sm d-none me-1"></span>Restart
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+              <div class="text-muted small mt-3">Restarting a service takes ~2-5 seconds. The page may briefly disconnect if nginx is restarted.</div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 5: About -->
         <div class="col-12">
           <div class="card">
             <div class="card-header text-muted small fw-semibold">ABOUT</div>
@@ -1261,20 +1430,19 @@
           <!-- Screen time limits -->
           <div class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;font-size:.7rem">Screen Time Limits</div>
           <div class="p-3 rounded mb-2" style="background:#0d1117;border:1px solid #21262d">
-            <div class="fw-semibold small mb-2">⏰ Daily query limits <span class="text-muted fw-normal">(0 = disabled)</span></div>
-            <div class="text-muted small mb-3">When daily DNS queries for a category exceed the limit, a warning page is shown with a "Continue for 30 minutes" snooze option. Social media generates ~20–100 queries per active session.</div>
+            <div class="fw-semibold small mb-2">⏰ Daily query limits <span class="text-muted fw-normal">(0 = disabled)</span> <span class="info-i" title="Limits how many DNS queries a device can make to social or gaming domains per day. When the limit is reached, a warning page appears with a 30-minute snooze option. One active session generates roughly 20-100 queries.">i</span></div>
             <div class="row g-2">
               <div class="col-6">
                 <label class="form-label small text-muted mb-1">📱 Social Media</label>
                 <div class="input-group input-group-sm">
-                  <input type="number" class="form-control" id="parental-social-limit" min="0" max="9999" value="500">
+                  <input type="number" class="form-control" id="parental-social-limit" min="0" max="9999" value="500" title="Daily DNS query limit for social media domains (Facebook, TikTok, Instagram, etc.). Set to 0 to disable the limit.">
                   <span class="input-group-text text-muted" style="font-size:.7rem">queries/day</span>
                 </div>
               </div>
               <div class="col-6">
                 <label class="form-label small text-muted mb-1">🎮 Gaming</label>
                 <div class="input-group input-group-sm">
-                  <input type="number" class="form-control" id="parental-gaming-limit" min="0" max="9999" value="500">
+                  <input type="number" class="form-control" id="parental-gaming-limit" min="0" max="9999" value="500" title="Daily DNS query limit for gaming/streaming domains (Steam, Roblox, Twitch, etc.). Set to 0 to disable the limit.">
                   <span class="input-group-text text-muted" style="font-size:.7rem">queries/day</span>
                 </div>
               </div>

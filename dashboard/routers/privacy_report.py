@@ -6,6 +6,7 @@
 """
 IoT Privacy Leak Report — maps DNS queries per device to their parent company.
 """
+import ipaddress
 import time
 import aiosqlite
 from fastapi import APIRouter
@@ -114,6 +115,18 @@ _COMPANY_MAP: list[tuple[str, str]] = [
 ]
 
 
+# Docker compose default bridge — not real clients
+_DOCKER_NET = ipaddress.ip_network("172.18.0.0/16")
+
+
+def _is_container(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+        return addr.is_loopback or addr in _DOCKER_NET
+    except ValueError:
+        return False
+
+
 def _classify(domain: str) -> str:
     domain = domain.lower().rstrip(".")
     for suffix, company in _COMPANY_MAP:
@@ -137,13 +150,22 @@ async def privacy_report():
                GROUP BY client_ip, domain"""
         )
 
-    # Build per-device company totals
+    # Build per-device company totals (skip Docker containers / loopback)
     device_map: dict[str, dict[str, int]] = {}
     for client_ip, domain, cnt in rows:
+        if _is_container(client_ip):
+            continue
         company = _classify(domain)
         if client_ip not in device_map:
             device_map[client_ip] = {}
         device_map[client_ip][company] = device_map[client_ip].get(company, 0) + cnt
+
+    # Fetch device labels for display
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        label_rows = await db.execute_fetchall(
+            "SELECT ip, label, device_type FROM device_fingerprints"
+        )
+    labels = {r[0]: (r[1] or "", r[2] or "") for r in label_rows}
 
     result = []
     for ip, companies in device_map.items():
@@ -153,10 +175,13 @@ async def privacy_report():
              for c, n in companies.items()],
             key=lambda x: -x["count"]
         )
+        lbl, dtype = labels.get(ip, ("", ""))
         result.append({
             "ip": ip,
+            "label": lbl,
+            "device_type": dtype,
             "total_forwarded": total,
-            "companies": breakdown[:12],   # top 12
+            "companies": breakdown[:12],
         })
 
     result.sort(key=lambda x: -x["total_forwarded"])

@@ -2,7 +2,7 @@
 // All rights reserved.
 
 import { useCallback, useEffect, useState } from 'react'
-import { apiGet, apiPatch, apiPost } from '../api/client'
+import { apiDelete, apiGet, apiPatch, apiPost } from '../api/client'
 import type { Device, ParentalSettings } from '../api/types'
 import { LoadingSpinner, FullPageSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
@@ -67,6 +67,7 @@ function DeviceSheet({
   const [parental,    setParental]    = useState<ParentalSettings | null>(null)
   const [loadingP,    setLoadingP]    = useState(false)
   const [saving,      setSaving]      = useState(false)
+  const [deleting,    setDeleting]    = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -191,6 +192,28 @@ function DeviceSheet({
                           onChange={v => setParental({ ...parental, parental_block_gaming: v })}
                         />
                       </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">Social daily limit (queries, 0=off)</label>
+                        <input
+                          type="number"
+                          value={parental.parental_social_limit}
+                          onChange={e => setParental({ ...parental, parental_social_limit: Number(e.target.value) || 0 })}
+                          className="input-base"
+                          min={0}
+                          max={10000}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">Gaming daily limit (queries, 0=off)</label>
+                        <input
+                          type="number"
+                          value={parental.parental_gaming_limit}
+                          onChange={e => setParental({ ...parental, parental_gaming_limit: Number(e.target.value) || 0 })}
+                          className="input-base"
+                          min={0}
+                          max={10000}
+                        />
+                      </div>
                     </div>
                   </>
                 )}
@@ -206,10 +229,31 @@ function DeviceSheet({
             </div>
           )}
 
-          {/* Save */}
-          <button onClick={handleSave} className="btn-primary" disabled={saving}>
-            {saving ? <LoadingSpinner size={16} /> : 'Save Changes'}
-          </button>
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button onClick={handleSave} className="btn-primary flex-1" disabled={saving}>
+              {saving ? <LoadingSpinner size={16} /> : 'Save Changes'}
+            </button>
+            <button
+              onClick={async () => {
+                setDeleting(true)
+                try {
+                  await apiDelete(`/api/devices/${device.ip}`)
+                  showToast('success', `Device ${device.ip} removed`)
+                  onSaved()
+                  onClose()
+                } catch (err: unknown) {
+                  showToast('error', err instanceof Error ? err.message : 'Delete failed')
+                } finally {
+                  setDeleting(false)
+                }
+              }}
+              className="btn-danger px-4"
+              disabled={deleting}
+            >
+              {deleting ? <LoadingSpinner size={16} /> : 'Delete'}
+            </button>
+          </div>
         </div>
       </div>
     </>

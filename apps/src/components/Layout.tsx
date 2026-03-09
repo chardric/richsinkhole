@@ -14,9 +14,9 @@ interface NavItem {
 function Logo() {
   return (
     <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="16" cy="16" r="14" stroke="#58a6ff" strokeWidth="2" fill="none" />
-      <circle cx="16" cy="16" r="9"  stroke="#58a6ff" strokeWidth="2" fill="none" opacity="0.7" />
-      <circle cx="16" cy="16" r="4"  fill="#58a6ff" />
+      <circle cx="16" cy="16" r="14" stroke="#da3633" strokeWidth="2" fill="none" />
+      <circle cx="16" cy="16" r="9"  stroke="#da3633" strokeWidth="2" fill="none" opacity="0.65" />
+      <circle cx="16" cy="16" r="4"  fill="#da3633" />
     </svg>
   )
 }
@@ -52,6 +52,21 @@ const SettingsIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
   </svg>
 )
+const ScheduleIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+)
+const PrivacyIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+)
+const ProxyIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+  </svg>
+)
 const MoreIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -64,6 +79,9 @@ const DESKTOP_NAV: NavItem[] = [
   { path: '/blocklist',  label: 'Blocklist',   icon: <BlocklistIcon /> },
   { path: '/devices',    label: 'Devices',     icon: <DevicesIcon /> },
   { path: '/security',   label: 'Security',    icon: <SecurityIcon /> },
+  { path: '/schedules',  label: 'Schedules',   icon: <ScheduleIcon /> },
+  { path: '/privacy',    label: 'Privacy',     icon: <PrivacyIcon /> },
+  { path: '/proxy',      label: 'Proxy & DNS', icon: <ProxyIcon /> },
   { path: '/settings',   label: 'Settings',    icon: <SettingsIcon /> },
 ]
 
@@ -76,8 +94,11 @@ const MOBILE_TABS: NavItem[] = [
 ]
 
 const MORE_ITEMS: NavItem[] = [
-  { path: '/security',  label: 'Security',  icon: <SecurityIcon /> },
-  { path: '/settings',  label: 'Settings',  icon: <SettingsIcon /> },
+  { path: '/security',   label: 'Security',    icon: <SecurityIcon /> },
+  { path: '/schedules',  label: 'Schedules',   icon: <ScheduleIcon /> },
+  { path: '/privacy',    label: 'Privacy',     icon: <PrivacyIcon /> },
+  { path: '/proxy',      label: 'Proxy & DNS', icon: <ProxyIcon /> },
+  { path: '/settings',   label: 'Settings',    icon: <SettingsIcon /> },
 ]
 
 interface LayoutProps {
@@ -91,7 +112,7 @@ export function Layout({ children }: LayoutProps) {
 
   const isActive = (path: string) => {
     if (path === '/more') {
-      return location.pathname === '/security' || location.pathname === '/settings'
+      return MORE_ITEMS.some(m => location.pathname === m.path)
     }
     return location.pathname === path
   }

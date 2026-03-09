@@ -12,6 +12,9 @@ import { LogsScreen }      from './screens/LogsScreen'
 import { BlocklistScreen } from './screens/BlocklistScreen'
 import { DevicesScreen }   from './screens/DevicesScreen'
 import { SecurityScreen }  from './screens/SecurityScreen'
+import { SchedulesScreen } from './screens/SchedulesScreen'
+import { PrivacyScreen }   from './screens/PrivacyScreen'
+import { ProxyScreen }     from './screens/ProxyScreen'
 import { SettingsScreen }  from './screens/SettingsScreen'
 
 function AuthGate() {
@@ -29,13 +32,16 @@ function AuthGate() {
   return (
     <Layout>
       <Routes>
-        <Route path="/dashboard" element={<DashboardScreen />} />
-        <Route path="/logs"      element={<LogsScreen />} />
-        <Route path="/blocklist" element={<BlocklistScreen />} />
-        <Route path="/devices"   element={<DevicesScreen />} />
-        <Route path="/security"  element={<SecurityScreen />} />
-        <Route path="/settings"  element={<SettingsScreen />} />
-        <Route path="/more"      element={<></>} />
+        <Route path="/dashboard"  element={<DashboardScreen />} />
+        <Route path="/logs"       element={<LogsScreen />} />
+        <Route path="/blocklist"  element={<BlocklistScreen />} />
+        <Route path="/devices"    element={<DevicesScreen />} />
+        <Route path="/security"   element={<SecurityScreen />} />
+        <Route path="/schedules"  element={<SchedulesScreen />} />
+        <Route path="/privacy"    element={<PrivacyScreen />} />
+        <Route path="/proxy"      element={<ProxyScreen />} />
+        <Route path="/settings"   element={<SettingsScreen />} />
+        <Route path="/more"       element={<></>} />
         <Route path="*"          element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Layout>

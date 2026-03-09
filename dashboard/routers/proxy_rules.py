@@ -60,29 +60,85 @@ def _conf_path(rule_id: int) -> str:
     return f"{NGINX_CONF_DIR}/proxy_{rule_id}.conf"
 
 
+HTTP_PORT = os.getenv("HTTP_PORT", "80")
+
+
+def _is_self_target(target: str) -> bool:
+    """Detect if the proxy target points back to this server (would loop)."""
+    if not HOST_IP:
+        return False
+    from urllib.parse import urlparse
+    parsed = urlparse(target)
+    host = parsed.hostname or ""
+    port = str(parsed.port) if parsed.port else "80"
+    return host == HOST_IP and port == HTTP_PORT
+
+
 def _write_conf(rule_id: int, hostname: str, target: str) -> None:
     os.makedirs(NGINX_CONF_DIR, exist_ok=True)
     # Strip trailing slash from target to avoid double-slash in proxy_pass
     target = target.rstrip("/")
-    conf = (
-        f"# RichSinkhole proxy: {hostname} -> {target}\n"
-        f"server {{\n"
-        f"    listen 80;\n"
-        f"    server_name {hostname};\n\n"
-        f"    location / {{\n"
-        f"        proxy_pass         {target};\n"
-        f"        proxy_http_version 1.1;\n"
-        f"        proxy_set_header   Host              $host;\n"
-        f"        proxy_set_header   X-Real-IP         $remote_addr;\n"
-        f"        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n"
-        f"        proxy_set_header   X-Forwarded-Proto $scheme;\n"
-        f"        proxy_set_header   Upgrade           $http_upgrade;\n"
-        f"        proxy_set_header   Connection        \"upgrade\";\n"
-        f"        proxy_read_timeout    60s;\n"
-        f"        proxy_connect_timeout 10s;\n"
-        f"    }}\n"
-        f"}}\n"
-    )
+
+    # If target points back to this server's nginx, generate a dashboard
+    # proxy with proper path rewriting to avoid redirect loops
+    if _is_self_target(target):
+        root_path = os.getenv("ROOT_PATH", "/richsinkhole")
+        conf = (
+            f"# RichSinkhole proxy: {hostname} -> {target} (self → dashboard)\n"
+            f"server {{\n"
+            f"    listen 80;\n"
+            f"    server_name {hostname};\n\n"
+            f"    # Root redirect to dashboard\n"
+            f"    location = / {{\n"
+            f"        return 301 {root_path}/;\n"
+            f"    }}\n\n"
+            f"    # Dashboard with prefix strip\n"
+            f"    location {root_path}/ {{\n"
+            f"        rewrite ^{root_path}/(.*) /$1 break;\n"
+            f"        proxy_pass              http://dashboard:8080;\n"
+            f"        proxy_http_version      1.1;\n"
+            f"        proxy_set_header        Host              $host;\n"
+            f"        proxy_set_header        X-Real-IP         $remote_addr;\n"
+            f"        proxy_set_header        X-Forwarded-For   $proxy_add_x_forwarded_for;\n"
+            f"        proxy_set_header        X-Forwarded-Proto $scheme;\n"
+            f"        proxy_set_header        Upgrade           $http_upgrade;\n"
+            f"        proxy_set_header        Connection        \"upgrade\";\n"
+            f"        proxy_buffering         off;\n"
+            f"        proxy_cache             off;\n"
+            f"        proxy_read_timeout      86400s;\n"
+            f"        chunked_transfer_encoding on;\n"
+            f"    }}\n\n"
+            f"    # Catch-all for other paths\n"
+            f"    location / {{\n"
+            f"        proxy_pass              http://dashboard:8080;\n"
+            f"        proxy_http_version      1.1;\n"
+            f"        proxy_set_header        Host              $host;\n"
+            f"        proxy_set_header        X-Real-IP         $remote_addr;\n"
+            f"        proxy_set_header        X-Forwarded-For   $proxy_add_x_forwarded_for;\n"
+            f"        proxy_set_header        X-Forwarded-Proto $scheme;\n"
+            f"    }}\n"
+            f"}}\n"
+        )
+    else:
+        conf = (
+            f"# RichSinkhole proxy: {hostname} -> {target}\n"
+            f"server {{\n"
+            f"    listen 80;\n"
+            f"    server_name {hostname};\n\n"
+            f"    location / {{\n"
+            f"        proxy_pass         {target};\n"
+            f"        proxy_http_version 1.1;\n"
+            f"        proxy_set_header   Host              $host;\n"
+            f"        proxy_set_header   X-Real-IP         $remote_addr;\n"
+            f"        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n"
+            f"        proxy_set_header   X-Forwarded-Proto $scheme;\n"
+            f"        proxy_set_header   Upgrade           $http_upgrade;\n"
+            f"        proxy_set_header   Connection        \"upgrade\";\n"
+            f"        proxy_read_timeout    60s;\n"
+            f"        proxy_connect_timeout 10s;\n"
+            f"    }}\n"
+            f"}}\n"
+        )
     with open(_conf_path(rule_id), "w") as f:
         f.write(conf)
 

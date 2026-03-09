@@ -25,6 +25,8 @@ services:
   unbound:
     build: ./unbound
     restart: unless-stopped
+    volumes:
+      - ./data:/data
     deploy:
       resources:
         limits:

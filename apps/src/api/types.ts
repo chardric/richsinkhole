@@ -96,6 +96,18 @@ export interface NtpStatus {
   running: boolean
 }
 
+export interface ServiceInfo {
+  running: boolean
+  status: string
+  started_at?: string
+}
+
+export interface ServicesStatus {
+  dns: ServiceInfo
+  unbound: ServiceInfo
+  nginx: ServiceInfo
+}
+
 export interface SecurityStats {
   active_blocks: number
   total_blocks: number
@@ -113,4 +125,49 @@ export interface ParentalSettings {
   parental_block_gaming: boolean
   parental_social_limit: number
   parental_gaming_limit: number
+}
+
+export interface Schedule {
+  id: number
+  name: string
+  start_time: string
+  end_time: string
+  days: string
+  target_profile: string
+  enabled: boolean
+}
+
+export interface NetworkScore {
+  score: number
+  grade: string
+  breakdown: Record<string, { score: number; max: number; detail: string }>
+}
+
+export interface PrivacyDevice {
+  ip: string
+  label: string | null
+  total: number
+  blocked: number
+  categories: Record<string, number>
+}
+
+export interface HeatmapData {
+  hours: number[]
+}
+
+export interface DnsRecord {
+  id: number
+  hostname: string
+  type: string
+  value: string
+  ttl: number
+  enabled: boolean
+}
+
+export interface ProxyRule {
+  id: number
+  hostname: string
+  target: string
+  enabled: boolean
+  created_at: string
 }
