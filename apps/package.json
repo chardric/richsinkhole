@@ -1,0 +1,47 @@
+{
+  "name": "richsinkhole-app",
+  "version": "1.0.0",
+  "description": "RichSinkhole DNS Sinkhole Manager",
+  "homepage": "https://downstreamtech.net",
+  "author": {
+    "name": "DownStreamTech",
+    "email": "info@downstreamtech.net",
+    "url": "https://downstreamtech.net"
+  },
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:electron": "npm run build && electron-builder",
+    "build:linux": "npm run build && electron-builder --linux AppImage deb",
+    "build:win": "npm run build && electron-builder --win",
+    "electron:dev": "vite build && electron .",
+    "cap:sync": "cap sync android",
+    "cap:build": "npm run build && cap sync android"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@capacitor/android": "^5.7.2",
+    "@capacitor/cli": "^5.7.2",
+    "@capacitor/core": "^5.7.2",
+    "@capacitor/preferences": "^5.0.7",
+    "@capacitor/status-bar": "^5.0.8",
+    "autoprefixer": "^10.4.17",
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vite-plugin-electron": "^0.28.4"
+  }
+}

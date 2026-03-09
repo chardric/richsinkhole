@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
-from fastapi import FastAPI, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -316,6 +316,33 @@ async def ca_mobileconfig():
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
+
+@app.post("/api/auth/login")
+async def api_login(payload: dict = Body(...)):
+    """JSON login endpoint for native mobile/desktop apps. Returns a Bearer token."""
+    password = str(payload.get("password", ""))
+    if not auth.is_password_set():
+        # First-run: set password via app
+        if len(password) < 8:
+            raise HTTPException(400, "Password must be at least 8 characters")
+        auth.set_password(password)
+    elif not auth.check_password(password):
+        raise HTTPException(401, "Invalid credentials")
+    return {"token": auth.make_session_token()}
+
+
+@app.post("/api/auth/change-password")
+async def api_change_password(payload: dict = Body(...)):
+    """Change admin password. Requires current password for verification."""
+    current = str(payload.get("current_password", ""))
+    new_pw  = str(payload.get("new_password", ""))
+    if not auth.check_password(current):
+        raise HTTPException(401, "Current password is incorrect")
+    if len(new_pw) < 8:
+        raise HTTPException(400, "New password must be at least 8 characters")
+    auth.set_password(new_pw)
+    return {"status": "ok"}
+
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = ""):

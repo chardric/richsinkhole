@@ -1,0 +1,45 @@
+appId: net.downstreamtech.richsinkhole
+productName: RichSinkhole
+copyright: Copyright © 2026 DownStreamTech
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - build/tray-*.png
+  - build/icons/**
+  - package.json
+
+# Unpack tray/launcher icons from asar so nativeImage.createFromPath() can read them
+asarUnpack:
+  - build/tray-*.png
+  - build/icons/**
+
+linux:
+  target:
+    - target: AppImage
+    - target: deb
+  category: Network
+  synopsis: DNS Sinkhole Manager
+  description: Manage your RichSinkhole DNS sinkhole server
+  maintainer: DownStreamTech <info@downstreamtech.net>
+  icon: build/icons
+
+win:
+  target:
+    - target: nsis
+  artifactName: RichSinkhole-Setup-${version}.exe
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.utilities

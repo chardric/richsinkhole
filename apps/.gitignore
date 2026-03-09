@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+installer/linux/
+installer/windows/
+installer/mobile/
+android/.gradle/
+android/app/build/
+android/build/
+*.local
+.capacitor/

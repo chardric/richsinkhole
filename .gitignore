@@ -3,8 +3,14 @@ backups/
 nginx/certs/*.key
 nginx/certs/*.crt
 nginx/certs/*.pem
+nginx/certs/*.csr
+nginx/certs/*.srl
+nginx/certs/*.ext
 .env
 __pycache__/
 *.pyc
 *.pyo
 setup.sh
+installer/linux/
+installer/windows/
+installer/mobile/

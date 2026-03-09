@@ -205,19 +205,43 @@ def run_update() -> None:
         _write_status(0, 0, "no_sources")
         return
 
+    # Fetch per-URL to track per-feed domain counts
+    per_url: dict[str, list[str]] = {}
     all_domains: set[str] = set()
     for url in urls:
-        all_domains.update(fetch_domains(url, whiteset))
+        domains = fetch_domains(url, whiteset)
+        per_url[url] = domains
+        all_domains.update(domains)
 
     if not all_domains:
         log.warning("No domains fetched from any source — skipping DB update")
         _write_status(0, 0, "no_domains")
         return
 
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     try:
         with sqlite3.connect(BLOCKLIST_DB) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bd_domain ON blocked_domains(domain)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bd_source ON blocked_domains(source)")
+            # Ensure feeds table and source column exist
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS blocklist_feeds (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url          TEXT    NOT NULL UNIQUE,
+                    name         TEXT,
+                    domain_count INTEGER DEFAULT 0,
+                    last_synced  TEXT,
+                    enabled      INTEGER DEFAULT 1,
+                    is_builtin   INTEGER DEFAULT 0,
+                    created_at   TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            try:
+                conn.execute("ALTER TABLE blocked_domains ADD COLUMN source TEXT")
+            except Exception:
+                pass
+
             (count_before,) = conn.execute(
                 "SELECT COUNT(*) FROM blocked_domains"
             ).fetchone()
@@ -226,6 +250,18 @@ def run_update() -> None:
                 "INSERT OR IGNORE INTO blocked_domains (domain) VALUES (?)",
                 [(d,) for d in all_domains],
             )
+            conn.commit()
+
+            # Update blocklist_feeds metadata for each built-in source URL
+            for url, domains in per_url.items():
+                conn.execute("""
+                    INSERT INTO blocklist_feeds (url, domain_count, last_synced, enabled, is_builtin)
+                    VALUES (?, ?, ?, 1, 1)
+                    ON CONFLICT(url) DO UPDATE SET
+                        domain_count = excluded.domain_count,
+                        last_synced  = excluded.last_synced,
+                        is_builtin   = 1
+                """, (url, len(domains), now))
             conn.commit()
 
             (count_after,) = conn.execute(

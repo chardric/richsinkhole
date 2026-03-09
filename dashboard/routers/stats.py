@@ -70,6 +70,7 @@ async def get_stats():
         "forwarded": forwarded,
         "block_pct": block_pct,
         "clients_seen": clients_seen,
+        "unique_clients": clients_seen,
         "total_blocked_domains": total_blocked_domains,
         "bandwidth_saved_mb": bandwidth_saved_mb,
         "time_saved_min": time_saved_min,

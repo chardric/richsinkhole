@@ -22,7 +22,7 @@ CONFIG_PATH = "/config/config.yml"
 # Paths that don't require auth
 _PUBLIC = {"/login", "/health", "/static", "/captive", "/captive-portal",
            "/ca.crt", "/ca.mobileconfig", "/install-cert.sh", "/dns-query",
-           "/parental-block", "/api/parental/snooze"}
+           "/parental-block", "/api/parental/snooze", "/api/auth"}
 
 
 def _cfg() -> dict:
@@ -112,8 +112,16 @@ def verify_session_token(token: str) -> bool:
 def is_authenticated(request: Request) -> bool:
     if not is_password_set():
         return True   # no auth configured — open access
+    # Cookie auth (web UI)
     token = request.cookies.get("rs_session", "")
-    return verify_session_token(token)
+    if token and verify_session_token(token):
+        return True
+    # Bearer token auth (native mobile/desktop apps)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        return verify_session_token(token)
+    return False
 
 
 async def auth_middleware(request: Request, call_next):

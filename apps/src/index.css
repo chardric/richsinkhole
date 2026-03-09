@@ -1,0 +1,212 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #0d1117;
+  color: #e6edf3;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Custom scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #161b22;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* ── Mobile overscroll / bounce fix ─────────────────────────────────────── */
+.scroll-area {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ── Animations ──────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes toastIn {
+  from { transform: translateY(100px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes glowRed {
+  0%, 100% { box-shadow: 0 0 8px rgba(248, 81, 73, 0.4); }
+  50%       { box-shadow: 0 0 20px rgba(248, 81, 73, 0.7); }
+}
+
+.animate-fade-in     { animation: fadeIn 0.2s ease-out; }
+.animate-slide-up    { animation: slideUp 0.25s ease-out; }
+.animate-slide-sheet { animation: slideUpSheet 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.animate-toast-in    { animation: toastIn 0.3s ease-out; }
+.animate-spin        { animation: spin 1s linear infinite; }
+.animate-pulse-dot   { animation: pulse 2s ease-in-out infinite; }
+.animate-glow-red    { animation: glowRed 2s ease-in-out infinite; }
+
+/* ── Stat card glow ──────────────────────────────────────────────────────── */
+.stat-card--hot {
+  animation: glowRed 2s ease-in-out infinite;
+}
+
+/* ── Pill badges ─────────────────────────────────────────────────────────── */
+.pill {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+.pill-blocked    { @apply bg-red-900/60 text-red-300; }
+.pill-allowed    { @apply bg-green-900/60 text-green-300; }
+.pill-forwarded  { @apply bg-blue-900/60 text-blue-300; }
+.pill-parental   { @apply bg-orange-900/60 text-orange-300; }
+.pill-warn       { @apply bg-yellow-900/60 text-yellow-300; }
+
+/* ── Bottom sheet backdrop ──────────────────────────────────────────────── */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 50;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.sheet-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  border-radius: 16px 16px 0 0;
+  z-index: 51;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: slideUpSheet 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ── Toggle switch ───────────────────────────────────────────────────────── */
+.toggle-track {
+  @apply relative inline-flex h-6 w-11 items-center rounded-full transition-colors;
+}
+
+.toggle-thumb {
+  @apply absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform;
+}
+
+/* ── Modal overlay ───────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-panel {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.2s ease-out;
+}
+
+/* ── Input base ──────────────────────────────────────────────────────────── */
+.input-base {
+  @apply w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-sm
+         text-[#e6edf3] placeholder-[#8b949e] outline-none transition-colors
+         focus:border-[#58a6ff] focus:ring-1 focus:ring-[#58a6ff]/30;
+}
+
+/* ── Button base ─────────────────────────────────────────────────────────── */
+.btn-primary {
+  @apply flex items-center justify-center gap-2 w-full rounded-lg px-4 py-3 text-sm font-semibold
+         bg-[#58a6ff] text-[#0d1117] transition-opacity min-h-[44px]
+         hover:opacity-90 active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium
+         bg-[#21262d] border border-[#30363d] text-[#e6edf3] transition-colors min-h-[44px]
+         hover:bg-[#30363d] active:bg-[#484f58] disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.btn-danger {
+  @apply flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium
+         bg-red-900/30 border border-red-800/50 text-[#f85149] transition-colors min-h-[44px]
+         hover:bg-red-900/50 active:bg-red-900/70;
+}
+
+/* ── Nav items ───────────────────────────────────────────────────────────── */
+.nav-item {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#8b949e]
+         transition-colors cursor-pointer min-h-[44px];
+}
+
+.nav-item:hover {
+  @apply bg-[#161b22] text-[#e6edf3];
+}
+
+.nav-item.active {
+  @apply bg-[#1c2128] text-[#58a6ff];
+}
+
+.bottom-nav-item {
+  @apply flex flex-col items-center justify-center gap-1 flex-1 py-2 text-[#8b949e]
+         transition-colors cursor-pointer min-h-[56px];
+}
+
+.bottom-nav-item.active {
+  @apply text-[#58a6ff];
+}
