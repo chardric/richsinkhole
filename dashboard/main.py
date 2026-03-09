@@ -365,14 +365,14 @@ async def login_submit(request: Request):
             "request": request, "error": "Incorrect password.", "root_path": ROOT_PATH,
         })
     token = auth.make_session_token()
-    resp = RedirectResponse(url="/", status_code=302)
+    resp = RedirectResponse(url=f"{ROOT_PATH}/", status_code=302)
     resp.set_cookie("rs_session", token, httponly=True, samesite="lax", max_age=86400 * 7)
     return resp
 
 
 @app.post("/logout")
 async def logout():
-    resp = RedirectResponse(url="/login", status_code=302)
+    resp = RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
     resp.delete_cookie("rs_session")
     return resp
 

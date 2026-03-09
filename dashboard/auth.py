@@ -13,6 +13,8 @@ import os
 import secrets
 import time
 import yaml
+
+ROOT_PATH = os.getenv("ROOT_PATH", "").rstrip("/")
 from pathlib import Path
 from fastapi import Request
 from fastapi.responses import RedirectResponse
@@ -131,5 +133,5 @@ async def auth_middleware(request: Request, call_next):
         if path == pub or path.startswith(pub + "/") or path.startswith(pub + "?"):
             return await call_next(request)
     if not is_authenticated(request):
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
     return await call_next(request)
