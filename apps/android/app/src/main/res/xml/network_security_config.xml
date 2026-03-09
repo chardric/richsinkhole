@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allow cleartext HTTP to any host (LAN only — sinkhole is on local network).
+  Also trust user-installed CA certs so the self-signed sinkhole cert works over HTTPS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <!-- System CAs -->
+            <certificates src="system" />
+            <!-- User-installed CAs (e.g. the sinkhole's self-signed CA cert) -->
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
