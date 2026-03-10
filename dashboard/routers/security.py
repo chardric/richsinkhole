@@ -90,12 +90,13 @@ async def security_stats():
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await db.execute(_ENSURE_TABLE)
         has_sec = await _table_exists(db, "security_events")
-        # Collapse query_log counts into one scan
+        # Count ratelimited / nxdomain in last 24h (use ts filter to avoid full scan)
         ql_row = (await db.execute_fetchall("""
             SELECT
-                SUM(action='ratelimited' AND ts >= datetime('now','-24 hours')),
-                SUM(action='nxdomain'   AND ts >= datetime('now','-24 hours'))
+                SUM(action='ratelimited'),
+                SUM(action='nxdomain')
             FROM query_log
+            WHERE ts >= datetime('now','-24 hours')
         """))[0]
         (blocks_row, sec_row) = await asyncio.gather(
             db.execute_fetchall("""

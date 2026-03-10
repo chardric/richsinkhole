@@ -90,13 +90,14 @@ export function PrivacyScreen() {
   const [score, setScore] = useState<NetworkScore | null>(null)
   const [devices, setDevices] = useState<PrivacyDevice[]>([])
   const [heatmap, setHeatmap] = useState<number[]>([])
+  const [range, setRange] = useState<'24h' | '7d'>('24h')
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
     try {
       const [s, d, h] = await Promise.all([
         apiGet<NetworkScore>('/api/network-score'),
-        apiGet<PrivacyDevice[]>('/api/privacy-report'),
+        apiGet<PrivacyDevice[]>(`/api/privacy-report?range=${range}`),
         apiGet<HeatmapData>('/api/heatmap'),
       ])
       setScore(s)
@@ -107,7 +108,7 @@ export function PrivacyScreen() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [range])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -185,7 +186,22 @@ export function PrivacyScreen() {
         <section>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold text-[#e6edf3]">Privacy Report</h2>
-            <span className="text-xs text-muted">{devices.length} devices</span>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg overflow-hidden border border-border">
+                {(['24h', '7d'] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => { setRange(r); setLoading(true) }}
+                    className={`px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+                      range === r ? 'bg-primary/20 text-primary' : 'text-muted'
+                    }`}
+                  >
+                    {r === '24h' ? '24h' : '7d'}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted">{devices.length} devices</span>
+            </div>
           </div>
 
           {devices.length === 0 ? (

@@ -211,6 +211,8 @@ def init_query_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ql_action_ts ON query_log(action, ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ql_client    ON query_log(client_ip)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ql_domain    ON query_log(domain)")
+        # Covering index for privacy report (ts range + action filter + group by client_ip,domain)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ql_privacy   ON query_log(ts, action, client_ip, domain)")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS device_fingerprints (
                 ip          TEXT PRIMARY KEY,

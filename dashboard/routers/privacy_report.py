@@ -9,15 +9,16 @@ IoT Privacy Leak Report — maps DNS queries per device to their parent company.
 import ipaddress
 import time
 import aiosqlite
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 SINKHOLE_DB = "/data/sinkhole.db"
 
 router = APIRouter()
 
-_privacy_cache: list | None = None
-_privacy_cache_ts: float = 0.0
-_PRIVACY_TTL = 60.0  # heavier query — cache for 1 minute
+# Keyed cache — separate entries per time range
+_privacy_cache: dict[str, tuple[float, list]] = {}
+_PRIVACY_TTL = 120.0  # heavier query — cache for 2 minutes
+_VALID_RANGES = {"24h": "-24 hours", "7d": "-7 days"}
 
 # Domain suffix → parent company
 # Ordered longest-first so more specific rules match first
@@ -136,17 +137,19 @@ def _classify(domain: str) -> str:
 
 
 @router.get("/privacy-report")
-async def privacy_report():
+async def privacy_report(range: str = Query("24h", pattern="^(24h|7d)$")):
     """Aggregate DNS queries per device, grouped by parent company."""
-    global _privacy_cache, _privacy_cache_ts
-    if _privacy_cache is not None and time.monotonic() - _privacy_cache_ts < _PRIVACY_TTL:
-        return _privacy_cache
+    cached = _privacy_cache.get(range)
+    if cached and time.monotonic() - cached[0] < _PRIVACY_TTL:
+        return cached[1]
 
+    sql_range = _VALID_RANGES[range]
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         rows = await db.execute_fetchall(
-            """SELECT client_ip, domain, COUNT(*) AS cnt
+            f"""SELECT client_ip, domain, COUNT(*) AS cnt
                FROM query_log
-               WHERE action NOT IN ('blocked', 'ratelimited', 'scheduled')
+               WHERE ts >= datetime('now', '{sql_range}')
+                 AND action NOT IN ('blocked', 'ratelimited', 'scheduled')
                GROUP BY client_ip, domain"""
         )
 
@@ -185,8 +188,7 @@ async def privacy_report():
         })
 
     result.sort(key=lambda x: -x["total_forwarded"])
-    _privacy_cache = result
-    _privacy_cache_ts = time.monotonic()
+    _privacy_cache[range] = (time.monotonic(), result)
     return result
 
 

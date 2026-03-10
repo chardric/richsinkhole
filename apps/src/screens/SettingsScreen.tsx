@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiGet, apiPost, getServerUrl } from '../api/client'
-import type { AppSettings, NtpStatus, ServicesStatus } from '../api/types'
+import type { AppSettings, NtpStatus, ServicesStatus, UpdateSchedule } from '../api/types'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
@@ -162,26 +162,30 @@ export function SettingsScreen() {
   const { logout, serverUrl } = useAuth()
   const navigate = useNavigate()
 
-  const [settings,     setSettings]     = useState<AppSettings | null>(null)
-  const [ntpRunning,   setNtpRunning]   = useState<boolean | null>(null)
-  const [services,     setServices]     = useState<ServicesStatus | null>(null)
-  const [restarting,   setRestarting]   = useState<string | null>(null)
-  const [loading,      setLoading]      = useState(true)
-  const [togglingNtp,  setTogglingNtp]  = useState(false)
-  const [togglingYt,   setTogglingYt]   = useState(false)
-  const [togglingCap,  setTogglingCap]  = useState(false)
-  const [showChangePw, setShowChangePw] = useState(false)
+  const [settings,      setSettings]     = useState<AppSettings | null>(null)
+  const [ntpRunning,    setNtpRunning]   = useState<boolean | null>(null)
+  const [services,      setServices]     = useState<ServicesStatus | null>(null)
+  const [schedule,      setSchedule]     = useState<UpdateSchedule>({ update_hour: 3, update_minute: 0, update_frequency: 'daily', update_day_of_week: 0, update_day_of_month: 1 })
+  const [savingSched,   setSavingSched]  = useState(false)
+  const [restarting,    setRestarting]   = useState<string | null>(null)
+  const [loading,       setLoading]      = useState(true)
+  const [togglingNtp,   setTogglingNtp]  = useState(false)
+  const [togglingYt,    setTogglingYt]   = useState(false)
+  const [togglingCap,   setTogglingCap]  = useState(false)
+  const [showChangePw,  setShowChangePw] = useState(false)
 
   const fetchAll = useCallback(async () => {
     try {
-      const [cfg, ntp, svc] = await Promise.allSettled([
+      const [cfg, ntp, svc, sched] = await Promise.allSettled([
         apiGet<AppSettings>('/api/settings'),
         apiGet<NtpStatus>('/api/ntp/status'),
         apiGet<ServicesStatus>('/api/services/status'),
+        apiGet<UpdateSchedule>('/api/settings/update-schedule'),
       ])
       if (cfg.status === 'fulfilled') setSettings(cfg.value)
       if (ntp.status === 'fulfilled') setNtpRunning(ntp.value.running)
       if (svc.status === 'fulfilled') setServices(svc.value)
+      if (sched.status === 'fulfilled') setSchedule(sched.value)
     } catch {
       // silent
     } finally {
@@ -237,6 +241,27 @@ export function SettingsScreen() {
       showToast('error', err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
       setTogglingCap(false)
+    }
+  }
+
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+
+  function scheduleLabel(s: UpdateSchedule): string {
+    const t = `${String(s.update_hour).padStart(2,'0')}:${String(s.update_minute).padStart(2,'0')}`
+    if (s.update_frequency === 'weekly')  return `Every ${DAYS[s.update_day_of_week]} at ${t}`
+    if (s.update_frequency === 'monthly') return `Day ${s.update_day_of_month} of every month at ${t}`
+    return `Daily at ${t}`
+  }
+
+  async function saveSchedule() {
+    setSavingSched(true)
+    try {
+      await apiPost('/api/settings/update-schedule', schedule)
+      showToast('success', `Schedule saved: ${scheduleLabel(schedule)}`)
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to save schedule')
+    } finally {
+      setSavingSched(false)
     }
   }
 
@@ -369,6 +394,105 @@ export function SettingsScreen() {
               </div>
             )
           })}
+        </SectionCard>
+
+        {/* Blocklist Update Schedule */}
+        <SectionCard title="Blocklist Update Schedule">
+          <div className="px-4 py-4 space-y-4">
+            <p className="text-xs text-muted">Configure when the blocklist refreshes. Takes effect within 60 seconds.</p>
+
+            {/* Frequency picker */}
+            <div className="flex gap-2">
+              {(['daily', 'weekly', 'monthly'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setSchedule(s => ({ ...s, update_frequency: f }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    schedule.update_frequency === f
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : 'bg-transparent border-border text-muted'
+                  }`}
+                >
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3 items-end flex-wrap">
+              {/* Day of week — weekly only */}
+              {schedule.update_frequency === 'weekly' && (
+                <div>
+                  <p className="text-xs text-muted mb-1">Day</p>
+                  <select
+                    value={schedule.update_day_of_week}
+                    onChange={e => setSchedule(s => ({ ...s, update_day_of_week: Number(e.target.value) }))}
+                    className="input-base"
+                    style={{ width: 110 }}
+                  >
+                    {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map((d, i) => (
+                      <option key={i} value={i}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Day of month — monthly only */}
+              {schedule.update_frequency === 'monthly' && (
+                <div>
+                  <p className="text-xs text-muted mb-1">Day of month</p>
+                  <select
+                    value={schedule.update_day_of_month}
+                    onChange={e => setSchedule(s => ({ ...s, update_day_of_month: Number(e.target.value) }))}
+                    className="input-base"
+                    style={{ width: 72 }}
+                  >
+                    {Array.from({ length: 28 }, (_, i) => (
+                      <option key={i + 1} value={i + 1}>{i + 1}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Hour */}
+              <div>
+                <p className="text-xs text-muted mb-1">Hour</p>
+                <select
+                  value={schedule.update_hour}
+                  onChange={e => setSchedule(s => ({ ...s, update_hour: Number(e.target.value) }))}
+                  className="input-base"
+                  style={{ width: 72 }}
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Minute */}
+              <div>
+                <p className="text-xs text-muted mb-1">Minute</p>
+                <select
+                  value={schedule.update_minute}
+                  onChange={e => setSchedule(s => ({ ...s, update_minute: Number(e.target.value) }))}
+                  className="input-base"
+                  style={{ width: 72 }}
+                >
+                  {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                    <option key={m} value={m}>:{String(m).padStart(2, '0')}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button onClick={saveSchedule} disabled={savingSched} className="btn-primary px-4 py-2">
+                {savingSched ? <LoadingSpinner size={14} /> : 'Save'}
+              </button>
+            </div>
+
+            <p className="text-xs text-muted">
+              Current: <span className="text-[#e6edf3]">{scheduleLabel(schedule)}</span>
+              <span className="text-muted ml-1">(Asia/Manila)</span>
+            </p>
+          </div>
         </SectionCard>
 
         {/* About */}

@@ -600,6 +600,65 @@ async function saveSettings() {
 }
 
 // ============================================================
+// Blocklist update schedule
+// ============================================================
+(function initUpdateScheduleSelects() {
+  // Hour select (0-23)
+  const hourSel = document.getElementById("update-hour");
+  if (hourSel) {
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement("option");
+      opt.value = h;
+      opt.textContent = String(h).padStart(2, "0");
+      hourSel.appendChild(opt);
+    }
+  }
+  // Day of month select (1-28)
+  const domSel = document.getElementById("update-dom");
+  if (domSel) {
+    for (let d = 1; d <= 28; d++) {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d;
+      domSel.appendChild(opt);
+    }
+  }
+  // Show/hide contextual selectors based on frequency
+  document.querySelectorAll("input[name='update-freq']").forEach(radio => {
+    radio.addEventListener("change", () => _updateScheduleFreqUI(radio.value));
+  });
+})();
+
+function _updateScheduleFreqUI(freq) {
+  document.getElementById("update-dow-wrap").style.display = freq === "weekly"  ? "" : "none";
+  document.getElementById("update-dom-wrap").style.display = freq === "monthly" ? "" : "none";
+}
+
+function _scheduleDisplayText(data) {
+  const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const t = `${String(data.update_hour).padStart(2,"0")}:${String(data.update_minute).padStart(2,"0")}`;
+  if (data.update_frequency === "weekly")  return `Every ${days[data.update_day_of_week]} at ${t}`;
+  if (data.update_frequency === "monthly") return `Day ${data.update_day_of_month} of every month at ${t}`;
+  return `Daily at ${t}`;
+}
+
+async function loadUpdateSchedule() {
+  try {
+    const data = await api("GET", "/api/settings/update-schedule");
+    const freq = data.update_frequency || "daily";
+    document.querySelector(`input[name='update-freq'][value='${freq}']`).checked = true;
+    document.getElementById("update-hour").value   = data.update_hour;
+    document.getElementById("update-minute").value = data.update_minute;
+    document.getElementById("update-dow").value    = data.update_day_of_week;
+    document.getElementById("update-dom").value    = data.update_day_of_month;
+    _updateScheduleFreqUI(freq);
+    document.getElementById("update-schedule-display").textContent = _scheduleDisplayText(data);
+  } catch (e) {
+    console.warn("Failed to load update schedule:", e);
+  }
+}
+
+// ============================================================
 // Email notifications settings
 // ============================================================
 async function loadEmailSettings() {
@@ -1754,8 +1813,10 @@ function renderPrivacyReport() {
 
 async function loadPrivacyReport() {
   const el = document.getElementById("privacy-report-body");
+  const range = document.getElementById("privacy-range")?.value || "24h";
+  el.innerHTML = '<div class="text-muted small text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>';
   try {
-    _privacyDevices = await api("GET", "/api/privacy-report");
+    _privacyDevices = await api("GET", `/api/privacy-report?range=${range}`);
     renderPrivacyReport();
   } catch (_) {
     el.innerHTML = '<div class="text-muted small text-center py-4">Could not load privacy report.</div>';
@@ -2033,6 +2094,7 @@ function bindEvents() {
   // Privacy tab
   document.getElementById("tab-privacy-btn").addEventListener("shown.bs.tab", loadPrivacyReport);
   document.getElementById("btn-refresh-privacy").addEventListener("click", loadPrivacyReport);
+  document.getElementById("privacy-range").addEventListener("change", loadPrivacyReport);
   document.getElementById("privacy-sort").addEventListener("change", renderPrivacyReport);
 
   // Tab switch: load settings when Settings tab is shown
@@ -2042,6 +2104,28 @@ function bindEvents() {
     loadRateLimits();
     loadUnboundSettings();
     loadServiceStatus();
+    loadUpdateSchedule();
+  });
+  document.getElementById("btn-save-update-schedule").addEventListener("click", async () => {
+    const btn  = document.getElementById("btn-save-update-schedule");
+    const freq = document.querySelector("input[name='update-freq']:checked")?.value || "daily";
+    const payload = {
+      update_hour:         parseInt(document.getElementById("update-hour").value,   10),
+      update_minute:       parseInt(document.getElementById("update-minute").value, 10),
+      update_frequency:    freq,
+      update_day_of_week:  parseInt(document.getElementById("update-dow").value,    10),
+      update_day_of_month: parseInt(document.getElementById("update-dom").value,    10),
+    };
+    btn.disabled = true;
+    try {
+      await api("POST", "/api/settings/update-schedule", payload);
+      document.getElementById("update-schedule-display").textContent = _scheduleDisplayText(payload);
+      showToast("Update schedule saved — takes effect within 60s", "success");
+    } catch (e) {
+      showToast("Failed to save schedule: " + e.message, "danger");
+    } finally {
+      btn.disabled = false;
+    }
   });
   document.getElementById("btn-save-rate-limits").addEventListener("click", saveRateLimits);
   document.getElementById("btn-save-unbound").addEventListener("click", saveUnboundSettings);

@@ -5,8 +5,10 @@
 
 import asyncio
 import base64
+import hashlib
 import os
 import sqlite3
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -383,11 +385,15 @@ async def logout():
 
 # ─── Main pages ───────────────────────────────────────────────────────────────
 
+_BOOT_TS = str(int(time.time()))
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "root_path": ROOT_PATH,
+        "cache_bust": _BOOT_TS,
     })
 
 

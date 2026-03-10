@@ -108,6 +108,14 @@ export interface ServicesStatus {
   nginx: ServiceInfo
 }
 
+export interface UpdateSchedule {
+  update_hour: number
+  update_minute: number
+  update_frequency: 'daily' | 'weekly' | 'monthly'
+  update_day_of_week: number    // 0=Mon … 6=Sun
+  update_day_of_month: number   // 1-28
+}
+
 export interface SecurityStats {
   active_blocks: number
   total_blocks: number

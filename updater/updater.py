@@ -313,6 +313,7 @@ def run_update() -> None:
 
             log.info("DB swap: building indexes...")
             # Add unique index on fully populated table (single sort pass)
+            conn.execute("DROP INDEX IF EXISTS idx_bdn_domain")
             conn.execute("CREATE UNIQUE INDEX idx_bdn_domain ON blocked_domains_new(domain)")
 
             # Re-insert preserved custom/feed/threat_intel domains (few rows, index exists)
@@ -322,6 +323,7 @@ def run_update() -> None:
                     custom_rows,
                 )
 
+            conn.execute("DROP INDEX IF EXISTS idx_bdn_source")
             conn.execute("CREATE INDEX idx_bdn_source ON blocked_domains_new(source)")
 
             log.info("DB swap: renaming tables...")
@@ -352,6 +354,15 @@ def run_update() -> None:
 
     except Exception as exc:
         log.error("DB error during update: %s", exc)
+        # Clean up any half-built swap table/indexes so next run starts fresh
+        try:
+            with sqlite3.connect(BLOCKLIST_DB) as conn:
+                conn.execute("DROP INDEX IF EXISTS idx_bdn_domain")
+                conn.execute("DROP INDEX IF EXISTS idx_bdn_source")
+                conn.execute("DROP TABLE IF EXISTS blocked_domains_new")
+                conn.commit()
+        except Exception:
+            pass
         _write_status(0, 0, "db_error")
         return
 
@@ -504,6 +515,64 @@ def prune_query_log(retain_days: int = 30) -> None:
         log.error("Query log prune failed: %s", exc)
 
 
+_CONFIG_PATH = "/config/config.yml"
+
+_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+# Snapshot of active schedule settings — used to detect changes
+_ScheduleKey = tuple  # (hour, minute, frequency, day_of_week, day_of_month)
+
+
+def _read_update_schedule() -> _ScheduleKey:
+    """Return schedule tuple from config.yml, falling back to defaults."""
+    try:
+        with open(_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        h   = max(0, min(23, int(cfg.get("update_hour",         3))))
+        m   = max(0, min(59, int(cfg.get("update_minute",       0))))
+        frq = cfg.get("update_frequency", "daily")
+        if frq not in ("daily", "weekly", "monthly"):
+            frq = "daily"
+        dow = max(0, min(6,  int(cfg.get("update_day_of_week",  0))))
+        dom = max(1, min(28, int(cfg.get("update_day_of_month", 1))))
+        return h, m, frq, dow, dom
+    except Exception:
+        return 3, 0, "daily", 0, 1
+
+
+def _set_update_schedule(key: _ScheduleKey) -> None:
+    """Clear and re-register blocklist + prune jobs for the given schedule."""
+    hour, minute, frequency, day_of_week, day_of_month = key
+    schedule.clear("blocklist")
+    schedule.clear("prune")
+
+    time_str = f"{hour:02d}:{minute:02d}"
+
+    if frequency == "weekly":
+        getattr(schedule.every(), _DAYS[day_of_week]).at(time_str).do(run_update).tag("blocklist")
+        log.info("Schedule: blocklist every %s at %s", _DAYS[day_of_week], time_str)
+
+    elif frequency == "monthly":
+        # schedule lib has no native monthly support — check day-of-month inside a daily job
+        def _monthly_check(dom=day_of_month):
+            from datetime import date as _date
+            if _date.today().day == dom:
+                run_update()
+        schedule.every().day.at(time_str).do(_monthly_check).tag("blocklist")
+        log.info("Schedule: blocklist monthly on day %d at %s", day_of_month, time_str)
+
+    else:  # daily
+        schedule.every().day.at(time_str).do(run_update).tag("blocklist")
+        log.info("Schedule: blocklist daily at %s", time_str)
+
+    # Prune always runs daily, 5 min after the configured time
+    prune_minute = (minute + 5) % 60
+    prune_hour   = hour if minute + 5 < 60 else (hour + 1) % 24
+    prune_str    = f"{prune_hour:02d}:{prune_minute:02d}"
+    schedule.every().day.at(prune_str).do(prune_query_log).tag("prune")
+    log.info("Schedule: prune daily at %s", prune_str)
+
+
 def main() -> None:
     log.info("RichSinkhole Updater starting up...")
 
@@ -512,17 +581,17 @@ def main() -> None:
     run_threat_intel()
     prune_query_log()
 
-    # Schedule daily at 03:00 Asia/Manila (UTC+8)
-    schedule.every().day.at("03:00").do(run_update)
-    schedule.every().day.at("03:05").do(prune_query_log)
-    # Threat intel refreshes every 6 hours
+    # Load initial schedule from config
+    cur_key = _read_update_schedule()
+    _set_update_schedule(cur_key)
+
+    # Threat intel refreshes every 6 hours (fixed — not user-configurable)
     schedule.every(6).hours.do(run_threat_intel)
-    log.info("Scheduled: blocklist at 03:00, prune at 03:05, threat intel every 6h")
 
     while True:
         schedule.run_pending()
 
-        # Re-read config each cycle to pick up sources.yml changes
+        # Re-read config each cycle to pick up sources.yml and schedule changes
         try:
             cfg = load_sources()
         except Exception:
@@ -530,13 +599,19 @@ def main() -> None:
 
         check_new_clients(cfg)
 
+        # Detect and apply schedule changes without restarting
+        new_key = _read_update_schedule()
+        if new_key != cur_key:
+            log.info("Update schedule changed — rescheduling")
+            cur_key = new_key
+            _set_update_schedule(cur_key)
+
         force_path = Path(FORCE_UPDATE_PATH)
         if force_path.exists():
             log.info("Force update triggered via /data/force_update")
             force_path.unlink(missing_ok=True)
-            schedule.clear()
             run_update()
-            schedule.every().day.at("03:00").do(run_update)
+            _set_update_schedule(cur_key)
 
         time.sleep(60)
 

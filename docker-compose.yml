@@ -103,6 +103,7 @@ services:
       TZ: ${TZ:-Asia/Manila}
     volumes:
       - ./data:/data
+      - ./data/config:/config:ro
       - ./updater/sources.yml:/updater/sources.yml:ro
     restart: unless-stopped
     deploy:
