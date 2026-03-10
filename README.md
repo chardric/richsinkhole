@@ -9,7 +9,7 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 ### Blocking
 - **DNS-level blocking** — blocks ads, trackers, telemetry, and malware for every device on the network
 - **2.2M+ domains blocked** out of the box via curated subscription feeds
-- **Subscription feed manager** — add/remove blocklist URLs; feeds auto-sync daily at 3 AM
+- **Subscription feed manager** — add/remove blocklist URLs; feeds auto-sync on a configurable schedule (daily, weekly, or monthly)
 - **Custom block list** — manually block individual domains
 - **Allowlist** — permanently whitelist domains so they survive feed re-syncs
 - **Threat intel feeds** — URLhaus and ThreatFox malware/phishing domains refreshed every 6 hours
@@ -53,7 +53,10 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **Schedule rules** — time-based blocking per device or network-wide
 
 ### Dashboard & Apps
-- **React web dashboard** — dark theme, real-time query log, stat cards, SSE activity stream
+- **React web dashboard** — dark theme, real-time query log, stat cards, query activity heatmap, network health score, SSE activity stream
+- **Privacy report** — per-device domain breakdown with 24h/7d time range filter
+- **Service controls** — restart DNS, Unbound, and Nginx containers from the Settings tab
+- **Configurable update schedule** — set blocklist sync frequency (daily/weekly/monthly), day, and time from Settings
 - **Native desktop app** — Electron wrapper for Linux (AppImage + DEB) and Windows (NSIS installer); system tray with minimize-to-tray
 - **Android app** — Capacitor-based APK
 - **Webhook notifications** — alerts for blocklist updates, new devices, and daily summaries
@@ -187,12 +190,14 @@ Or use the **native desktop app** — see the [Native Apps](#native-apps) sectio
 
 | Tab | Description |
 |-----|-------------|
-| **Dashboard** | Query stats (total, blocked, block rate, clients), top blocked domains, live recent activity |
+| **Dashboard** | Query stats (total, blocked, block rate, clients), top blocked domains, query activity heatmap, network health score, live recent activity |
 | **Query Logs** | Real-time DNS log with filter chips (All / Blocked / Allowed / Forwarded / Parental); inline Block/Allow actions |
 | **Blocklist** | Subscription feed management, custom blocked domains, allowlist |
-| **Devices** | Fingerprinted devices with MAC/vendor, per-device profile, parental controls |
+| **Devices** | Fingerprinted devices with MAC/vendor, per-device profile, parental controls, per-device stats |
 | **Security** | Active blocks, security events (DGA, tunnel, typosquat, NRD, rebinding, burst), protected brands, DNS leak status |
-| **Settings** | Feature toggles (YouTube redirect, captive portal, NTP), NRD mode, DNS leak results, change password, About |
+| **Privacy** | Per-device domain breakdown and tracker analysis (24h/7d range) |
+| **Schedules** | Time-based blocking rules per device or network-wide |
+| **Settings** | Feature toggles (YouTube redirect, captive portal, NTP), NRD mode, blocklist update schedule, service controls, DNS leak results, change password, About |
 
 ---
 
@@ -200,7 +205,7 @@ Or use the **native desktop app** — see the [Native Apps](#native-apps) sectio
 
 ### Subscription feeds
 
-The **Blocklist → Subscriptions** tab shows all feed sources. Built-in feeds (defined in `updater/sources.yml`) are labeled **built-in** and auto-sync daily at 3 AM.
+The **Blocklist → Subscriptions** tab shows all feed sources. Built-in feeds (defined in `updater/sources.yml`) are labeled **built-in** and auto-sync on the configured schedule (daily by default at 3:00 AM). The update schedule — frequency (daily/weekly/monthly), day, and time — is configurable from **Settings → Blocklist Update Schedule**.
 
 To add a custom feed:
 1. Go to **Blocklist → Subscriptions**
@@ -349,13 +354,25 @@ richsinkhole/
 │   │   ├── logs.py             # Query log REST + SSE stream
 │   │   ├── stats.py            # Aggregate stats with cache
 │   │   ├── devices.py          # Device CRUD, profiles, parental settings
+│   │   ├── device_stats.py     # Per-device query stats
 │   │   ├── security.py         # Active blocks, security events, unblock
-│   │   ├── settings.py         # Config read/write, NTP toggle
+│   │   ├── settings.py         # Config read/write, update schedule, NTP toggle
+│   │   ├── services.py         # Service restart controls (DNS, Unbound, Nginx)
 │   │   ├── health.py           # Health check endpoint
+│   │   ├── heatmap.py          # Query activity heatmap (7×24 grid)
+│   │   ├── network_score.py    # Network health score
+│   │   ├── privacy_report.py   # Per-device privacy/tracker report
+│   │   ├── parental.py         # Parental controls, screen time, circadian profiles
+│   │   ├── schedules.py        # Time-based blocking schedules
 │   │   ├── proxy_rules.py      # .lan reverse proxy rule management
-│   │   ├── protected_brands.py # Typosquat brand list management
+│   │   ├── dns_records.py      # Custom DNS record management
+│   │   ├── doh.py              # DNS-over-HTTPS endpoint
+│   │   ├── ntp.py              # NTP server toggle
 │   │   ├── nrd.py              # NRD feed status and mode
-│   │   └── dns_leak.py         # DNS leak detection results
+│   │   ├── dns_leak.py         # DNS leak detection results
+│   │   ├── metrics.py          # Prometheus-style metrics
+│   │   ├── qr.py               # QR code generator
+│   │   └── updater.py          # Blocklist updater status
 │   └── templates/              # Jinja2 templates (login, captive portal, block pages)
 ├── dns/                        # DNS sinkhole server
 │   ├── server.py               # DNS server (dnslib), blocking + security checks
