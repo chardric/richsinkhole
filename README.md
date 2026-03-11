@@ -467,5 +467,5 @@ Use `./backup.sh` to snapshot and `./restore.sh` to migrate to a new machine.
 
 ## License
 
-MIT — © 2026 [DownStreamTech](https://downstreamtech.net). All rights reserved.
-Developed by Richard R. Ayuyang, PhD
+© 2024–2026 [DownStreamTech](https://downstreamtech.net) — Licensed under the [Apache License 2.0](LICENSE)
+Developed by **Engr. Richard R. Ayuyang, PhD** — Professor II, CSU | [chadlinuxtech.net](https://chadlinuxtech.net)
