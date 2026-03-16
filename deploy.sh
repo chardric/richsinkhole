@@ -26,7 +26,7 @@ SERVICES=("${@}")
 
 # Default: all services
 if [ ${#SERVICES[@]} -eq 0 ]; then
-  SERVICES=(dashboard dns updater youtube-proxy unbound ntp)
+  SERVICES=(sinkhole unbound ntp)
 fi
 
 echo "==> Target: $REMOTE ($PLATFORM)"
@@ -38,7 +38,13 @@ docker exec buildx_buildkit_${BUILDER}0 sh -c "echo 'nameserver 1.1.1.1' > /etc/
 
 for svc in "${SERVICES[@]}"; do
   IMAGE="richsinkhole-${svc}:latest"
-  CTX="./${svc}"
+  if [ "$svc" = "sinkhole" ]; then
+    CTX="."
+    DOCKERFILE="sinkhole/Dockerfile"
+  else
+    CTX="./${svc}"
+    DOCKERFILE="${CTX}/Dockerfile"
+  fi
 
   echo "──────────────────────────────────────"
   echo "  Building: $svc  ($PLATFORM)"
@@ -47,6 +53,7 @@ for svc in "${SERVICES[@]}"; do
     --builder "$BUILDER" \
     --platform "$PLATFORM" \
     --network host \
+    --file "$DOCKERFILE" \
     --tag "$IMAGE" \
     --load \
     "$CTX"

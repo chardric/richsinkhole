@@ -4,7 +4,7 @@
 # All rights reserved.
 
 """
-Service Controls — restart core containers (DNS, Unbound, Nginx)
+Service Controls — restart core containers (Sinkhole, Unbound, Nginx)
 via Docker HTTP API over the Unix socket.
 """
 import os
@@ -15,9 +15,9 @@ from fastapi import APIRouter, HTTPException
 DOCKER_SOCK = "/var/run/docker.sock"
 
 _CONTAINERS = {
-    "dns":     "richsinkhole-dns-1",
-    "unbound": "richsinkhole-unbound-1",
-    "nginx":   "richsinkhole-nginx-1",
+    "sinkhole": "richsinkhole-sinkhole-1",
+    "unbound":  "richsinkhole-unbound-1",
+    "nginx":    "richsinkhole-nginx-1",
 }
 
 router = APIRouter()

@@ -573,7 +573,12 @@ def _set_update_schedule(key: _ScheduleKey) -> None:
     log.info("Schedule: prune daily at %s", prune_str)
 
 
-def main() -> None:
+def start_updater_sync() -> None:
+    """Blocking loop that runs the updater forever.
+
+    Designed to be called via ``asyncio.to_thread(start_updater_sync)``
+    from the unified sinkhole entrypoint, or directly in standalone mode.
+    """
     log.info("RichSinkhole Updater starting up...")
 
     # Run immediately on startup
@@ -614,6 +619,10 @@ def main() -> None:
             _set_update_schedule(cur_key)
 
         time.sleep(60)
+
+
+def main() -> None:
+    start_updater_sync()
 
 
 if __name__ == "__main__":

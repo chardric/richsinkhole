@@ -38,8 +38,10 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  dns:
-    build: ./dns
+  sinkhole:
+    build:
+      context: .
+      dockerfile: sinkhole/Dockerfile
     depends_on:
       - unbound
     ports:
@@ -47,31 +49,9 @@ services:
       - "0.0.0.0:53:53/tcp"
     environment:
       HOST_IP: ${HOST_IP:-}
-      TZ: ${TZ:-Asia/Manila}
-    volumes:
-      - ./data:/data
-      - ./data/config:/config
-    restart: unless-stopped
-    cap_add:
-      - NET_BIND_SERVICE
-    deploy:
-      resources:
-        limits:
-          memory: 128m
-          cpus: "0.5"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  dashboard:
-    build: ./dashboard
-    environment:
-      ROOT_PATH: /richsinkhole
-      HOST_IP: ${HOST_IP:-}
       HTTP_PORT: ${HTTP_PORT:-80}
       TZ: ${TZ:-Asia/Manila}
+      ROOT_PATH: /richsinkhole
       NGINX_CONTAINER: richsinkhole-nginx-1
     volumes:
       - ./data:/data
@@ -80,12 +60,17 @@ services:
       - ./nginx/certs:/certs:ro
       - ./nginx/conf.d:/nginx/conf.d
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     restart: unless-stopped
+    cap_add:
+      - NET_BIND_SERVICE
     deploy:
       resources:
         limits:
-          memory: 256m
-          cpus: "1.0"
+          memory: 640m
+          cpus: "2.0"
     logging:
       driver: json-file
       options:
@@ -96,43 +81,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-
-  updater:
-    build: ./updater
-    environment:
-      TZ: ${TZ:-Asia/Manila}
-    volumes:
-      - ./data:/data
-      - ./data/config:/config:ro
-      - ./updater/sources.yml:/updater/sources.yml:ro
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.5"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  youtube-proxy:
-    build: ./youtube-proxy
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-    deploy:
-      resources:
-        limits:
-          memory: 128m
-          cpus: "0.5"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   nginx:
     image: nginx:alpine
@@ -146,8 +94,7 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./nginx/conf.d:/etc/nginx/conf.d
     depends_on:
-      - dashboard
-      - youtube-proxy
+      - sinkhole
     restart: unless-stopped
     deploy:
       resources:

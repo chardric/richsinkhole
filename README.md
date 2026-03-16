@@ -1,6 +1,6 @@
 # RichSinkhole
 
-A self-hosted DNS sinkhole and ad blocker for your home network, built with Python, FastAPI, Unbound, and Docker. Blocks ads, trackers, telemetry, and malicious domains at the DNS level — network-wide, no per-device software needed. Runs on any Linux machine including a Raspberry Pi.
+A self-hosted DNS sinkhole and ad blocker for your home network, built with Python, FastAPI, Unbound, and Docker. Blocks ads, trackers, telemetry, and malicious domains at the DNS level — network-wide, no per-device software needed. Runs on any Linux machine including a Raspberry Pi 3B+.
 
 ---
 
@@ -40,7 +40,7 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 
 ### Network
 - **Captive portal** — soft portal that auto-whitelists devices on page visit
-- **Reverse proxy manager** — map `.lan` hostnames to LAN services (e.g. `nas.lan → 192.168.1.50:5000`)
+- **Reverse proxy manager** — map `.lan` hostnames to LAN services (e.g. `nas.lan -> 192.168.1.50:5000`)
 - **DNS-over-HTTPS** — built-in DoH endpoint (`/dns-query`) compatible with all major browsers
 - **NTP server** — built-in chrony NTP server (port 123/UDP); toggle from Settings
 - **HTTPS dashboard** — nginx serves dashboard on port 443 with self-signed cert
@@ -49,13 +49,13 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **Device fingerprinting** — auto-identifies device type by DNS patterns (Apple, Android, Windows, Samsung TV, Xbox, MikroTik, Xiaomi, Router, and more)
 - **Per-device blocking profiles** — Normal, Strict, or Passthrough
 - **MAC/vendor info** — ARP-correlated vendor names shown per device
-- **Ghost detection** — devices with ARP entries but no DNS queries in 24h marked with 👻
+- **Ghost detection** — devices with ARP entries but no DNS queries in 24h marked with ghost icon
 - **Schedule rules** — time-based blocking per device or network-wide
 
 ### Dashboard & Apps
 - **React web dashboard** — dark theme, real-time query log, stat cards, query activity heatmap, network health score, SSE activity stream
 - **Privacy report** — per-device domain breakdown with 24h/7d time range filter
-- **Service controls** — restart DNS, Unbound, and Nginx containers from the Settings tab
+- **Service controls** — restart Sinkhole, Unbound, and Nginx containers from the Settings tab
 - **Configurable update schedule** — set blocklist sync frequency (daily/weekly/monthly), day, and time from Settings
 - **Native desktop app** — Electron wrapper for Linux (AppImage + DEB) and Windows (NSIS installer); system tray with minimize-to-tray
 - **Android app** — Capacitor-based APK
@@ -65,13 +65,10 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 
 ## Tech Stack
 
-| Service | Technology | Purpose |
-|---------|------------|---------|
-| DNS Sinkhole | Python, dnslib | DNS blocking, device fingerprinting, query logging |
-| Dashboard | Python, FastAPI, Jinja2 | Web UI, REST API, SSE live log |
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Sinkhole | Python, dnslib, FastAPI, httpx | DNS blocking, dashboard, updater, YouTube proxy |
 | Recursive Resolver | Unbound | DNSSEC validation, DNS rebinding protection |
-| Blocklist Updater | Python | Scheduled fetch, dedup, SQLite writer |
-| YouTube Proxy | Python, httpx | Ad-stripping reverse proxy |
 | NTP Server | chrony (Alpine) | Network time server |
 | Reverse Proxy | Nginx | TLS, routing, static files |
 | Infrastructure | Docker Compose | Container orchestration |
@@ -85,47 +82,38 @@ Clients (phones, laptops, smart TVs)
         |
         | DNS queries (port 53)
         v
-  ┌─────────────┐
-  │  DNS Server │  (Python / dnslib)
-  │  server.py  │──► blocked → NXDOMAIN / sinkhole IP
-  └──────┬──────┘
-         │ allowed queries
-         v
-  ┌─────────────┐
-  │   Unbound   │  recursive resolver w/ DNSSEC
-  └──────┬──────┘
-         │
-         v
-   Root DNS servers (no third-party DNS)
+  ┌─────────────────────────────────────┐
+  │         Sinkhole Container          │
+  │                                     │
+  │  DNS Server (:53)                   │  blocks / forwards queries
+  │  Dashboard  (:8080)                 │  web UI + REST API
+  │  Updater    (background)            │  blocklist sync + threat intel
+  │  YouTube Proxy (:8000)              │  ad-stripping reverse proxy
+  └──────────────┬──────────────────────┘
+                 │ allowed queries
+                 v
+  ┌─────────────────────┐
+  │      Unbound        │  recursive resolver w/ DNSSEC
+  └──────────┬──────────┘
+             v
+       Root DNS servers
 
-  ┌──────────────────┐
-  │  Dashboard       │  FastAPI + React (port 8080 internal)
-  └──────────────────┘
+  ┌─────────────────────┐
+  │  NTP Server         │  chrony (port 123/UDP)
+  └─────────────────────┘
 
-  ┌──────────────────┐
-  │  YouTube Proxy   │  httpx transparent proxy (port 8000)
-  └──────────────────┘
-
-  ┌──────────────────┐
-  │  NTP Server      │  chrony (port 123/UDP)
-  └──────────────────┘
-
-  ┌──────────────────┐
-  │  Updater         │  blocklist sync + ARP scan + threat intel
-  └──────────────────┘
-
-  ┌──────────────────┐
-  │  Nginx           │  reverse proxy (ports 80/443), SNI routing
-  └──────────────────┘
+  ┌─────────────────────┐
+  │  Nginx              │  reverse proxy (ports 80/443), SNI routing
+  └─────────────────────┘
 ```
 
-All services run in Docker containers orchestrated by Docker Compose.
+All Python services run in a single container (one Python runtime) to minimize memory usage — fits comfortably on a Raspberry Pi 3B (1 GB RAM). Total steady-state: ~210 MB across all containers.
 
 ---
 
 ## Requirements
 
-- Linux machine (x86_64 or ARM64 / Raspberry Pi 4+)
+- Linux machine (x86_64 or ARM64 / Raspberry Pi 3B+)
 - Docker Engine 24+
 - Docker Compose v2+
 - A static LAN IP address
@@ -205,10 +193,10 @@ Or use the **native desktop app** — see the [Native Apps](#native-apps) sectio
 
 ### Subscription feeds
 
-The **Blocklist → Subscriptions** tab shows all feed sources. Built-in feeds (defined in `updater/sources.yml`) are labeled **built-in** and auto-sync on the configured schedule (daily by default at 3:00 AM). The update schedule — frequency (daily/weekly/monthly), day, and time — is configurable from **Settings → Blocklist Update Schedule**.
+The **Blocklist > Subscriptions** tab shows all feed sources. Built-in feeds (defined in `updater/sources.yml`) are labeled **built-in** and auto-sync on the configured schedule (daily by default at 3:00 AM). The update schedule — frequency (daily/weekly/monthly), day, and time — is configurable from **Settings > Blocklist Update Schedule**.
 
 To add a custom feed:
-1. Go to **Blocklist → Subscriptions**
+1. Go to **Blocklist > Subscriptions**
 2. Click **Add Feed**
 3. Paste a URL — supports hosts file format (`0.0.0.0 domain.com`) or plain domain lists (one per line)
 
@@ -220,7 +208,7 @@ Individual domains from subscription feeds cannot be deleted (they return on the
 
 ### Custom blocked domains
 
-Go to **Blocklist → Custom** to manually block specific domains. These are independent of subscription feeds and can be deleted individually.
+Go to **Blocklist > Custom** to manually block specific domains. These are independent of subscription feeds and can be deleted individually.
 
 ---
 
@@ -294,8 +282,8 @@ docker buildx create --name multiarch --driver docker-container --use
 ./deploy.sh
 
 # Deploy specific services
-./deploy.sh dashboard
-./deploy.sh dashboard dns updater
+./deploy.sh sinkhole
+./deploy.sh sinkhole nginx
 ```
 
 The script builds `linux/arm64` images, transfers them via `docker save | gzip | ssh docker load`, and restarts the affected containers on the Pi.
@@ -336,70 +324,58 @@ Additional feeds can also be added from the dashboard without editing this file.
 
 ```
 richsinkhole/
-├── apps/                       # Native app (Electron + Android)
-│   ├── src/                    # React + TypeScript frontend
-│   │   ├── screens/            # Dashboard, Logs, Blocklist, Devices, Security, Settings
-│   │   ├── components/         # Shared UI components
-│   │   ├── api/                # API client and type definitions
-│   │   └── context/            # Auth and Toast providers
-│   ├── electron/               # Electron main process
-│   ├── android/                # Capacitor Android project
-│   ├── electron-builder.yml    # Desktop build config
-│   └── package.json
-├── dashboard/                  # FastAPI backend
-│   ├── main.py                 # App entry, auth middleware, captive portal
-│   ├── auth.py                 # HMAC session tokens, password hashing
+├── sinkhole/                      # Unified container entrypoint
+│   ├── Dockerfile                 # Single image with all Python services
+│   └── main.py                    # Orchestrator: starts DNS, dashboard, updater, YT proxy
+├── dashboard/                     # FastAPI backend
+│   ├── main.py                    # App entry, auth middleware, captive portal
+│   ├── auth.py                    # HMAC session tokens, password hashing
 │   ├── routers/
-│   │   ├── blocklist.py        # Feed subscriptions, custom domains, allowlist
-│   │   ├── logs.py             # Query log REST + SSE stream
-│   │   ├── stats.py            # Aggregate stats with cache
-│   │   ├── devices.py          # Device CRUD, profiles, parental settings
-│   │   ├── device_stats.py     # Per-device query stats
-│   │   ├── security.py         # Active blocks, security events, unblock
-│   │   ├── settings.py         # Config read/write, update schedule, NTP toggle
-│   │   ├── services.py         # Service restart controls (DNS, Unbound, Nginx)
-│   │   ├── health.py           # Health check endpoint
-│   │   ├── heatmap.py          # Query activity heatmap (7×24 grid)
-│   │   ├── network_score.py    # Network health score
-│   │   ├── privacy_report.py   # Per-device privacy/tracker report
-│   │   ├── parental.py         # Parental controls, screen time, circadian profiles
-│   │   ├── schedules.py        # Time-based blocking schedules
-│   │   ├── proxy_rules.py      # .lan reverse proxy rule management
-│   │   ├── dns_records.py      # Custom DNS record management
-│   │   ├── doh.py              # DNS-over-HTTPS endpoint
-│   │   ├── ntp.py              # NTP server toggle
-│   │   ├── nrd.py              # NRD feed status and mode
-│   │   ├── dns_leak.py         # DNS leak detection results
-│   │   ├── metrics.py          # Prometheus-style metrics
-│   │   ├── qr.py               # QR code generator
-│   │   └── updater.py          # Blocklist updater status
-│   └── templates/              # Jinja2 templates (login, captive portal, block pages)
-├── dns/                        # DNS sinkhole server
-│   ├── server.py               # DNS server (dnslib), blocking + security checks
-│   ├── dga.py                  # DGA domain scoring
-│   ├── tunnel_detect.py        # DNS tunneling detection
-│   └── typosquat.py            # Typosquat / homoglyph detection
-├── updater/                    # Scheduled background tasks
-│   ├── updater.py              # Blocklist sync, ARP scan, threat intel, DNS leak probe
-│   ├── arp_scan.py             # ARP table correlation for device enrichment
-│   ├── oui.txt                 # IEEE OUI vendor database
-│   └── sources.yml             # Blocklist source URLs and whitelist
-├── unbound/                    # Recursive DNS resolver
+│   │   ├── blocklist.py           # Feed subscriptions, custom domains, allowlist
+│   │   ├── logs.py                # Query log REST + SSE stream
+│   │   ├── stats.py               # Aggregate stats with cache
+│   │   ├── devices.py             # Device CRUD, profiles, parental settings
+│   │   ├── device_stats.py        # Per-device query stats
+│   │   ├── security.py            # Active blocks, security events, unblock
+│   │   ├── settings.py            # Config read/write, update schedule, NTP toggle
+│   │   ├── services.py            # Service restart controls (Sinkhole, Unbound, Nginx)
+│   │   ├── health.py              # Health check endpoint
+│   │   ├── heatmap.py             # Query activity heatmap (7x24 grid)
+│   │   ├── network_score.py       # Network health score
+│   │   ├── privacy_report.py      # Per-device privacy/tracker report
+│   │   ├── parental.py            # Parental controls, screen time, circadian profiles
+│   │   ├── schedules.py           # Time-based blocking schedules
+│   │   ├── proxy_rules.py         # .lan reverse proxy rule management
+│   │   ├── dns_records.py         # Custom DNS record management
+│   │   ├── doh.py                 # DNS-over-HTTPS endpoint
+│   │   ├── ntp.py                 # NTP server toggle
+│   │   ├── metrics.py             # Prometheus-style metrics
+│   │   ├── qr.py                  # QR code generator
+│   │   └── updater.py             # Blocklist updater status
+│   └── templates/                 # Jinja2 templates (login, captive portal, block pages)
+├── dns/                           # DNS sinkhole server
+│   ├── server.py                  # DNS server (dnslib), blocking + security checks
+│   └── blocker.py                 # Blocklist lookup engine
+├── updater/                       # Scheduled background tasks
+│   ├── updater.py                 # Blocklist sync, threat intel, query log prune
+│   └── sources.yml                # Blocklist source URLs and whitelist
+├── youtube-proxy/                 # YouTube transparent proxy
+│   └── proxy.py                   # Ad-stripping reverse proxy
+├── unbound/                       # Recursive DNS resolver
 │   └── unbound.conf
-├── youtube-proxy/              # YouTube transparent proxy
-│   └── proxy.py
-├── ntp/                        # NTP time server
+├── ntp/                           # NTP time server
 │   ├── Dockerfile
 │   └── chrony.conf
-├── nginx/                      # Reverse proxy
-│   ├── nginx.conf              # Main config (router-level DNS setup)
-│   ├── conf.d/                 # Dynamic per-hostname proxy rules
-│   ├── 50x.html                # Custom error page
-│   └── certs/                  # CA and server TLS certificates
-├── installer/
-│   ├── linux/                  # AppImage + DEB
-│   ├── windows/                # NSIS installer
-│   └── mobile/                 # Android APK
+├── nginx/                         # Reverse proxy
+│   ├── nginx.conf                 # Production config (RPi)
+│   ├── nginx-standalone.conf      # Dev/standalone config
+│   ├── conf.d/                    # Dynamic per-hostname proxy rules
+│   └── certs/                     # CA and server TLS certificates
+├── apps/                          # Native app (Electron + Android)
+│   ├── src/                       # React + TypeScript frontend
+│   ├── electron/                  # Electron main process
+│   ├── android/                   # Capacitor Android project
+│   └── package.json
 ├── docker-compose.yml
 ├── .env.example
 ├── install.sh
@@ -412,15 +388,14 @@ richsinkhole/
 
 ## Services & Ports
 
-| Service | Port | Description |
-|---------|------|-------------|
-| `dns` | `53/udp`, `53/tcp` | DNS sinkhole |
+| Container | Port | Description |
+|-----------|------|-------------|
+| `sinkhole` | `53/udp`, `53/tcp` | DNS sinkhole |
+| `sinkhole` | `8080` (internal) | Web UI and REST API |
+| `sinkhole` | `8000` (internal) | YouTube ad-stripping proxy |
 | `unbound` | internal | Recursive DNS resolver |
 | `ntp` | `123/udp` | NTP time server |
-| `dashboard` | `8080` (internal) | Web UI and REST API |
-| `youtube-proxy` | `8000` (internal) | YouTube ad-stripping proxy |
 | `nginx` | `80`, `443` | Reverse proxy (public) |
-| `updater` | — | Background scheduler |
 
 ---
 
@@ -444,7 +419,7 @@ Use `./backup.sh` to snapshot and `./restore.sh` to migrate to a new machine.
 ```bash
 # Create backup
 ./backup.sh
-# → saves to ./backups/richsinkhole-YYYY-MM-DD.tar.gz
+# -> saves to ./backups/richsinkhole-YYYY-MM-DD.tar.gz
 
 # Restore
 ./restore.sh ./backups/richsinkhole-2026-03-09.tar.gz
@@ -471,6 +446,6 @@ Use `./backup.sh` to snapshot and `./restore.sh` to migrate to a new machine.
 
 **Company:** DownStreamTech — https://downstreamtech.net
 
-**Copyright:** © 2023–2026 DownStreamTech. All rights reserved.
+**Copyright:** (c) 2023-2026 DownStreamTech. All rights reserved.
 
 Licensed under the [Apache License 2.0](LICENSE).

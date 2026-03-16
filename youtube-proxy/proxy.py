@@ -142,6 +142,21 @@ def _strip_ads(content: bytes, content_type: str) -> bytes:
         return content
 
 
+async def start_yt_proxy(host: str = "0.0.0.0", port: int = 8000):
+    """Start the YouTube proxy programmatically on the given host:port.
+
+    Used by the unified sinkhole entrypoint. Runs uvicorn as an async task.
+    """
+    import uvicorn
+    config = uvicorn.Config(
+        app, host=host, port=port,
+        proxy_headers=True, forwarded_allow_ips="*",
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str):
     host = request.headers.get("host", "youtube.com")

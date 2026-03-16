@@ -44,7 +44,7 @@ async def health_check():
     checks: dict[str, str] = {}
 
     # DNS server reachable
-    checks["dns"] = "ok" if _tcp_ok("dns", 53) else "offline"
+    checks["dns"] = "ok" if _tcp_ok("localhost", 53) else "offline"
 
     # SQLite DBs readable
     for label, path in (("dns_db", SINKHOLE_DB), ("blocklist_db", BLOCKLIST_DB)):
@@ -66,7 +66,7 @@ async def health_check():
         checks["updater"] = f"error: {e}"
 
     # YouTube proxy
-    checks["yt_proxy"] = "ok" if _tcp_ok("youtube-proxy", 8000) else "offline"
+    checks["yt_proxy"] = "ok" if _tcp_ok("localhost", 8000) else "offline"
 
     # NTP server (non-blocking UDP probe)
     checks["ntp"] = "ok" if _ntp_ok() else "offline"

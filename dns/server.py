@@ -1521,7 +1521,12 @@ def setup_logging(level_str: str):
     )
 
 
-def main():
+def start_dns():
+    """Initialise config, spawn daemon threads, start UDP+TCP servers.
+
+    Returns immediately — all work runs in daemon threads.
+    Called by the unified sinkhole entrypoint or standalone mode.
+    """
     bootstrap_config()
     reload_config()
 
@@ -1587,12 +1592,13 @@ def main():
     log.info("Config: %s | Blocklist DB: %s | Query log DB: %s",
              CONFIG_PATH, BLOCKLIST_DB, SINKHOLE_DB)
 
+
+def main():
+    start_dns()
     try:
         threading.Event().wait()
     except KeyboardInterrupt:
-        log.info("Shutting down.")
-        udp_server.stop()
-        tcp_server.stop()
+        logging.getLogger("main").info("Shutting down.")
 
 
 if __name__ == "__main__":

@@ -1260,13 +1260,13 @@
                   <div class="p-3 rounded d-flex flex-column gap-2" style="background:#161b22;border:1px solid #30363d">
                     <div class="d-flex align-items-center justify-content-between">
                       <div>
-                        <span class="fw-semibold">DNS Server</span>
-                        <span class="info-i" title="The core DNS resolver that intercepts queries, applies blocklists, and enforces parental/security rules. Restarting causes a brief DNS blip (~2s) for your network.">i</span>
+                        <span class="fw-semibold">Sinkhole</span>
+                        <span class="info-i" title="The unified service running DNS resolver, dashboard, updater, and YouTube proxy. Restarting causes a brief DNS blip (~2s) for your network.">i</span>
                       </div>
-                      <span class="badge rounded-pill" id="svc-dns-badge" style="font-size:.65rem">--</span>
+                      <span class="badge rounded-pill" id="svc-sinkhole-badge" style="font-size:.65rem">--</span>
                     </div>
-                    <div class="text-muted small">Port 53 &middot; Blocklist enforcement</div>
-                    <button class="btn btn-outline-warning btn-sm mt-1 svc-restart-btn" data-service="dns">
+                    <div class="text-muted small">DNS + Dashboard + Updater + YT Proxy</div>
+                    <button class="btn btn-outline-warning btn-sm mt-1 svc-restart-btn" data-service="sinkhole">
                       <span class="spinner-border spinner-border-sm d-none me-1"></span>Restart
                     </button>
                   </div>
