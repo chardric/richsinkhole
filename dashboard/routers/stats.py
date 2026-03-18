@@ -15,7 +15,7 @@ router = APIRouter()
 
 _stats_cache: dict | None = None
 _stats_cache_ts: float = 0.0
-_STATS_TTL = 15.0  # seconds
+_STATS_TTL = 60.0  # seconds — longer cache for Pi 3B performance
 
 
 @router.get("/stats")
@@ -24,26 +24,30 @@ async def get_stats():
     if _stats_cache and time.monotonic() - _stats_cache_ts < _STATS_TTL:
         return _stats_cache
 
-    # Single aggregation pass over query_log — one table scan instead of five
+    # 24h window — uses idx_ql_action_ts and idx_ql_ts indexes instead of full scan
+    _24H = "datetime('now', '-24 hours')"
+
     async def _query_sinkhole():
         async with aiosqlite.connect(SINKHOLE_DB) as db:
-            row = (await db.execute_fetchall("""
+            row = (await db.execute_fetchall(f"""
                 SELECT
                     COUNT(*)                                                        AS total,
                     SUM(action = 'blocked')                                         AS blocked,
                     SUM(action IN ('captive','youtube','redirected'))                AS redirected,
                     SUM(action IN ('forwarded','allowed','cached'))                  AS forwarded,
                     COUNT(DISTINCT client_ip)                                        AS clients_seen
-                FROM query_log
+                FROM query_log WHERE ts >= {_24H}
             """))[0]
             top_blocked, top_clients = await asyncio.gather(
-                db.execute_fetchall("""
+                db.execute_fetchall(f"""
                     SELECT domain, COUNT(*) AS cnt FROM query_log
-                    WHERE action='blocked'
+                    WHERE action='blocked' AND ts >= {_24H}
                     GROUP BY domain ORDER BY cnt DESC LIMIT 10
                 """),
-                db.execute_fetchall("""
-                    SELECT client_ip, COUNT(*) AS cnt FROM query_log
+                db.execute_fetchall(f"""
+                    SELECT client_ip, COUNT(*) AS cnt
+                    FROM query_log INDEXED BY idx_ql_ts
+                    WHERE ts >= {_24H}
                     GROUP BY client_ip ORDER BY cnt DESC LIMIT 10
                 """),
             )
