@@ -438,14 +438,10 @@ Use `./backup.sh` to snapshot and `./restore.sh` to migrate to a new machine.
 - Rate limiting, burst detection, NXDOMAIN flood detection with per-device thresholds
 - 9 active security features: rebinding, DGA, tunneling, typosquat, NRD, ARP correlation, ghost detection, DNS leak, screen time enforcement
 
-## About
 
-**Developed by:** Engr. Richard R. Ayuyang, PhD — Professor II, CSU
+---
 
-**Web:** https://chadlinuxtech.net
-
-**Company:** DownStreamTech — https://downstreamtech.net
-
-**Copyright:** (c) 2023-2026 DownStreamTech. All rights reserved.
-
-Licensed under the [Apache License 2.0](LICENSE).
+Developed by: [Engr. Richard R. Ayuyang, PhD](https://chadlinuxtech.net)
+<br>Professor II, CSU
+<br>Copyright 2026 [DownStreamTech](https://downstreamtech.net). All rights reserved.
+<br>Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
