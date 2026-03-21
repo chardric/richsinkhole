@@ -573,6 +573,23 @@ def _set_update_schedule(key: _ScheduleKey) -> None:
     log.info("Schedule: prune daily at %s", prune_str)
 
 
+def _blocklist_stale(max_age_hours: int = 23) -> bool:
+    """Return True if blocklist hasn't been updated within max_age_hours."""
+    try:
+        with open(STATUS_PATH) as f:
+            status = json.load(f)
+        last = status.get("last_updated", "")
+        if not last or status.get("status") != "ok":
+            return True
+        from datetime import datetime as _dt
+        updated = _dt.strptime(last, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=timezone.utc)
+        age_h = (datetime.now(timezone.utc) - updated).total_seconds() / 3600
+        log.info("Blocklist age: %.1fh (stale threshold: %dh)", age_h, max_age_hours)
+        return age_h >= max_age_hours
+    except Exception:
+        return True
+
+
 def start_updater_sync() -> None:
     """Blocking loop that runs the updater forever.
 
@@ -581,9 +598,13 @@ def start_updater_sync() -> None:
     """
     log.info("RichSinkhole Updater starting up...")
 
-    # Run immediately on startup
-    run_update()
-    run_threat_intel()
+    # Only run on startup if blocklist is stale (>23h old)
+    # Avoids 2-3 min DB lock on every container restart
+    if _blocklist_stale():
+        run_update()
+        run_threat_intel()
+    else:
+        log.info("Blocklist is fresh — skipping startup update")
     prune_query_log()
 
     # Load initial schedule from config

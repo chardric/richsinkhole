@@ -8,6 +8,12 @@ youtube_domains:
   - youtu.be
   - yt.be
   - m.youtube.com
+  - facebook.com
+  - www.facebook.com
+  - m.facebook.com
+  - web.facebook.com
+  - fb.com
+  - www.fb.com
 captive_portal_enabled: false
 captive_portal_ip: ""
 rate_window: 10

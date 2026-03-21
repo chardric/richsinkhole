@@ -538,6 +538,45 @@ async function loadServiceStatus() {
   } catch (_) {}
 }
 
+async function loadWhitelist() {
+  const tbody = document.getElementById("whitelist-tbody");
+  const empty = document.getElementById("whitelist-empty");
+  const count = document.getElementById("whitelist-count");
+  try {
+    const data = await api("GET", "/api/whitelist");
+    count.textContent = data.length;
+    if (!data.length) {
+      tbody.innerHTML = "";
+      empty.style.display = "";
+      return;
+    }
+    empty.style.display = "none";
+    tbody.innerHTML = data.map(d => `<tr>
+      <td class="font-monospace">${escHtml(d.ip)}</td>
+      <td>${escHtml(d.device_type || "—")}</td>
+      <td>${escHtml(d.label || "—")}</td>
+      <td class="text-muted">${escHtml((d.whitelisted_at || "").slice(0, 16))}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-danger py-0 btn-wl-remove" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">Remove</button>
+      </td>
+    </tr>`).join("");
+    tbody.querySelectorAll(".btn-wl-remove").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const ip = btn.dataset.ip;
+        if (!confirm(`Remove ${ip} from MITM whitelist?\n\nThis device will no longer get YouTube/Facebook traffic through the proxy. DNS ad blocking will still work.`)) return;
+        try {
+          await api("DELETE", `/api/whitelist/${encodeURIComponent(ip)}`);
+          showToast(`${ip} removed from whitelist`, "success");
+          loadWhitelist();
+          loadDevices();
+        } catch (e) {
+          showToast("Remove failed: " + e.message, "danger");
+        }
+      });
+    });
+  } catch (_) {}
+}
+
 async function restartService(service, btn) {
   const spinner = btn.querySelector(".spinner-border");
   btn.disabled = true;
@@ -923,10 +962,14 @@ async function loadDevices() {
       const parentalBtn = d.parental_enabled
         ? `<button class="btn btn-sm btn-warning py-0 btn-parental" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">🛡️ On</button>`
         : `<button class="btn btn-sm btn-outline-secondary py-0 btn-parental" data-ip="${escHtml(d.ip)}" style="font-size:.7rem">🛡️ Off</button>`;
+      const certBadge = d.cert_installed
+        ? `<span class="badge bg-success" style="font-size:.6rem" title="CA cert installed — MITM proxy active for YT/FB">CERT</span>`
+        : `<span class="badge bg-secondary" style="font-size:.6rem" title="No CA cert — DNS ad blocking only">—</span>`;
       return `<tr>
         <td class="ps-3 font-monospace small">${escHtml(d.ip)}</td>
         <td class="small">${label}</td>
         <td>${deviceBadge(d.device_type)}</td>
+        <td>${certBadge}</td>
         <td>${profileSelect}</td>
         <td>${parentalBtn}</td>
         <td style="min-width:80px" data-sort="${d.confidence}">${confBar}</td>
@@ -2104,6 +2147,7 @@ function bindEvents() {
     loadRateLimits();
     loadUnboundSettings();
     loadServiceStatus();
+    loadWhitelist();
     loadUpdateSchedule();
   });
   document.getElementById("btn-save-update-schedule").addEventListener("click", async () => {

@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 UPSTREAM_MAP = {
+    # YouTube
     "youtube.com":               "https://www.youtube.com",
     "www.youtube.com":           "https://www.youtube.com",
     "m.youtube.com":             "https://m.youtube.com",
@@ -52,6 +53,13 @@ UPSTREAM_MAP = {
     "yt.be":                     "https://yt.be",
     "youtubei.googleapis.com":   "https://youtubei.googleapis.com",
     "suggestqueries.google.com": "https://suggestqueries.google.com",
+    # Facebook
+    "facebook.com":              "https://www.facebook.com",
+    "www.facebook.com":          "https://www.facebook.com",
+    "m.facebook.com":            "https://m.facebook.com",
+    "web.facebook.com":          "https://web.facebook.com",
+    "fb.com":                    "https://www.facebook.com",
+    "www.fb.com":                "https://www.facebook.com",
 }
 
 AD_FIELDS = [

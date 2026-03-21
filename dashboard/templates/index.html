@@ -786,11 +786,12 @@
                   <th class="ps-3" data-col="0">IP Address</th>
                   <th data-col="1">Label</th>
                   <th data-col="2">Device Type</th>
-                  <th data-col="3">Profile</th>
-                  <th data-col="4">Parental</th>
-                  <th data-col="5">Confidence</th>
-                  <th data-col="6">First Seen</th>
-                  <th data-col="7">Last Seen</th>
+                  <th data-col="3">Cert</th>
+                  <th data-col="4">Profile</th>
+                  <th data-col="5">Parental</th>
+                  <th data-col="6">Confidence</th>
+                  <th data-col="7">First Seen</th>
+                  <th data-col="8">Last Seen</th>
                   <th class="pe-3"></th>
                 </tr>
               </thead>
@@ -1313,7 +1314,37 @@
           </div>
         </div>
 
-        <!-- Row 5: Blocklist Update Schedule -->
+        <!-- Row 5: MITM Whitelist (cert-installed devices) -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#whitelist-collapse">
+              MITM WHITELIST
+              <span class="badge bg-info" id="whitelist-count" style="font-size:.65rem">0</span>
+            </div>
+            <div class="collapse" id="whitelist-collapse">
+            <div class="card-body">
+              <p class="text-muted small mb-3">Devices that have installed the CA certificate. These devices get YouTube/Facebook traffic routed through the MITM proxy for ad stripping. Other devices use DNS-level ad blocking only.</p>
+              <div class="table-responsive">
+                <table class="table table-sm table-dark mb-0" style="font-size:.8rem">
+                  <thead>
+                    <tr class="text-muted">
+                      <th>IP Address</th>
+                      <th>Device</th>
+                      <th>Label</th>
+                      <th>Whitelisted</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="whitelist-tbody"></tbody>
+                </table>
+              </div>
+              <div id="whitelist-empty" class="text-center text-muted py-3 small" style="display:none">No devices whitelisted. Devices are added when they install the CA certificate from the captive portal.</div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 6: Blocklist Update Schedule -->
         <div class="col-12">
           <div class="card">
             <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#update-schedule-collapse">

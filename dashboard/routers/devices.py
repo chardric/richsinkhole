@@ -32,11 +32,13 @@ async def list_devices():
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await db.execute(_ENSURE_TABLE)
         rows = await db.execute_fetchall(
-            """SELECT ip, device_type, confidence, first_seen, last_seen, label,
-                      COALESCE(profile, 'normal'),
-                      COALESCE(parental_enabled, 0)
-               FROM device_fingerprints
-               ORDER BY last_seen DESC"""
+            """SELECT d.ip, d.device_type, d.confidence, d.first_seen, d.last_seen,
+                      d.label, COALESCE(d.profile, 'normal'),
+                      COALESCE(d.parental_enabled, 0),
+                      CASE WHEN w.ip IS NOT NULL THEN 1 ELSE 0 END
+               FROM device_fingerprints d
+               LEFT JOIN captive_whitelist w ON d.ip = w.ip
+               ORDER BY d.last_seen DESC"""
         )
     return [
         {
@@ -48,9 +50,37 @@ async def list_devices():
             "label":           r[5] or "",
             "profile":         r[6],
             "parental_enabled": bool(r[7]),
+            "cert_installed":  bool(r[8]),
         }
         for r in rows
     ]
+
+
+@router.get("/whitelist")
+async def list_whitelist():
+    """Devices that have installed the CA cert (captive portal whitelist)."""
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        rows = await db.execute_fetchall(
+            """SELECT w.ip, w.ts, d.label, d.device_type
+               FROM captive_whitelist w
+               LEFT JOIN device_fingerprints d ON w.ip = d.ip
+               ORDER BY w.ts DESC"""
+        )
+    return [
+        {"ip": r[0], "whitelisted_at": r[1], "label": r[2] or "", "device_type": r[3] or ""}
+        for r in rows
+    ]
+
+
+@router.delete("/whitelist/{ip}")
+async def remove_from_whitelist(ip: str):
+    """Remove a device from the captive whitelist (revoke cert trust)."""
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        cur = await db.execute("DELETE FROM captive_whitelist WHERE ip=?", (ip,))
+        await db.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "IP not in whitelist")
+    return {"ip": ip, "removed": True}
 
 
 class LabelIn(BaseModel):
