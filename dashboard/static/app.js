@@ -391,51 +391,69 @@ function prependLogRow(entry) {
 // ============================================================
 // Blocklist
 // ============================================================
-// Quick-block presets
+// Blocked Services (AdGuard-style)
 // ============================================================
-async function loadPresetStatus() {
-  const toggles = document.querySelectorAll(".preset-toggle");
-  const domains = [...toggles].map(t => t.dataset.domain);
-  try {
-    const status = await api("POST", "/api/blocklist/check", { domains });
-    toggles.forEach(t => { t.checked = !!status[t.dataset.domain]; });
-    updatePresetCounts();
-  } catch (_) {}
-}
+let _bsData = null;  // cached services data
 
-function updatePresetCounts() {
-  const groups = { ads: "qb-ads", tracking: "qb-tracking", telemetry: "qb-telemetry", social: "qb-social", malware: "qb-malware", gambling: "qb-gambling" };
-  Object.entries(groups).forEach(([, collapseId]) => {
-    const section = document.getElementById(collapseId);
-    if (!section) return;
-    const toggles = section.querySelectorAll(".preset-toggle");
-    const blocked = [...toggles].filter(t => t.checked).length;
-    const countEl = document.getElementById(collapseId + "-count");
-    if (countEl) {
-      countEl.textContent = `${blocked}/${toggles.length} blocked`;
-      countEl.className = "badge ms-auto me-2 qb-count " + (blocked > 0 ? "bg-danger" : "bg-secondary");
-    }
-  });
-}
-
-async function togglePreset(toggle) {
-  const domain = toggle.dataset.domain;
-  const enabling = toggle.checked;
-  toggle.disabled = true;
+async function loadBlockedServices() {
+  const container = document.getElementById("blocked-services-container");
+  const summary = document.getElementById("bs-summary");
   try {
-    if (enabling) {
-      await api("POST", "/api/blocklist", { domain });
-      showToast(`Blocked: ${domain}`, "success");
-    } else {
-      await api("DELETE", `/api/blocklist/${domain}`);
-      showToast(`Unblocked: ${domain}`, "info");
+    const data = await api("GET", "/api/blocked-services");
+    _bsData = data;
+    const enabledCount = data.services.filter(s => s.enabled).length;
+    summary.textContent = `${enabledCount} of ${data.services.length} services blocked`;
+
+    let html = "";
+    for (const group of data.groups) {
+      const groupServices = data.services.filter(s => s.group === group.id);
+      if (!groupServices.length) continue;
+      const groupBlocked = groupServices.filter(s => s.enabled).length;
+      const badgeClass = groupBlocked > 0 ? "bg-danger" : "bg-secondary";
+      const badgeText = groupBlocked > 0 ? `${groupBlocked} blocked` : "none";
+      html += `
+        <div class="border-bottom border-secondary">
+          <div class="d-flex align-items-center justify-content-between px-3 py-2" style="background:#0d1117">
+            <span class="fw-semibold small">${escHtml(group.name)}</span>
+            <span class="badge ${badgeClass}" style="font-size:.6rem">${badgeText}</span>
+          </div>
+          <div class="d-flex flex-wrap gap-2 px-3 py-2">
+            ${groupServices.map(s => {
+              const checked = s.enabled ? "checked" : "";
+              return `<div class="d-inline-flex align-items-center gap-1 px-2 py-1 rounded" style="background:#161b22;border:1px solid #30363d;min-width:130px">
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input svc-toggle" type="checkbox" data-sid="${escHtml(s.id)}" ${checked} style="cursor:pointer;width:2.2em;height:1.1em">
+                </div>
+                <span class="small" style="cursor:default">${escHtml(s.name)}</span>
+                <span class="text-muted" style="font-size:.55rem">${s.domain_count}</span>
+              </div>`;
+            }).join("")}
+          </div>
+        </div>`;
     }
-    updatePresetCounts();
-  } catch (err) {
-    toggle.checked = !enabling; // revert
-    showToast(err.message, "danger");
-  } finally {
-    toggle.disabled = false;
+    container.innerHTML = html;
+
+    // Wire up toggles — each toggle saves immediately
+    container.querySelectorAll(".svc-toggle").forEach(toggle => {
+      toggle.addEventListener("change", async () => {
+        // Collect all currently checked IDs
+        const ids = [...container.querySelectorAll(".svc-toggle:checked")].map(t => t.dataset.sid);
+        toggle.disabled = true;
+        try {
+          await api("PUT", "/api/blocked-services", { ids });
+          const name = toggle.dataset.sid;
+          showToast(toggle.checked ? `${name} blocked` : `${name} unblocked`, toggle.checked ? "success" : "info");
+          loadBlockedServices();  // refresh counts
+        } catch (e) {
+          toggle.checked = !toggle.checked;  // revert
+          showToast("Failed: " + e.message, "danger");
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    });
+  } catch (e) {
+    container.innerHTML = `<div class="text-center text-danger py-3 small">Failed to load services</div>`;
   }
 }
 
@@ -2042,16 +2060,13 @@ function bindEvents() {
     document.getElementById("log-count").textContent = "0 entries";
   });
 
-  // Preset domain toggles
-  document.querySelectorAll(".preset-toggle").forEach(toggle => {
-    toggle.addEventListener("change", () => togglePreset(toggle));
-  });
+  // Blocked services are loaded dynamically — no static event wiring needed
 
   // Tab switch: load updater info + preset status + YT auto-blocked when Blocklist tab is shown
   document.getElementById("tab-bl-btn").addEventListener("shown.bs.tab", () => {
     loadUpdaterStatus();
     loadSources();
-    loadPresetStatus();
+    loadBlockedServices();
     loadAllowlist();
   });
 

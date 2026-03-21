@@ -100,6 +100,57 @@ def _cache_put(domain: str, qtype: int, reply, upstream: str) -> None:
             _dns_cache.popitem(last=False)   # evict oldest
 
 
+# ---------------------------------------------------------------------------
+# Blocked services — cached domain set, reloaded every 30s
+# ---------------------------------------------------------------------------
+_blocked_svc_domains: set = set()
+_blocked_svc_lock = threading.Lock()
+_blocked_svc_last: float = 0.0
+_BLOCKED_SVC_RELOAD = 30  # seconds
+
+
+def _load_blocked_services() -> None:
+    """Reload blocked service domains from the DB."""
+    global _blocked_svc_domains, _blocked_svc_last
+    try:
+        with sqlite3.connect(SINKHOLE_DB, timeout=3) as conn:
+            # Import the service definitions
+            import sys
+            if "/app/dashboard" not in sys.path:
+                sys.path.insert(0, "/app/dashboard")
+            from services_data import SERVICES_BY_ID
+            rows = conn.execute("SELECT service_id FROM blocked_services").fetchall()
+            domains = set()
+            for (sid,) in rows:
+                svc = SERVICES_BY_ID.get(sid)
+                if svc:
+                    for d in svc["domains"]:
+                        domains.add(d.lower())
+        with _blocked_svc_lock:
+            _blocked_svc_domains = domains
+            _blocked_svc_last = time.monotonic()
+    except Exception:
+        pass  # keep previous set on failure
+
+
+def _is_service_blocked(domain: str) -> bool:
+    """Check if domain (or any parent) belongs to a blocked service."""
+    now = time.monotonic()
+    if now - _blocked_svc_last > _BLOCKED_SVC_RELOAD:
+        _load_blocked_services()
+    with _blocked_svc_lock:
+        domains = _blocked_svc_domains
+    # Check exact match and parent domains (e.g. cdn.facebook.com matches facebook.com)
+    if domain in domains:
+        return True
+    parts = domain.split(".")
+    for i in range(1, len(parts)):
+        parent = ".".join(parts[i:])
+        if parent in domains:
+            return True
+    return False
+
+
 def _is_cert_installed(client_ip: str) -> bool:
     """Return True if this client IP has installed the CA cert (captive portal whitelist)."""
     try:
@@ -1348,7 +1399,13 @@ class SinkholeResolver(BaseResolver):
                     log_query(client_ip, domain, qtype_str, action_str)
                     return self._redirect_response(request, host_ip)
 
-        # 3. Blocklist check (allowlist takes precedence inside is_blocked; skipped for passthrough)
+        # 3. Blocked services check (skipped for passthrough)
+        if not passthrough and _is_service_blocked(domain):
+            self.logger.info("SERVICE  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
+            log_query(client_ip, domain, qtype_str, "blocked")
+            return self._redirect_response(request, "0.0.0.0")
+
+        # 4. Blocklist check (allowlist takes precedence inside is_blocked; skipped for passthrough)
         if not passthrough and blocker.is_blocked(domain):
             self.logger.info("BLOCKED  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")

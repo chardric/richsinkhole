@@ -69,7 +69,7 @@
     .progress { height: 6px; }
     .accordion-button::after { filter: invert(1) opacity(0.5); }
     .accordion-button:not(.collapsed) { box-shadow: none; }
-    .preset-toggle { cursor: pointer; width: 2.5em; height: 1.25em; }
+    .svc-toggle { cursor: pointer; width: 2.5em; height: 1.25em; }
     .qb-count { font-size: 0.7rem; min-width: 3.5rem; text-align: center; }
     .sse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3fb950; margin-right: 5px; }
     .sse-dot.disconnected { background: #da3633; }
@@ -364,187 +364,16 @@
         </div>
       </div>
 
-      <!-- Quick block presets -->
+      <!-- Blocked Services (AdGuard-style) -->
       <div class="card">
-        <div class="card-header text-muted small fw-semibold">QUICK BLOCK</div>
-        <div class="accordion accordion-flush" id="qb-accordion">
-
-          <!-- Ads -->
-          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
-            <h2 class="accordion-header">
-              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#qb-ads">
-                <span class="fw-semibold me-2">Ads &amp; Ad Networks</span>
-                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-ads-count">—</span>
-              </button>
-            </h2>
-            <div id="qb-ads" class="accordion-collapse collapse">
-              <div class="p-0">
-                <table class="table table-sm table-dark table-hover mb-0">
-                  <tbody>
-                    <tr><td class="font-monospace small ps-3">doubleclick.net</td><td class="text-muted small">Google DoubleClick ad delivery</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="doubleclick.net"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">googlesyndication.com</td><td class="text-muted small">Google AdSense display ads</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="googlesyndication.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">adservice.google.com</td><td class="text-muted small">Google ad serving service</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="adservice.google.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">amazon-adsystem.com</td><td class="text-muted small">Amazon advertising network</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="amazon-adsystem.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">taboola.com</td><td class="text-muted small">Sponsored content recommendations</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="taboola.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">outbrain.com</td><td class="text-muted small">Sponsored content recommendations</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="outbrain.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">criteo.com</td><td class="text-muted small">Retargeting ad network</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="criteo.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">adsrvr.org</td><td class="text-muted small">The Trade Desk programmatic ads</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="adsrvr.org"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">rubiconproject.com</td><td class="text-muted small">Magnite/Rubicon ad exchange</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="rubiconproject.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">pubmatic.com</td><td class="text-muted small">PubMatic ad exchange</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="pubmatic.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">openx.net</td><td class="text-muted small">OpenX ad exchange</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="openx.net"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">moatads.com</td><td class="text-muted small">Oracle Moat ad analytics</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="moatads.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">media.net</td><td class="text-muted small">Yahoo/Bing contextual ads</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="media.net"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">revcontent.com</td><td class="text-muted small">Native ad network</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="revcontent.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">smartadserver.com</td><td class="text-muted small">Smart AdServer platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="smartadserver.com"></div></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tracking -->
-          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
-            <h2 class="accordion-header">
-              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#qb-tracking">
-                <span class="fw-semibold me-2">Tracking &amp; Analytics</span>
-                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-tracking-count">—</span>
-              </button>
-            </h2>
-            <div id="qb-tracking" class="accordion-collapse collapse">
-              <div class="p-0">
-                <table class="table table-sm table-dark table-hover mb-0">
-                  <tbody>
-                    <tr><td class="font-monospace small ps-3">google-analytics.com</td><td class="text-muted small">Google web analytics</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="google-analytics.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">googletagmanager.com</td><td class="text-muted small">Google Tag Manager scripts</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="googletagmanager.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">hotjar.com</td><td class="text-muted small">Session recording &amp; heatmaps</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="hotjar.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">clarity.ms</td><td class="text-muted small">Microsoft Clarity session recording</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="clarity.ms"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">mixpanel.com</td><td class="text-muted small">Product analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="mixpanel.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">segment.io</td><td class="text-muted small">Customer data platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="segment.io"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">amplitude.com</td><td class="text-muted small">Product analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="amplitude.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">fullstory.com</td><td class="text-muted small">Session replay &amp; tracking</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="fullstory.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">mouseflow.com</td><td class="text-muted small">Session replay &amp; heatmaps</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="mouseflow.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">newrelic.com</td><td class="text-muted small">Browser performance monitoring</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="newrelic.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">heap.io</td><td class="text-muted small">Behavioral analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="heap.io"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">scorecardresearch.com</td><td class="text-muted small">Nielsen audience measurement</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="scorecardresearch.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">quantserve.com</td><td class="text-muted small">Quantcast audience tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="quantserve.com"></div></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Telemetry -->
-          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
-            <h2 class="accordion-header">
-              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#qb-telemetry">
-                <span class="fw-semibold me-2">Telemetry</span>
-                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-telemetry-count">—</span>
-              </button>
-            </h2>
-            <div id="qb-telemetry" class="accordion-collapse collapse">
-              <div class="p-0">
-                <table class="table table-sm table-dark table-hover mb-0">
-                  <tbody>
-                    <tr><td class="font-monospace small ps-3">telemetry.mozilla.org</td><td class="text-muted small">Firefox telemetry reporting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="telemetry.mozilla.org"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">incoming.telemetry.mozilla.org</td><td class="text-muted small">Firefox telemetry ingestion</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="incoming.telemetry.mozilla.org"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">telemetry.microsoft.com</td><td class="text-muted small">Windows telemetry reporting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="telemetry.microsoft.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">vortex.data.microsoft.com</td><td class="text-muted small">Windows Vortex telemetry</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="vortex.data.microsoft.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">data.microsoft.com</td><td class="text-muted small">Microsoft data collection</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="data.microsoft.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">settings-win.data.microsoft.com</td><td class="text-muted small">Windows settings telemetry</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="settings-win.data.microsoft.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">watson.telemetry.microsoft.com</td><td class="text-muted small">Windows Error Reporting (Watson)</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="watson.telemetry.microsoft.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">telemetry.apple.com</td><td class="text-muted small">Apple device telemetry</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="telemetry.apple.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">metrics.icloud.com</td><td class="text-muted small">Apple iCloud metrics</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="metrics.icloud.com"></div></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Social Trackers -->
-          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
-            <h2 class="accordion-header">
-              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#qb-malware">
-                <span class="fw-semibold me-2">Malware &amp; Phishing</span>
-                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-malware-count">—</span>
-              </button>
-            </h2>
-            <div id="qb-malware" class="accordion-collapse collapse">
-              <div class="p-0">
-                <table class="table table-sm table-dark table-hover mb-0">
-                  <tbody>
-                    <tr><td class="font-monospace small ps-3">malware.testcategory.com</td><td class="text-muted small">Malware delivery test domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="malware.testcategory.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">phishing.testcategory.com</td><td class="text-muted small">Phishing test domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="phishing.testcategory.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">ransomware.testcategory.com</td><td class="text-muted small">Ransomware C2 test domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="ransomware.testcategory.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">cxlvnkqjv.com</td><td class="text-muted small">Known malware C2 domain (URLhaus)</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="cxlvnkqjv.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">driveway-gate-expert.com</td><td class="text-muted small">Known phishing/scam domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="driveway-gate-expert.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">secure-verification-required.com</td><td class="text-muted small">Phishing credential harvester</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="secure-verification-required.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">account-update-secure.net</td><td class="text-muted small">Bank/account phishing domain</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="account-update-secure.net"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">emotet-group.com</td><td class="text-muted small">Emotet botnet C2 infrastructure</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="emotet-group.com"></div></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="accordion-item bg-transparent border-0 border-bottom border-secondary">
-            <h2 class="accordion-header">
-              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#qb-gambling">
-                <span class="fw-semibold me-2">Gambling</span>
-                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-gambling-count">—</span>
-              </button>
-            </h2>
-            <div id="qb-gambling" class="accordion-collapse collapse">
-              <div class="p-0">
-                <table class="table table-sm table-dark table-hover mb-0">
-                  <tbody>
-                    <tr><td class="font-monospace small ps-3">bet365.com</td><td class="text-muted small">Sports betting platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="bet365.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">pokerstars.com</td><td class="text-muted small">Online poker platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="pokerstars.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">draftkings.com</td><td class="text-muted small">Daily fantasy sports &amp; betting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="draftkings.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">fanduel.com</td><td class="text-muted small">Sports betting &amp; fantasy</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="fanduel.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">betway.com</td><td class="text-muted small">Online casino &amp; sports betting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="betway.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">888casino.com</td><td class="text-muted small">Online casino platform</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="888casino.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">unibet.com</td><td class="text-muted small">Sports betting &amp; casino</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="unibet.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">pinnacle.com</td><td class="text-muted small">Online sports betting</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="pinnacle.com"></div></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="accordion-item bg-transparent border-0">
-            <h2 class="accordion-header">
-              <button class="accordion-button collapsed bg-transparent text-white py-3" type="button"
-                data-bs-toggle="collapse" data-bs-target="#qb-social">
-                <span class="fw-semibold me-2">Social Trackers</span>
-                <span class="badge bg-secondary ms-auto me-2 qb-count" id="qb-social-count">—</span>
-              </button>
-            </h2>
-            <div id="qb-social" class="accordion-collapse collapse">
-              <div class="p-0">
-                <table class="table table-sm table-dark table-hover mb-0">
-                  <tbody>
-                    <tr><td class="font-monospace small ps-3">connect.facebook.net</td><td class="text-muted small">Facebook social plugins &amp; share buttons</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="connect.facebook.net"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">graph.facebook.com</td><td class="text-muted small">Facebook Graph API tracking</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="graph.facebook.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">static.ads-twitter.com</td><td class="text-muted small">Twitter/X ad scripts</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="static.ads-twitter.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">ads.twitter.com</td><td class="text-muted small">Twitter/X advertising</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="ads.twitter.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">platform.linkedin.com</td><td class="text-muted small">LinkedIn social tracking pixel</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="platform.linkedin.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">snap.licdn.com</td><td class="text-muted small">LinkedIn Insight Tag</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="snap.licdn.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">ads.tiktok.com</td><td class="text-muted small">TikTok advertising</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="ads.tiktok.com"></div></td></tr>
-                    <tr><td class="font-monospace small ps-3">analytics.tiktok.com</td><td class="text-muted small">TikTok analytics tracker</td><td class="text-end pe-3"><div class="form-check form-switch mb-0 d-flex justify-content-end"><input class="form-check-input preset-toggle" type="checkbox" data-domain="analytics.tiktok.com"></div></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="text-muted small fw-semibold">BLOCKED SERVICES</span>
+          <span class="text-muted small" id="bs-summary">—</span>
+        </div>
+        <div class="card-body p-0" id="blocked-services-container">
+          <div class="text-center text-muted py-4 small">Loading services...</div>
         </div>
       </div>
-
       <!-- Custom Allowlist -->
       <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
