@@ -718,6 +718,12 @@ async function loadUpdateSchedule() {
 // ============================================================
 // Email notifications settings
 // ============================================================
+function _toggleDigestFields() {
+  const freq = document.getElementById("digest-frequency").value;
+  document.getElementById("digest-dow-wrap").classList.toggle("d-none", freq !== "weekly");
+  document.getElementById("digest-dom-wrap").classList.toggle("d-none", freq === "weekly");
+}
+
 async function loadEmailSettings() {
   try {
     const cfg = await api("GET", "/api/settings/email");
@@ -731,8 +737,12 @@ async function loadEmailSettings() {
     document.getElementById("email-to").value                = cfg.to_addr;
     document.getElementById("email-notify-security").checked = cfg.notify_security;
     document.getElementById("email-notify-update").checked   = cfg.notify_update;
-    document.getElementById("email-notify-daily").checked    = cfg.notify_daily;
-    document.getElementById("email-daily-hour").value        = cfg.daily_hour;
+    document.getElementById("email-notify-digest").checked   = cfg.notify_digest;
+    document.getElementById("digest-frequency").value        = cfg.digest_frequency || "weekly";
+    document.getElementById("digest-hour").value             = cfg.digest_hour ?? 8;
+    document.getElementById("digest-day-of-week").value      = cfg.digest_day_of_week ?? 0;
+    document.getElementById("digest-day-of-month").value     = cfg.digest_day_of_month ?? 1;
+    _toggleDigestFields();
   } catch (e) {
     showToast("Failed to load email settings: " + e.message, "danger");
   }
@@ -753,10 +763,13 @@ async function saveEmailSettings() {
       smtp_password:    document.getElementById("email-password").value,
       from_addr:        document.getElementById("email-from").value.trim(),
       to_addr:          document.getElementById("email-to").value.trim(),
-      notify_security:  document.getElementById("email-notify-security").checked,
-      notify_update:    document.getElementById("email-notify-update").checked,
-      notify_daily:     document.getElementById("email-notify-daily").checked,
-      daily_hour:       parseInt(document.getElementById("email-daily-hour").value, 10),
+      notify_security:    document.getElementById("email-notify-security").checked,
+      notify_update:      document.getElementById("email-notify-update").checked,
+      notify_digest:      document.getElementById("email-notify-digest").checked,
+      digest_frequency:   document.getElementById("digest-frequency").value,
+      digest_hour:        parseInt(document.getElementById("digest-hour").value, 10),
+      digest_day_of_week: parseInt(document.getElementById("digest-day-of-week").value, 10),
+      digest_day_of_month:parseInt(document.getElementById("digest-day-of-month").value, 10),
     });
     showToast("Email settings saved", "success");
     status.textContent = "Saved ✓";
@@ -2219,6 +2232,7 @@ function bindEvents() {
     e.preventDefault();
     await saveEmailSettings();
   });
+  document.getElementById("digest-frequency").addEventListener("change", _toggleDigestFields);
 
   // Clear saved SMTP password
   document.getElementById("btn-clear-email-password").addEventListener("click", async () => {

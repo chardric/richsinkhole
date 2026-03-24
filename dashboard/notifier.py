@@ -17,7 +17,7 @@ import smtplib
 import sqlite3
 import ssl
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -31,10 +31,12 @@ log = logging.getLogger("notifier")
 
 # ── Runtime state ─────────────────────────────────────────────────────────────
 _last_block_check_ts: str   = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-_last_digest_date:    str   = ""
+_last_digest_sent:    str   = ""   # ISO date of last sent digest
 _last_update_ts:      str   = ""
 _last_alert_sent:     float = 0.0   # monotonic; rate-limits security alert emails
 _ALERT_COOLDOWN             = 3600  # seconds — at most 1 security alert email per hour
+
+_FREQ_DAYS = {"weekly": 7, "monthly": 30, "yearly": 365}
 
 
 # ── Config helpers ────────────────────────────────────────────────────────────
@@ -173,9 +175,11 @@ def _security_alert_plain(blocks: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _daily_digest_html(stats: dict) -> str:
+def _digest_html(stats: dict, freq: str, days: int) -> str:
     today     = date.today().strftime("%Y-%m-%d")
     pct       = f"{stats['block_pct']:.1f}%"
+    label     = freq.capitalize()
+    period    = f"Last {days} days" if days > 1 else "Last 24 hours"
     top_rows  = ""
     max_cnt   = stats["top_blocked"][0][1] if stats["top_blocked"] else 1
     for domain, cnt in stats["top_blocked"]:
@@ -192,8 +196,8 @@ def _daily_digest_html(stats: dict) -> str:
         </tr>"""
 
     content = f"""
-    <div style="font-size:18px;font-weight:700;color:#0d1117;margin-bottom:4px">Daily Digest</div>
-    <div style="font-size:13px;color:#57606a;margin-bottom:24px">{today} &bull; Last 24 hours</div>
+    <div style="font-size:18px;font-weight:700;color:#0d1117;margin-bottom:4px">{label} Digest</div>
+    <div style="font-size:13px;color:#57606a;margin-bottom:24px">{today} &bull; {period}</div>
 
     <!-- Stat cards -->
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:8px 0;margin-bottom:24px">
@@ -231,23 +235,26 @@ def _daily_digest_html(stats: dict) -> str:
           <th style="padding:10px 12px;text-align:right;font-size:12px;color:#57606a;font-weight:600;border-bottom:1px solid #d0d7de">Blocks</th>
         </tr>
       </thead>
-      <tbody>{top_rows if top_rows else '<tr><td colspan="3" style="padding:16px;text-align:center;color:#57606a;font-size:13px">No blocked domains in the last 24 hours.</td></tr>'}</tbody>
+      <tbody>{top_rows if top_rows else f'<tr><td colspan="3" style="padding:16px;text-align:center;color:#57606a;font-size:13px">No blocked domains in the {period.lower()}.</td></tr>'}</tbody>
     </table>"""
 
-    return _html_wrap("Daily Digest", content)
+    return _html_wrap(f"{label} Digest", content)
 
 
-def _daily_digest_plain(stats: dict) -> str:
-    today = date.today().strftime("%Y-%m-%d")
+def _digest_plain(stats: dict, freq: str, days: int) -> str:
+    today  = date.today().strftime("%Y-%m-%d")
+    label  = freq.capitalize()
+    period = f"last {days} days" if days > 1 else "last 24 hours"
     lines = [
-        f"Daily Digest — {today}", "=" * 40, "",
+        f"{label} Digest — {today}", "=" * 40, "",
+        f"  Period            : {period}",
         f"  Total queries     : {stats['total']:,}",
         f"  Blocked           : {stats['blocked']:,}  ({stats['block_pct']:.1f}%)",
         f"  Forwarded         : {stats['forwarded']:,}",
         f"  NXDOMAIN          : {stats['nxdomain']:,}",
         f"  Rate limited      : {stats['ratelimited']:,}",
         f"  Clients seen      : {stats['clients']:,}",
-        f"  Auto-blocks today : {stats['auto_blocks']:,}",
+        f"  Auto-blocks       : {stats['auto_blocks']:,}",
         "", "TOP BLOCKED DOMAINS", "-" * 40,
     ]
     for domain, cnt in stats["top_blocked"]:
@@ -323,7 +330,7 @@ def _test_html() -> str:
       </tr>
       <tr style="background:#f6f8fa">
         <td style="padding:14px 16px;font-size:13px;color:#24292f;border-top:1px solid #d0d7de">
-          <strong>Daily Digest</strong> — Sent once a day with a 24-hour summary
+          <strong>Periodic Digest</strong> — Weekly, monthly, or yearly summary
         </td>
       </tr>
     </table>"""
@@ -408,13 +415,13 @@ def _new_blocks(since_ts: str) -> list[dict]:
         return []
 
 
-def _daily_stats() -> dict:
+def _digest_stats(days: int = 7) -> dict:
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
             def q(sql, *p):
                 return conn.execute(sql, p).fetchone()
 
-            window     = "datetime('now', '-24 hours')"
+            window     = f"datetime('now', '-{days} days')"
             total      = q(f"SELECT COUNT(*) FROM query_log WHERE ts >= {window}")[0]
             blocked    = q(f"SELECT COUNT(*) FROM query_log WHERE action='blocked' AND ts >= {window}")[0]
             forwarded  = q(f"SELECT COUNT(*) FROM query_log WHERE action='forwarded' AND ts >= {window}")[0]
@@ -437,7 +444,7 @@ def _daily_stats() -> dict:
             "block_pct": pct, "top_blocked": top,
         }
     except Exception as exc:
-        log.error("daily_stats error: %s", exc)
+        log.error("digest_stats error: %s", exc)
         return {}
 
 
@@ -452,8 +459,20 @@ def _read_update_status() -> dict:
 
 # ── Background loop ───────────────────────────────────────────────────────────
 
+def _is_digest_day(freq: str, day_of_week: int, day_of_month: int) -> bool:
+    """Check if today is the right day to send the digest based on frequency."""
+    now = datetime.now()
+    if freq == "weekly":
+        return now.weekday() == day_of_week
+    elif freq == "monthly":
+        return now.day == day_of_month
+    elif freq == "yearly":
+        return now.month == 1 and now.day == day_of_month
+    return False
+
+
 async def run_notifier() -> None:
-    global _last_block_check_ts, _last_digest_date, _last_update_ts
+    global _last_block_check_ts, _last_digest_sent, _last_update_ts
 
     st = _read_update_status()
     _last_update_ts = st.get("last_updated", "")
@@ -498,17 +517,26 @@ async def run_notifier() -> None:
             except Exception as exc:
                 log.error("Update notification failed: %s", exc)
 
-        # ── Daily digest ───────────────────────────────────────────────────
-        if ec.get("notify_daily", True):
+        # ── Periodic digest (weekly / monthly / yearly) ────────────────────
+        if ec.get("notify_digest", False):
             try:
                 now        = datetime.now()
                 today_str  = now.strftime("%Y-%m-%d")
-                digest_hour = int(ec.get("daily_hour", 8))
-                if today_str != _last_digest_date and now.hour >= digest_hour:
-                    _last_digest_date = today_str
-                    stats = _daily_stats()
+                digest_hour = int(ec.get("digest_hour", ec.get("daily_hour", 8)))
+                freq        = ec.get("digest_frequency", "weekly")
+                dow         = int(ec.get("digest_day_of_week", 0))
+                dom         = int(ec.get("digest_day_of_month", 1))
+                days        = _FREQ_DAYS.get(freq, 7)
+
+                if (today_str != _last_digest_sent
+                        and now.hour >= digest_hour
+                        and _is_digest_day(freq, dow, dom)):
+                    _last_digest_sent = today_str
+                    stats = _digest_stats(days)
                     if stats:
-                        await send_async("Daily Digest", _daily_digest_plain(stats), _daily_digest_html(stats))
-                        log.info("Daily digest sent")
+                        label   = freq.capitalize()
+                        subject = f"{label} Digest"
+                        await send_async(subject, _digest_plain(stats, freq, days), _digest_html(stats, freq, days))
+                        log.info("%s digest sent (last %d days)", label, days)
             except Exception as exc:
-                log.error("Daily digest failed: %s", exc)
+                log.error("Digest failed: %s", exc)

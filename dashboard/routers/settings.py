@@ -70,8 +70,11 @@ class EmailSettingsIn(BaseModel):
     tls: bool = True
     notify_security: bool = True
     notify_update: bool = True
-    notify_daily: bool = True
-    daily_hour: int = 8
+    notify_digest: bool = False
+    digest_frequency: str = "weekly"      # weekly | monthly | yearly
+    digest_hour: int = 8                  # 0-23
+    digest_day_of_week: int = 0           # 0=Mon … 6=Sun (for weekly)
+    digest_day_of_month: int = 1          # 1-28 (for monthly/yearly)
 
 
 @router.get("/settings/email")
@@ -89,8 +92,11 @@ async def get_email_settings():
         "tls":              ec.get("tls", True),
         "notify_security":  ec.get("notify_security", True),
         "notify_update":    ec.get("notify_update", True),
-        "notify_daily":     ec.get("notify_daily", True),
-        "daily_hour":       ec.get("daily_hour", 8),
+        "notify_digest":      ec.get("notify_digest", False),
+        "digest_frequency":   ec.get("digest_frequency", "weekly"),
+        "digest_hour":        ec.get("digest_hour", ec.get("daily_hour", 8)),
+        "digest_day_of_week": ec.get("digest_day_of_week", 0),
+        "digest_day_of_month":ec.get("digest_day_of_month", 1),
     }
 
 
@@ -104,19 +110,26 @@ async def save_email_settings(body: EmailSettingsIn):
     if password == "••••••••" or password == "":
         password = ec.get("smtp_password", "")
 
+    freq = body.digest_frequency
+    if freq not in ("weekly", "monthly", "yearly"):
+        raise HTTPException(status_code=400, detail="digest_frequency must be weekly, monthly, or yearly")
+
     cfg["email_notifications"] = {
-        "enabled":         body.enabled,
-        "smtp_host":       body.smtp_host.strip(),
-        "smtp_port":       body.smtp_port,
-        "smtp_user":       body.smtp_user.strip(),
-        "smtp_password":   password,
-        "from_addr":       body.from_addr.strip() or body.smtp_user.strip(),
-        "to_addr":         body.to_addr.strip(),
-        "tls":             body.tls,
-        "notify_security": body.notify_security,
-        "notify_update":   body.notify_update,
-        "notify_daily":    body.notify_daily,
-        "daily_hour":      max(0, min(23, body.daily_hour)),
+        "enabled":           body.enabled,
+        "smtp_host":         body.smtp_host.strip(),
+        "smtp_port":         body.smtp_port,
+        "smtp_user":         body.smtp_user.strip(),
+        "smtp_password":     password,
+        "from_addr":         body.from_addr.strip() or body.smtp_user.strip(),
+        "to_addr":           body.to_addr.strip(),
+        "tls":               body.tls,
+        "notify_security":   body.notify_security,
+        "notify_update":     body.notify_update,
+        "notify_digest":     body.notify_digest,
+        "digest_frequency":  freq,
+        "digest_hour":       max(0, min(23, body.digest_hour)),
+        "digest_day_of_week":  max(0, min(6, body.digest_day_of_week)),
+        "digest_day_of_month": max(1, min(28, body.digest_day_of_month)),
     }
 
     with open(CONFIG_PATH, "w") as f:

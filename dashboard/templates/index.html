@@ -1000,13 +1000,39 @@
                       </div>
                       <div class="col-md-4">
                         <div class="p-3 rounded d-flex gap-2" style="background:#161b22;border:1px solid #30363d">
-                          <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" id="email-notify-daily">
-                          <label class="form-check-label small" for="email-notify-daily">
-                            <span class="fw-semibold d-block">Daily Digest</span>
-                            <span class="text-muted d-flex align-items-center gap-1">Send at hour
-                              <input type="number" class="form-control form-control-sm font-monospace d-inline-block"
-                                id="email-daily-hour" value="8" min="0" max="23" style="width:4rem" title="Hour of day (0-23) when the daily digest email is sent. Default: 8 (8:00 AM).">
-                            </span>
+                          <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" id="email-notify-digest">
+                          <label class="form-check-label small" for="email-notify-digest">
+                            <span class="fw-semibold d-block">Digest Report</span>
+                            <div class="d-flex flex-column gap-1 mt-1">
+                              <select class="form-select form-select-sm" id="digest-frequency" style="font-size:.75rem">
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="yearly">Yearly</option>
+                              </select>
+                              <div id="digest-dow-wrap" class="d-flex align-items-center gap-1">
+                                <span class="text-muted" style="font-size:.7rem;white-space:nowrap">On</span>
+                                <select class="form-select form-select-sm" id="digest-day-of-week" style="font-size:.75rem">
+                                  <option value="0">Monday</option>
+                                  <option value="1">Tuesday</option>
+                                  <option value="2">Wednesday</option>
+                                  <option value="3">Thursday</option>
+                                  <option value="4">Friday</option>
+                                  <option value="5">Saturday</option>
+                                  <option value="6">Sunday</option>
+                                </select>
+                              </div>
+                              <div id="digest-dom-wrap" class="d-none d-flex align-items-center gap-1">
+                                <span class="text-muted" style="font-size:.7rem;white-space:nowrap">Day</span>
+                                <input type="number" class="form-control form-control-sm font-monospace" id="digest-day-of-month"
+                                  value="1" min="1" max="28" style="width:3.5rem;font-size:.75rem" title="Day of month (1-28)">
+                              </div>
+                              <div class="d-flex align-items-center gap-1">
+                                <span class="text-muted" style="font-size:.7rem;white-space:nowrap">At</span>
+                                <input type="number" class="form-control form-control-sm font-monospace" id="digest-hour"
+                                  value="8" min="0" max="23" style="width:3.5rem;font-size:.75rem" title="Hour (0-23)">
+                                <span class="text-muted" style="font-size:.7rem">h</span>
+                              </div>
+                            </div>
                           </label>
                         </div>
                       </div>
