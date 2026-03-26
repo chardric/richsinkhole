@@ -947,6 +947,14 @@ def _burst_check(client_ip: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _burst_uncount(client_ip: str) -> None:
+    """Decrement burst counter for blocklist-blocked queries."""
+    with _burst_lock:
+        entry = _burst_counters.get(client_ip)
+        if entry and entry[0] > 0:
+            _burst_counters[client_ip] = (entry[0] - 1, entry[1])
+
+
 # ---------------------------------------------------------------------------
 # DNS Canary Tokens — hidden tripwire domains; trigger security alert on query
 # ---------------------------------------------------------------------------
@@ -1228,6 +1236,18 @@ def _rate_check(client_ip: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _rate_uncount(client_ip: str) -> None:
+    """Decrement rate counter for a query that was blocked by the blocklist.
+
+    Blocked domains (ads/trackers) should not fill up the rate bucket and
+    penalise legitimate queries from the same client.
+    """
+    with _rl_lock:
+        entry = _rate_counters.get(client_ip)
+        if entry and entry[0] > 0:
+            _rate_counters[client_ip] = (entry[0] - 1, entry[1])
+
+
 def _nxdomain_update(client_ip: str) -> None:
     """Track NXDOMAIN responses; auto-block on flood (DNS recon detection)."""
     now = time.monotonic()
@@ -1403,18 +1423,24 @@ class SinkholeResolver(BaseResolver):
         if not passthrough and _is_service_blocked(domain):
             self.logger.info("SERVICE  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
+            _rate_uncount(client_ip)
+            _burst_uncount(client_ip)
             return self._redirect_response(request, "0.0.0.0")
 
         # 4. Blocklist check (allowlist takes precedence inside is_blocked; skipped for passthrough)
         if not passthrough and blocker.is_blocked(domain):
             self.logger.info("BLOCKED  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
+            _rate_uncount(client_ip)
+            _burst_uncount(client_ip)
             return self._redirect_response(request, "0.0.0.0")
 
         # 3a. Strict profile: extra keyword-based blocking for tracking/analytics domains
         if not passthrough and profile == "strict" and _is_strict_blocked(domain):
             self.logger.info("STRICT   %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
+            _rate_uncount(client_ip)
+            _burst_uncount(client_ip)
             return self._redirect_response(request, "0.0.0.0")
 
         # 3b. Custom local DNS record
