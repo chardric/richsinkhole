@@ -12,6 +12,58 @@
 const BASE = (window.BASE_PATH || "").replace(/\/$/, "");
 
 // ============================================================
+// Custom modal dialogs (replaces native confirm/prompt/alert)
+// ============================================================
+function _modalDialog(html) {
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal fade show d-block";
+    overlay.setAttribute("tabindex", "-1");
+    overlay.style.background = "rgba(0,0,0,.6)";
+    overlay.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+        <div class="modal-content bg-dark border-secondary text-light">${html}</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = val => { overlay.remove(); resolve(val); };
+    overlay.querySelector("[data-action=cancel]")?.addEventListener("click", () => close(null));
+    overlay.querySelector("[data-action=ok]")?.addEventListener("click", () => {
+      const input = overlay.querySelector("input[data-modal-input]");
+      close(input ? input.value : true);
+    });
+    overlay.addEventListener("click", e => { if (e.target === overlay) close(null); });
+    const input = overlay.querySelector("input[data-modal-input]");
+    if (input) { input.focus(); input.select(); input.addEventListener("keydown", e => { if (e.key === "Enter") close(input.value); }); }
+    else overlay.querySelector("[data-action=ok]")?.focus();
+  });
+}
+
+function confirmDialog(message, { danger = false } = {}) {
+  const btnClass = danger ? "btn-danger" : "btn-primary";
+  const parts = message.split("\n\n");
+  const title = parts[0];
+  const detail = parts.length > 1 ? `<div class="text-muted mt-2" style="font-size:.8rem">${parts.slice(1).join("<br>")}</div>` : "";
+  return _modalDialog(`
+    <div class="modal-body">${title}${detail}</div>
+    <div class="modal-footer border-secondary py-2">
+      <button class="btn btn-sm btn-outline-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-sm ${btnClass}" data-action="ok">Confirm</button>
+    </div>`);
+}
+
+function promptDialog(message, defaultValue = "") {
+  return _modalDialog(`
+    <div class="modal-body">
+      <div class="mb-2">${message}</div>
+      <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary" data-modal-input value="${defaultValue.replace(/"/g, "&quot;")}">
+    </div>
+    <div class="modal-footer border-secondary py-2">
+      <button class="btn btn-sm btn-outline-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-sm btn-primary" data-action="ok">OK</button>
+    </div>`);
+}
+
+// ============================================================
 // Generic sortable table
 // ============================================================
 function initSortable(thead) {
@@ -581,7 +633,7 @@ async function loadWhitelist() {
     tbody.querySelectorAll(".btn-wl-remove").forEach(btn => {
       btn.addEventListener("click", async () => {
         const ip = btn.dataset.ip;
-        if (!confirm(`Remove ${ip} from MITM whitelist?\n\nThis device will no longer get YouTube/Facebook traffic through the proxy. DNS ad blocking will still work.`)) return;
+        if (!await confirmDialog(`Remove <strong>${ip}</strong> from MITM whitelist?\n\nThis device will no longer get YouTube/Facebook traffic through the proxy. DNS ad blocking will still work.`, { danger: true })) return;
         try {
           await api("DELETE", `/api/whitelist/${encodeURIComponent(ip)}`);
           showToast(`${ip} removed from whitelist`, "success");
@@ -1021,7 +1073,7 @@ async function loadDevices() {
     tbody.querySelectorAll(".btn-device-delete").forEach(btn => {
       btn.addEventListener("click", async () => {
         const ip = btn.dataset.ip;
-        if (!confirm(`Delete device ${ip} and ALL its records?\n\nThis removes query logs, security events, parental data, schedules, and blocks for this device. This cannot be undone.`)) return;
+        if (!await confirmDialog(`Delete device <strong>${ip}</strong> and ALL its records?\n\nThis removes query logs, security events, parental data, schedules, and blocks for this device. This cannot be undone.`, { danger: true })) return;
         try {
           await api("DELETE", `/api/devices/${encodeURIComponent(ip)}`);
           showToast(`Device ${ip} deleted`, "success");
@@ -1057,7 +1109,7 @@ async function loadDevices() {
       el.addEventListener("click", async () => {
         const ip    = el.dataset.ip;
         const current = el.dataset.label || "";
-        const val   = prompt(`Label for ${ip}:`, current);
+        const val   = await promptDialog(`Label for <strong>${ip}</strong>:`, current);
         if (val === null) return;
         try {
           await api("PATCH", `/api/devices/${encodeURIComponent(ip)}`, { label: val });
@@ -1166,7 +1218,7 @@ async function loadSchedules() {
 
     tbody.querySelectorAll(".btn-del-schedule").forEach(btn => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Delete this schedule rule?")) return;
+        if (!await confirmDialog("Delete this schedule rule?", { danger: true })) return;
         await api("DELETE", `/api/schedules/${btn.dataset.id}`);
         loadSchedules();
       });
@@ -1368,7 +1420,7 @@ async function loadDnsRecords() {
     }).join("");
     tbody.querySelectorAll(".btn-del-record").forEach(btn => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Delete this DNS record?")) return;
+        if (!await confirmDialog("Delete this DNS record?", { danger: true })) return;
         await api("DELETE", `/api/dns-records/${btn.dataset.id}`);
         loadDnsRecords();
       });
@@ -1627,7 +1679,7 @@ async function loadCanaryTokens() {
     }).join("");
     tbody.querySelectorAll(".btn-del-canary").forEach(btn => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Delete this canary token?")) return;
+        if (!await confirmDialog("Delete this canary token?", { danger: true })) return;
         await api("DELETE", `/api/canary-tokens/${btn.dataset.id}`);
         showToast("Canary token deleted", "info");
         loadCanaryTokens();
@@ -1725,7 +1777,7 @@ async function loadProxyRules() {
 
     tbody.querySelectorAll(".btn-del-proxy").forEach(btn => {
       btn.addEventListener("click", async () => {
-        if (!confirm(`Delete proxy rule for ${btn.closest("tr").querySelector("td").textContent}?`)) return;
+        if (!await confirmDialog(`Delete proxy rule for <strong>${btn.closest("tr").querySelector("td").textContent}</strong>?`, { danger: true })) return;
         try {
           await api("DELETE", `/api/proxy-rules/${btn.dataset.id}`);
           showToast("Proxy rule deleted", "info");
@@ -2280,6 +2332,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
   connectSSE();
+
+  // Persist active tab in URL hash so refresh stays on the same tab
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(btn => {
+    btn.addEventListener("shown.bs.tab", () => {
+      const hash = btn.getAttribute("data-bs-target");
+      if (hash) history.replaceState(null, "", hash);
+    });
+  });
+
+  // Restore tab from URL hash on page load
+  if (location.hash) {
+    const btn = document.querySelector(`[data-bs-target="${location.hash}"]`);
+    if (btn) new bootstrap.Tab(btn).show();
+  }
 
   // Fire all startup fetches in parallel — nothing blocks anything else
   Promise.all([
