@@ -92,6 +92,7 @@ _COMPANY_MAP: list[tuple[str, str]] = [
     ("aliyuncs.com",            "Alibaba"),
     ("alicdn.com",              "Alibaba"),
     ("alipay.com",              "Alibaba"),
+    ("aliyuncsslbintl.com",     "Alibaba"),
     # Twitter / X
     ("twitter.com",             "X (Twitter)"),
     ("twimg.com",               "X (Twitter)"),
@@ -102,6 +103,7 @@ _COMPANY_MAP: list[tuple[str, str]] = [
     # Spotify
     ("spotify.com",             "Spotify"),
     ("scdn.co",                 "Spotify"),
+    ("spotifycdn.com",          "Spotify"),
     # MikroTik
     ("mikrotik.com",            "MikroTik"),
     # Tuya
@@ -113,6 +115,237 @@ _COMPANY_MAP: list[tuple[str, str]] = [
     ("fastly.net",              "Fastly"),
     # Akamai
     ("edgesuite.net",           "Akamai"),
+    # Microsoft (additional)
+    ("office.com",              "Microsoft"),
+    ("office.net",              "Microsoft"),
+    ("skype.com",               "Microsoft"),
+    ("msn.com",                 "Microsoft"),
+    ("azure.net",               "Microsoft"),
+    ("msftncsi.com",            "Microsoft"),
+    # Google (additional)
+    ("googleusercontent.com",   "Google"),
+    ("chatgpt.com",             "OpenAI"),
+    # Meta (additional)
+    ("messenger.com",           "Meta"),
+    # Mozilla
+    ("mozilla.com",             "Mozilla"),
+    ("mozilla.org",             "Mozilla"),
+    ("firefox.com",             "Mozilla"),
+    # Shopee / Sea Group
+    ("shopee.ph",               "Shopee"),
+    ("shopeemobile.com",        "Shopee"),
+    ("susercontent.com",        "Shopee"),
+    # GitHub (Microsoft)
+    ("github.com",              "GitHub"),
+    ("github.io",               "GitHub"),
+    ("githubusercontent.com",   "GitHub"),
+    # Canonical
+    ("ubuntu.com",              "Canonical"),
+    # TP-Link
+    ("tp-link.com",             "TP-Link"),
+    ("tplinkcloud.com",         "TP-Link"),
+    ("tplinkdns.com",           "TP-Link"),
+    # Anthropic
+    ("anthropic.com",           "Anthropic"),
+    ("claude.ai",               "Anthropic"),
+    # Datadog
+    ("datadoghq.com",           "Datadog"),
+    # Honor / Huawei
+    ("hihonorcloud.com",        "Honor"),
+    ("hicloud.com",             "Honor"),
+    ("huawei.com",              "Honor"),
+    # Qihoo 360
+    ("360safe.com",             "Qihoo 360"),
+    ("360.cn",                  "Qihoo 360"),
+    # Linux Mint
+    ("linuxmint.com",           "Linux Mint"),
+    # Cloudflare (additional)
+    ("argotunnel.com",          "Cloudflare"),
+    ("pages.dev",               "Cloudflare"),
+    ("cloudflarestorage.com",   "Cloudflare"),
+    ("cloudflare.net",          "Cloudflare"),
+    # Tuya (additional — iotbing.com is Tuya Smart IoT)
+    ("iotbing.com",             "Tuya"),
+    # Microsoft (additional)
+    ("sharepoint.com",          "Microsoft"),
+    ("appcenter.ms",            "Microsoft"),
+    ("sfx.ms",                  "Microsoft"),
+    ("svc.ms",                  "Microsoft"),
+    ("linkedin.com",            "Microsoft"),
+    ("onedrive.com",            "Microsoft"),
+    ("windows.com",             "Microsoft"),
+    ("windows.net",             "Microsoft"),
+    ("xboxservices.com",        "Microsoft"),
+    ("xboxlive.com",            "Microsoft"),
+    ("live.net",                "Microsoft"),
+    ("msauth.net",              "Microsoft"),
+    ("msftauth.net",            "Microsoft"),
+    ("nelreports.net",          "Microsoft"),
+    ("s-microsoft.com",         "Microsoft"),
+    ("msftstatic.com",          "Microsoft"),
+    ("cloud.microsoft",         "Microsoft"),
+    ("static.microsoft",        "Microsoft"),
+    ("microsoftpersonalcontent.com", "Microsoft"),
+    ("fb-t-msedge.net",         "Microsoft"),
+    ("azurewebsites.net",       "Microsoft"),
+    ("azureedge.net",           "Microsoft"),
+    # Google (additional)
+    ("pkg.dev",                 "Google"),
+    ("gvt1.com",                "Google"),
+    ("gvt2.com",                "Google"),
+    ("ggpht.com",               "Google"),
+    ("pki.goog",                "Google"),
+    ("google.cn",               "Google"),
+    ("withgoogle.com",          "Google"),
+    ("mozgcp.net",              "Google"),
+    # Amazon (additional)
+    ("pv-cdn.net",              "Amazon"),
+    ("a2z.com",                 "Amazon"),
+    ("media-amazon.com",        "Amazon"),
+    ("ssl-images-amazon.com",   "Amazon"),
+    ("awsglobalaccelerator.com","Amazon"),
+    # Meta (additional)
+    ("fbpigeon.com",            "Meta"),
+    ("cdninstagram.com",        "Meta"),
+    ("fbsbx.com",               "Meta"),
+    # Canonical (additional)
+    ("launchpadcontent.net",    "Canonical"),
+    # Docker
+    ("docker.com",              "Docker"),
+    ("docker.io",               "Docker"),
+    # Atlassian
+    ("atlassian.net",           "Atlassian"),
+    ("atlassian.com",           "Atlassian"),
+    ("bitbucket.org",           "Atlassian"),
+    ("atl-paas.net",            "Atlassian"),
+    ("statuspage.io",           "Atlassian"),
+    ("opsgenie.com",            "Atlassian"),
+    # Vercel
+    ("nextjs.org",              "Vercel"),
+    ("vercel.com",              "Vercel"),
+    ("vercel.app",              "Vercel"),
+    # Twingate
+    ("twingate.com",            "Twingate"),
+    # Telecom standards (3GPP — mobile carrier signaling)
+    ("3gppnetwork.org",         "3GPP Mobile"),
+    # OpenAI (additional)
+    ("openai.com",              "OpenAI"),
+    ("oaistatic.com",           "OpenAI"),
+    # ByteDance / TikTok (additional)
+    ("capcutapi.com",           "ByteDance"),
+    ("capcut.com",              "ByteDance"),
+    ("ibyteimg.com",            "ByteDance"),
+    ("tiktokcdn.com",           "ByteDance"),
+    ("i18n-pglstatp.com",       "ByteDance"),
+    # Samsung (additional)
+    ("samsungcloud.com",        "Samsung"),
+    ("samsungapps.com",         "Samsung"),
+    ("samsungosp.com",          "Samsung"),
+    # Akamai (additional)
+    ("akamaized.net",           "Akamai"),
+    ("akamaihd.net",            "Akamai"),
+    # Fastly (additional)
+    ("fastly-edge.com",         "Fastly"),
+    # Spotify (additional)
+    ("tospotify.com",           "Spotify"),
+    # Netflix (additional)
+    ("nflxso.net",              "Netflix"),
+    # Shopee / Sea Group (additional)
+    ("shopeepay.ph",            "Shopee"),
+    ("shopee.io",               "Shopee"),
+    ("shopee.sg",               "Shopee"),
+    ("shopee.com",              "Shopee"),
+    ("garena.com",              "Shopee"),
+    # Xiaomi
+    ("xiaomi.com",              "Xiaomi"),
+    ("xiaomi.net",              "Xiaomi"),
+    ("miui.com",                "Xiaomi"),
+    ("mi.com",                  "Xiaomi"),
+    # Brave
+    ("brave.com",               "Brave"),
+    ("bravesoftware.com",       "Brave"),
+    # Tencent
+    ("qq.com",                  "Tencent"),
+    ("tdatamaster.com",         "Tencent"),
+    # Wikimedia
+    ("wikimedia.org",           "Wikimedia"),
+    ("wikipedia.org",           "Wikimedia"),
+    # AppsFlyer
+    ("appsflyersdk.com",        "AppsFlyer"),
+    ("appsflyer.com",           "AppsFlyer"),
+    # Salesforce
+    ("herokudns.com",           "Salesforce"),
+    ("salesforce.com",          "Salesforce"),
+    # Automattic
+    ("gravatar.com",            "Automattic"),
+    ("wordpress.com",           "Automattic"),
+    # Reddit
+    ("reddit.com",              "Reddit"),
+    # DuckDuckGo
+    ("duckduckgo.com",          "DuckDuckGo"),
+    # X (Twitter) additional
+    ("x.com",                   "X (Twitter)"),
+    # Giphy (Shutterstock)
+    ("giphy.com",               "Shutterstock"),
+    # Let's Encrypt / ISRG
+    ("lencr.org",               "Let's Encrypt"),
+    # DigiCert
+    ("digicert.com",            "DigiCert"),
+    # Dell
+    ("dell.com",                "Dell"),
+    ("dellcdn.com",             "Dell"),
+    # Stripe
+    ("stripe.com",              "Stripe"),
+    # Figma
+    ("figma.com",               "Figma"),
+    # PUBG / Krafton
+    ("gpubgm.com",              "Krafton"),
+    # GCash / PayMaya (Philippine fintech)
+    ("gcash.com",               "GCash"),
+    ("paymaya.com",             "Maya"),
+    # Sentry
+    ("sentry.io",               "Sentry"),
+    # New Relic
+    ("newrelic.com",            "New Relic"),
+    # Intercom
+    ("intercom.io",             "Intercom"),
+    ("intercomcdn.com",         "Intercom"),
+    # CleverTap
+    ("clevertap-prod.com",      "CleverTap"),
+    # LaunchDarkly
+    ("launchdarkly.com",        "LaunchDarkly"),
+    # MediaTek
+    ("mediatek.com",            "MediaTek"),
+    # AccuWeather
+    ("accuweather.com",         "AccuWeather"),
+    ("weather.com",             "Weather.com"),
+    # jsDelivr CDN
+    ("jsdelivr.net",            "jsDelivr"),
+    # npm (Microsoft/GitHub)
+    ("npmjs.org",               "npm"),
+    # Ollama
+    ("ollama.ai",               "Ollama"),
+    # AdGuard
+    ("adguard.com",             "AdGuard"),
+    # OpenStreetMap
+    ("openstreetmap.org",       "OpenStreetMap"),
+    # Niimbot (label printer)
+    ("niimbot.com",             "Niimbot"),
+    # Qihoo 360 (additional)
+    ("360mads.com",             "Qihoo 360"),
+    ("360.com",                 "Qihoo 360"),
+    ("360totalsecurity.com",    "Qihoo 360"),
+    # Scribd
+    ("scribd.com",              "Scribd"),
+    ("scribdassets.com",        "Scribd"),
+    # jQuery / OpenJS
+    ("jquery.com",              "jQuery"),
+    # Security Bank PH
+    ("securitybank.com",        "Security Bank"),
+    # Honor (additional)
+    ("hihonor.com",             "Honor"),
+    # Voyager / Smart (PH telecom)
+    ("voyagerapis.com",         "Smart/PLDT"),
 ]
 
 
@@ -133,7 +366,11 @@ def _classify(domain: str) -> str:
     for suffix, company in _COMPANY_MAP:
         if domain == suffix or domain.endswith("." + suffix):
             return company
-    return "Other"
+    # Fallback: use the parent domain as the company name (e.g. "example.org")
+    parts = domain.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return domain or "Unknown"
 
 
 @router.get("/privacy-report")
