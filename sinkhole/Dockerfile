@@ -10,7 +10,7 @@ WORKDIR /app
 # All deps from all 4 services (deduplicated)
 RUN pip install --no-cache-dir \
     dnslib pyyaml \
-    fastapi "uvicorn[standard]" aiosqlite httpx \
+    "fastapi>=0.115,<1.0" "uvicorn[standard]>=0.30,<1.0" aiosqlite httpx \
     jinja2 python-multipart "qrcode[pil]" \
     schedule
 

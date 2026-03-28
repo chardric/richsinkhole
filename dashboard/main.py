@@ -184,8 +184,7 @@ async def captive_portal(request: Request):
     # Auto-whitelist on page visit — internet access is never blocked
     if not cert_confirmed:
         _whitelist_ip(client_ip)
-    return templates.TemplateResponse("captive.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "captive.html", context={
         "host_ip": host_ip,
         "cert_confirmed": cert_confirmed,
     })
@@ -353,7 +352,7 @@ async def api_change_password(payload: dict = Body(...)):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = ""):
-    return templates.TemplateResponse("login.html", {"request": request, "error": error, "root_path": ROOT_PATH})
+    return templates.TemplateResponse(request, "login.html", context={"error": error, "root_path": ROOT_PATH})
 
 
 @app.post("/login")
@@ -363,13 +362,13 @@ async def login_submit(request: Request):
     if not auth.is_password_set():
         # First-run: set password
         if len(str(password)) < 8:
-            return templates.TemplateResponse("login.html", {
-                "request": request, "error": "Password must be at least 8 characters.", "setup": True, "root_path": ROOT_PATH,
+            return templates.TemplateResponse(request, "login.html", context={
+                "error": "Password must be at least 8 characters.", "setup": True, "root_path": ROOT_PATH,
             })
         auth.set_password(str(password))
     elif not auth.check_password(str(password)):
-        return templates.TemplateResponse("login.html", {
-            "request": request, "error": "Incorrect password.", "root_path": ROOT_PATH,
+        return templates.TemplateResponse(request, "login.html", context={
+            "error": "Incorrect password.", "root_path": ROOT_PATH,
         })
     token = auth.make_session_token()
     resp = RedirectResponse(url=f"{ROOT_PATH}/", status_code=302)
@@ -391,8 +390,7 @@ _BOOT_TS = str(int(time.time()))
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", context={
         "root_path": ROOT_PATH,
         "cache_bust": _BOOT_TS,
     })
@@ -411,8 +409,7 @@ async def setup(request: Request):
         except Exception:
             host_ip = "YOUR_SERVER_IP"
     http_port = os.getenv("HTTP_PORT", "80")
-    return templates.TemplateResponse("setup.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "setup.html", context={
         "root_path": ROOT_PATH,
         "host_ip": host_ip,
         "http_port": http_port,

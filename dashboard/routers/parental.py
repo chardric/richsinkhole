@@ -198,15 +198,13 @@ async def parental_block_page(request: Request):
         warning_category, snoozed = await _get_warning_info(client_ip, blocked_host, db)
 
     if warning_category and not snoozed:
-        return templates.TemplateResponse("screen_time_warning.html", {
-            "request":      request,
+        return templates.TemplateResponse(request, "screen_time_warning.html", context={
             "blocked_host": blocked_host,
             "category":     warning_category,
             "client_ip":    client_ip,
         })
 
-    return templates.TemplateResponse("parental_block.html", {
-        "request":      request,
+    return templates.TemplateResponse(request, "parental_block.html", context={
         "blocked_host": blocked_host,
     })
 
