@@ -41,9 +41,8 @@ CAPTIVE_PORTAL_DOMAINS = {
     "connectivitycheck.gstatic.com",
     "connectivitycheck.android.com",
     "clients3.google.com",
-    "www.msftconnecttest.com",
-    "www.msftncsi.com",
-    "ipv6.msftconnecttest.com",
+    # Windows NCSI domains excluded — intercepting them causes a persistent
+    # "No Internet" status in Windows taskbar. Let them resolve normally.
     "nmcheck.gnome.org",
     "nmcheck.fedoraproject.org",
 }
@@ -586,14 +585,17 @@ _DEVICE_SIGNATURES: list[tuple[str, str, int]] = [
     ("tuya.com",                                "Tuya IoT",         10),
     ("tuyaeu.com",                              "Tuya IoT",         10),
     # OS connectivity fingerprints
-    ("msftconnecttest.com",                     "Windows",          8),
-    ("windowsupdate.com",                       "Windows",          8),
-    ("microsoft.com",                           "Windows",          1),
-    ("connectivitycheck.gstatic.com",           "Android",          8),
-    ("connectivitycheck.android.com",           "Android",          8),
-    ("android.clients.google.com",              "Android",          8),
-    ("mtalk.google.com",                        "Android",          8),
-    ("play.google.com",                         "Android",          3),
+    ("msftconnecttest.com",                     "Windows",          12),
+    ("windowsupdate.com",                       "Windows",          12),
+    ("login.live.com",                          "Windows",          6),
+    ("microsoft.com",                           "Windows",          2),
+    # Android-exclusive domains (not triggered by Chrome on desktop)
+    ("connectivitycheck.android.com",           "Android",          12),
+    ("android.clients.google.com",              "Android",          12),
+    ("mtalk.google.com",                        "Android",          10),
+    ("android.googleapis.com",                  "Android",          10),
+    ("play.google.com",                         "Android",          4),
+    # connectivitycheck.gstatic.com excluded — Chrome on any OS queries it
     ("connectivity-check.ubuntu.com",           "Linux",            10),
     ("nmcheck.gnome.org",                       "Linux",            10),
     ("nmcheck.fedoraproject.org",               "Linux",            10),
