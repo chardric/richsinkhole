@@ -7,7 +7,7 @@ import json
 import socket
 
 import aiosqlite
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 SINKHOLE_DB = "/data/sinkhole.db"
@@ -40,7 +40,8 @@ def _ntp_ok(host: str = "ntp", port: int = 123) -> bool:
 
 
 @router.get("/health")
-async def health_check():
+async def health_check(request: Request):
+    """Public endpoint returns only overall status. Authenticated requests get full details."""
     checks: dict[str, str] = {}
 
     # DNS server reachable
@@ -52,8 +53,8 @@ async def health_check():
             async with aiosqlite.connect(path) as db:
                 await db.execute("SELECT 1")
             checks[label] = "ok"
-        except Exception as e:
-            checks[label] = f"error: {e}"
+        except Exception:
+            checks[label] = "error"
 
     # Updater status
     try:
@@ -62,8 +63,8 @@ async def health_check():
         checks["updater"] = s.get("status", "unknown")
     except FileNotFoundError:
         checks["updater"] = "never_run"
-    except Exception as e:
-        checks["updater"] = f"error: {e}"
+    except Exception:
+        checks["updater"] = "error"
 
     # YouTube proxy
     checks["yt_proxy"] = "ok" if _tcp_ok("localhost", 8000) else "offline"
@@ -74,4 +75,10 @@ async def health_check():
     # Only core services determine overall health; updater/yt_proxy/ntp are non-critical
     critical = {k: v for k, v in checks.items() if k in ("dns", "dns_db", "blocklist_db")}
     overall = "ok" if all(v == "ok" for v in critical.values()) else "degraded"
-    return JSONResponse({"status": overall, **checks}, status_code=200)
+
+    # Public: only overall status (for Docker HEALTHCHECK / uptime monitors)
+    # Authenticated: full service breakdown
+    from auth import is_authenticated
+    if is_authenticated(request):
+        return JSONResponse({"status": overall, **checks}, status_code=200)
+    return JSONResponse({"status": overall}, status_code=200)

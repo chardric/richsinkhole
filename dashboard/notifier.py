@@ -477,6 +477,9 @@ async def run_notifier() -> None:
     st = _read_update_status()
     _last_update_ts = st.get("last_updated", "")
 
+    # Assume digest was already sent today to prevent re-sending on restart
+    _last_digest_sent = datetime.now().strftime("%Y-%m-%d")
+
     log.info("Notifier started")
 
     while True:

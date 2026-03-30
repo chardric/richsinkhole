@@ -88,6 +88,18 @@ async def lifespan(app: FastAPI):
     # Parental control tables + column migrations
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await parental.ensure_tables(db)
+    # Auto-enable tracking/redirect blocking services on first run
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        await db.execute("""CREATE TABLE IF NOT EXISTS blocked_services (
+            service_id TEXT PRIMARY KEY,
+            enabled_at TEXT DEFAULT (datetime('now'))
+        )""")
+        for svc_id in ("affiliate_redirects", "ad_trackers", "piracy_hosts"):
+            await db.execute(
+                "INSERT OR IGNORE INTO blocked_services (service_id) VALUES (?)",
+                (svc_id,),
+            )
+        await db.commit()
     asyncio.create_task(notifier.run_notifier())
     yield
 
@@ -324,16 +336,21 @@ async def ca_mobileconfig():
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/login")
-async def api_login(payload: dict = Body(...)):
+async def api_login(request: Request, payload: dict = Body(...)):
     """JSON login endpoint for native mobile/desktop apps. Returns a Bearer token."""
+    client_ip = request.headers.get("x-real-ip", request.headers.get("x-forwarded-for", request.client.host or "")).split(",")[0].strip()
     password = str(payload.get("password", ""))
     if not auth.is_password_set():
         # First-run: set password via app
         if len(password) < 8:
             raise HTTPException(400, "Password must be at least 8 characters")
         auth.set_password(password)
-    elif not auth.check_password(password):
-        raise HTTPException(401, "Invalid credentials")
+    else:
+        if not auth.check_login_rate(client_ip):
+            raise HTTPException(429, "Too many login attempts. Try again in 5 minutes.")
+        if not auth.check_password(password):
+            auth.record_login_attempt(client_ip)
+            raise HTTPException(401, "Invalid credentials")
     return {"token": auth.make_session_token()}
 
 
@@ -357,6 +374,7 @@ async def login_page(request: Request, error: str = ""):
 
 @app.post("/login")
 async def login_submit(request: Request):
+    client_ip = request.headers.get("x-real-ip", request.headers.get("x-forwarded-for", request.client.host or "")).split(",")[0].strip()
     form = await request.form()
     password = form.get("password", "")
     if not auth.is_password_set():
@@ -366,10 +384,17 @@ async def login_submit(request: Request):
                 "error": "Password must be at least 8 characters.", "setup": True, "root_path": ROOT_PATH,
             })
         auth.set_password(str(password))
-    elif not auth.check_password(str(password)):
-        return templates.TemplateResponse(request, "login.html", context={
-            "error": "Incorrect password.", "root_path": ROOT_PATH,
-        })
+    else:
+        # Rate limit check
+        if not auth.check_login_rate(client_ip):
+            return templates.TemplateResponse(request, "login.html", context={
+                "error": "Too many login attempts. Try again in 5 minutes.", "root_path": ROOT_PATH,
+            })
+        if not auth.check_password(str(password)):
+            auth.record_login_attempt(client_ip)
+            return templates.TemplateResponse(request, "login.html", context={
+                "error": "Incorrect password.", "root_path": ROOT_PATH,
+            })
     token = auth.make_session_token()
     resp = RedirectResponse(url=f"{ROOT_PATH}/", status_code=302)
     resp.set_cookie("rs_session", token, httponly=True, samesite="lax", max_age=86400 * 7)

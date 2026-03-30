@@ -25,6 +25,32 @@ CONFIG_PATH = "/config/config.yml"
 _PUBLIC = {"/login", "/health", "/static", "/captive", "/captive-portal",
            "/ca.crt", "/ca.mobileconfig", "/install-cert.sh", "/dns-query",
            "/parental-block", "/api/parental/snooze", "/api/auth"}
+# Note: /metrics intentionally NOT in _PUBLIC — requires auth
+
+
+# ── Login rate limiting ────────────────────────────────────────────────────
+_login_attempts: dict[str, list[float]] = {}  # ip → [timestamps]
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW = 300  # 5 minutes
+
+
+def check_login_rate(ip: str) -> bool:
+    """Return True if login is allowed, False if rate-limited."""
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    # Prune old attempts outside the window
+    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
+    _login_attempts[ip] = attempts
+    return len(attempts) < _LOGIN_MAX_ATTEMPTS
+
+
+def record_login_attempt(ip: str) -> None:
+    """Record a failed login attempt."""
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
+    attempts.append(now)
+    _login_attempts[ip] = attempts
 
 
 def _cfg() -> dict:
