@@ -39,25 +39,32 @@ class RuleIn(BaseModel):
     start_time: str
     end_time: str
     enabled: bool = True
+    grace_minutes: int = 0   # 0 = instant block, >0 = warn before blocking
 
 
 @router.get("/schedules")
 async def list_schedules():
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await db.execute(_ENSURE_TABLE)
+        # Add grace_minutes column if missing (migration)
+        cols = {r[1] for r in await db.execute_fetchall("PRAGMA table_info(schedule_rules)")}
+        if "grace_minutes" not in cols:
+            await db.execute("ALTER TABLE schedule_rules ADD COLUMN grace_minutes INTEGER DEFAULT 0")
+            await db.commit()
         rows = await db.execute_fetchall(
-            "SELECT id, label, client_ip, days, start_time, end_time, enabled FROM schedule_rules ORDER BY id"
+            "SELECT id, label, client_ip, days, start_time, end_time, enabled, COALESCE(grace_minutes,0) FROM schedule_rules ORDER BY id"
         )
     return [
         {
-            "id":         r[0],
-            "label":      r[1],
-            "client_ip":  r[2],
-            "days":       r[3],
-            "days_label": _days_label(r[3]),
-            "start_time": r[4],
-            "end_time":   r[5],
-            "enabled":    bool(r[6]),
+            "id":            r[0],
+            "label":         r[1],
+            "client_ip":     r[2],
+            "days":          r[3],
+            "days_label":    _days_label(r[3]),
+            "start_time":    r[4],
+            "end_time":      r[5],
+            "enabled":       bool(r[6]),
+            "grace_minutes": r[7],
         }
         for r in rows
     ]
@@ -69,8 +76,8 @@ async def create_schedule(body: RuleIn):
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await db.execute(_ENSURE_TABLE)
         cur = await db.execute(
-            "INSERT INTO schedule_rules (label, client_ip, days, start_time, end_time, enabled) VALUES (?,?,?,?,?,?)",
-            (body.label.strip()[:64], body.client_ip.strip(), body.days, body.start_time, body.end_time, int(body.enabled)),
+            "INSERT INTO schedule_rules (label, client_ip, days, start_time, end_time, enabled, grace_minutes) VALUES (?,?,?,?,?,?,?)",
+            (body.label.strip()[:64], body.client_ip.strip(), body.days, body.start_time, body.end_time, int(body.enabled), max(0, min(60, body.grace_minutes))),
         )
         await db.commit()
         rule_id = cur.lastrowid
@@ -82,8 +89,8 @@ async def update_schedule(rule_id: int, body: RuleIn):
     _validate(body)
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         cur = await db.execute(
-            "UPDATE schedule_rules SET label=?, client_ip=?, days=?, start_time=?, end_time=?, enabled=? WHERE id=?",
-            (body.label.strip()[:64], body.client_ip.strip(), body.days, body.start_time, body.end_time, int(body.enabled), rule_id),
+            "UPDATE schedule_rules SET label=?, client_ip=?, days=?, start_time=?, end_time=?, enabled=?, grace_minutes=? WHERE id=?",
+            (body.label.strip()[:64], body.client_ip.strip(), body.days, body.start_time, body.end_time, int(body.enabled), max(0, min(60, body.grace_minutes)), rule_id),
         )
         await db.commit()
         if cur.rowcount == 0:

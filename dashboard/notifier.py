@@ -238,6 +238,38 @@ def _digest_html(stats: dict, freq: str, days: int) -> str:
       <tbody>{top_rows if top_rows else f'<tr><td colspan="3" style="padding:16px;text-align:center;color:#57606a;font-size:13px">No blocked domains in the {period.lower()}.</td></tr>'}</tbody>
     </table>"""
 
+    # Family activity section — per-device breakdown
+    devices = stats.get("top_devices", [])
+    if devices:
+        dev_rows = ""
+        for d in devices:
+            name = d["label"] or d["ip"]
+            dtype = d["device_type"] or "Unknown"
+            bpct = round(d["blocked"] / d["total"] * 100, 1) if d["total"] else 0
+            dev_rows += f"""
+            <tr>
+              <td style="padding:8px 12px;font-size:13px;color:#24292f;border-bottom:1px solid #f0f2f5">{name}</td>
+              <td style="padding:8px 12px;font-size:12px;color:#57606a;border-bottom:1px solid #f0f2f5">{dtype}</td>
+              <td style="padding:8px 12px;text-align:right;font-size:13px;color:#0969da;font-weight:600;border-bottom:1px solid #f0f2f5">{d['total']:,}</td>
+              <td style="padding:8px 12px;text-align:right;font-size:13px;color:#cf222e;border-bottom:1px solid #f0f2f5">{d['blocked']:,}</td>
+              <td style="padding:8px 12px;text-align:right;font-size:12px;color:#57606a;border-bottom:1px solid #f0f2f5">{bpct}%</td>
+            </tr>"""
+        content += f"""
+    <div style="font-size:14px;font-weight:700;color:#0d1117;margin:24px 0 12px">Device Activity</div>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border:1px solid #d0d7de;border-radius:8px;border-collapse:collapse;overflow:hidden">
+      <thead>
+        <tr style="background:#f6f8fa">
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:#57606a;font-weight:600;border-bottom:1px solid #d0d7de">Device</th>
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:#57606a;font-weight:600;border-bottom:1px solid #d0d7de">Type</th>
+          <th style="padding:10px 12px;text-align:right;font-size:12px;color:#57606a;font-weight:600;border-bottom:1px solid #d0d7de">Queries</th>
+          <th style="padding:10px 12px;text-align:right;font-size:12px;color:#57606a;font-weight:600;border-bottom:1px solid #d0d7de">Blocked</th>
+          <th style="padding:10px 12px;text-align:right;font-size:12px;color:#57606a;font-weight:600;border-bottom:1px solid #d0d7de">Block %</th>
+        </tr>
+      </thead>
+      <tbody>{dev_rows}</tbody>
+    </table>"""
+
     return _html_wrap(f"{label} Digest", content)
 
 
@@ -259,6 +291,15 @@ def _digest_plain(stats: dict, freq: str, days: int) -> str:
     ]
     for domain, cnt in stats["top_blocked"]:
         lines.append(f"  {cnt:<6} {domain}")
+
+    devices = stats.get("top_devices", [])
+    if devices:
+        lines += ["", "DEVICE ACTIVITY", "-" * 40]
+        for d in devices:
+            name = d["label"] or d["ip"]
+            bpct = round(d["blocked"] / d["total"] * 100, 1) if d["total"] else 0
+            lines.append(f"  {name:<20} {d['total']:>8} queries  {d['blocked']:>6} blocked ({bpct}%)")
+
     lines += ["", "— RichSinkhole"]
     return "\n".join(lines)
 
@@ -436,12 +477,30 @@ def _digest_stats(days: int = 7) -> dict:
                     GROUP BY domain ORDER BY cnt DESC LIMIT 10"""
             ).fetchall()
 
+            # Per-device breakdown (top 10 by query volume)
+            device_rows = conn.execute(
+                f"""SELECT q.client_ip, COUNT(*) as total,
+                       SUM(q.action='blocked') as blocked,
+                       COALESCE(d.label, '') as label,
+                       COALESCE(d.device_type, '') as dtype
+                    FROM query_log q
+                    LEFT JOIN device_fingerprints d ON q.client_ip = d.ip
+                    WHERE q.ts >= {window}
+                    GROUP BY q.client_ip
+                    ORDER BY total DESC LIMIT 10"""
+            ).fetchall()
+
         pct = (blocked / total * 100) if total else 0
         return {
             "total": total, "blocked": blocked, "forwarded": forwarded,
             "nxdomain": nxdomain, "ratelimited": ratelimited,
             "clients": clients, "auto_blocks": auto_blocks,
             "block_pct": pct, "top_blocked": top,
+            "top_devices": [
+                {"ip": r[0], "total": r[1], "blocked": r[2],
+                 "label": r[3], "device_type": r[4]}
+                for r in device_rows
+            ],
         }
     except Exception as exc:
         log.error("digest_stats error: %s", exc)

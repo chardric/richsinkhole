@@ -23,7 +23,7 @@ _ENSURE_TABLE = """
     )
 """
 
-_VALID_PROFILES = {"normal", "strict", "passthrough"}
+_VALID_PROFILES = {"normal", "strict", "passthrough", "quarantine", "guest"}
 
 
 @router.get("/devices")

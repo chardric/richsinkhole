@@ -844,6 +844,22 @@ def _fp_writer() -> None:
                                              ELSE device_fingerprints.label END""",
                         (ip, dtype, confidence, first, last, hostname),
                     )
+                # Auto-quarantine new devices if enabled in config
+                cfg = get_config()
+                if cfg.get("auto_quarantine", False):
+                    for ip in snapshot:
+                        existing = conn.execute(
+                            "SELECT profile FROM device_fingerprints WHERE ip=?", (ip,)
+                        ).fetchone()
+                        # Only set quarantine if device has no explicit profile yet
+                        if existing and existing[0] == "normal":
+                            # Check if this is the first time we see it (confidence matches snapshot)
+                            _, (_, conf, _) = ip, snapshot[ip]
+                            if conf <= 15:  # low confidence = newly seen
+                                conn.execute(
+                                    "UPDATE device_fingerprints SET profile='quarantine' WHERE ip=? AND profile='normal'",
+                                    (ip,),
+                                )
                 conn.commit()
             log.info("Fingerprints written for %d device(s)", len(snapshot))
         except Exception as exc:
@@ -1245,6 +1261,17 @@ def _load_device_profiles() -> None:
         pass
 
 
+# Quarantine mode: only these domains are allowed (essential for device onboarding)
+_QUARANTINE_ALLOW = frozenset({
+    "captive.apple.com", "connectivitycheck.gstatic.com",
+    "connectivitycheck.android.com", "clients3.google.com",
+    "www.msftconnecttest.com", "dns.msftncsi.com",
+    "connectivity-check.ubuntu.com", "nmcheck.gnome.org",
+    "time.apple.com", "time.google.com", "pool.ntp.org",
+    "ocsp.apple.com", "ocsp.digicert.com", "ocsp.pki.goog",
+})
+
+
 def _get_device_profile(client_ip: str) -> str:
     now = time.monotonic()
     if now - _profiles_last_load > _PROFILES_RELOAD:
@@ -1255,6 +1282,29 @@ def _get_device_profile(client_ip: str) -> str:
 
 def _is_strict_blocked(domain: str) -> bool:
     return any(term in domain for term in _STRICT_BLOCK_TERMS)
+
+
+# Dark web / anonymizer detection
+_DARKWEB_TLDS = frozenset({".onion", ".i2p"})
+_DARKWEB_DOMAINS = frozenset({
+    "torproject.org", "tor.eff.org", "bridges.torproject.org",
+    "check.torproject.org", "dist.torproject.org",
+})
+
+
+def _check_darkweb(client_ip: str, domain: str) -> bool:
+    """Detect .onion/.i2p queries and known Tor infrastructure. Returns True if detected."""
+    for tld in _DARKWEB_TLDS:
+        if domain.endswith(tld):
+            _log_security_event(client_ip, domain, "darkweb_attempt",
+                                f"Attempted to resolve {tld} domain")
+            return True
+    for dd in _DARKWEB_DOMAINS:
+        if domain == dd or domain.endswith("." + dd):
+            _log_security_event(client_ip, domain, "darkweb_access",
+                                f"Accessed Tor infrastructure: {domain}")
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -1304,10 +1354,18 @@ def _load_schedule_rules() -> None:
     global _schedule_rules, _schedule_last_load
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
-            rows = conn.execute(
-                "SELECT client_ip, days, start_time, end_time FROM schedule_rules WHERE enabled=1"
-            ).fetchall()
-        rules = [{"ip": r[0], "days": r[1], "start": r[2], "end": r[3]} for r in rows]
+            # Check if grace_minutes column exists
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(schedule_rules)")}
+            if "grace_minutes" in cols:
+                rows = conn.execute(
+                    "SELECT client_ip, days, start_time, end_time, COALESCE(grace_minutes,0) FROM schedule_rules WHERE enabled=1"
+                ).fetchall()
+                rules = [{"ip": r[0], "days": r[1], "start": r[2], "end": r[3], "grace": r[4]} for r in rows]
+            else:
+                rows = conn.execute(
+                    "SELECT client_ip, days, start_time, end_time FROM schedule_rules WHERE enabled=1"
+                ).fetchall()
+                rules = [{"ip": r[0], "days": r[1], "start": r[2], "end": r[3], "grace": 0} for r in rows]
         with _schedule_lock:
             _schedule_rules = rules
             _schedule_last_load = time.monotonic()
@@ -1315,8 +1373,9 @@ def _load_schedule_rules() -> None:
         pass
 
 
-def _is_scheduled_block(client_ip: str) -> bool:
-    """Return True if the client is in an active schedule block window right now."""
+def _is_scheduled_block(client_ip: str) -> str | None:
+    """Check if client is in a schedule block window.
+    Returns: 'block' if hard-blocked, 'grace' if in grace period, None if not blocked."""
     now = time.monotonic()
     if now - _schedule_last_load > _SCHEDULE_RELOAD:
         _load_schedule_rules()
@@ -1343,8 +1402,21 @@ def _is_scheduled_block(client_ip: str) -> bool:
         else:                            # crosses midnight
             in_window = hhmm >= s or hhmm < e
         if in_window:
-            return True
-    return False
+            grace = rule.get("grace", 0)
+            if grace > 0:
+                # Check if we're still in the grace period (first N minutes of the window)
+                sh, sm = int(s[:2]), int(s[3:5])
+                start_min = sh * 60 + sm
+                now_min = dt.hour * 60 + dt.minute
+                # Handle overnight: if now is before start, add 24h
+                if s > e and now_min < start_min:
+                    elapsed = (now_min + 1440) - start_min
+                else:
+                    elapsed = now_min - start_min
+                if elapsed < grace:
+                    return "grace"
+            return "block"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1515,6 +1587,13 @@ class SinkholeResolver(BaseResolver):
         profile = _get_device_profile(client_ip)
         passthrough = (profile == "passthrough")
 
+        # Quarantine: allow only essential DNS (captive portal check, NTP, OCSP)
+        if profile == "quarantine":
+            if domain not in _QUARANTINE_ALLOW and not any(domain.endswith("." + a) for a in _QUARANTINE_ALLOW):
+                self.logger.info("QUARANTINE %s  (client=%s)", domain, client_ip)
+                log_query(client_ip, domain, qtype_str, "blocked")
+                return self._redirect_response(request, "0.0.0.0")
+
         # 0. Rate limit / flood protection (skipped for passthrough)
         if not passthrough:
             refuse, rl_reason = _rate_check(client_ip)
@@ -1552,12 +1631,21 @@ class SinkholeResolver(BaseResolver):
             return reply
 
         # 0b. Schedule / bedtime block (skipped for passthrough)
-        if not passthrough and _is_scheduled_block(client_ip):
-            self.logger.info("SCHEDULED %s  (client=%s)", domain, client_ip)
-            log_query(client_ip, domain, qtype_str, "scheduled")
-            reply = request.reply()
-            reply.header.rcode = 3  # NXDOMAIN
-            return reply
+        if not passthrough:
+            sched_result = _is_scheduled_block(client_ip)
+            if sched_result == "block":
+                self.logger.info("SCHEDULED %s  (client=%s)", domain, client_ip)
+                log_query(client_ip, domain, qtype_str, "scheduled")
+                reply = request.reply()
+                reply.header.rcode = 3  # NXDOMAIN
+                return reply
+            elif sched_result == "grace":
+                # Grace period: redirect to bedtime warning page instead of blocking
+                host_ip = cfg.get("captive_portal_ip") or cfg.get("youtube_redirect_ip", "")
+                if host_ip:
+                    self.logger.info("BEDTIME-WARN %s -> %s  (client=%s)", domain, host_ip, client_ip)
+                    log_query(client_ip, domain, qtype_str, "scheduled")
+                    return self._redirect_response(request, host_ip)
 
         # 1. Captive portal detection domains (skipped for passthrough)
         cp_enabled = cfg.get("captive_portal_enabled", False)
@@ -1612,7 +1700,7 @@ class SinkholeResolver(BaseResolver):
             return self._redirect_response(request, "0.0.0.0")
 
         # 3a. Strict profile: extra keyword-based blocking for tracking/analytics domains
-        if not passthrough and profile == "strict" and _is_strict_blocked(domain):
+        if not passthrough and profile in ("strict", "guest") and _is_strict_blocked(domain):
             self.logger.info("STRICT   %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
             _rate_uncount(client_ip)
@@ -1703,6 +1791,7 @@ class SinkholeResolver(BaseResolver):
             _check_anomaly(client_ip, domain)
             _check_fingerprint(client_ip, domain)
             _check_hostname(client_ip, domain)
+            _check_darkweb(client_ip, domain)
 
             # Redirect chain detection (affiliate hijacking)
             if not passthrough and cfg.get("redirect_chain_detection", True):

@@ -51,6 +51,10 @@ async def device_stats(ip: str):
     label       = dev_row[0][0] if dev_row and dev_row[0][0] else None
     device_type = dev_row[0][1] if dev_row else None
 
+    # Bandwidth estimation: avg ad payload ~75KB, avg page ~300KB per DNS query
+    bandwidth_saved_mb = round(blocked * 75 / 1024, 1)
+    bandwidth_used_mb  = round(forwarded * 300 / 1024, 1)
+
     return {
         "ip":          ip,
         "label":       label,
@@ -59,6 +63,8 @@ async def device_stats(ip: str):
         "blocked":     blocked,
         "forwarded":   forwarded,
         "block_pct":   round(blocked / total * 100, 1) if total else 0.0,
+        "bandwidth_saved_mb":  bandwidth_saved_mb,
+        "bandwidth_used_mb":   bandwidth_used_mb,
         "top_blocked_domains":   [{"domain": r[0], "count": r[1]} for r in top_blocked],
         "top_forwarded_domains": [{"domain": r[0], "count": r[1]} for r in top_forwarded],
         "recent_queries": [

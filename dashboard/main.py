@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import notifier
-from routers import allowlist, blocked_services, blocklist, canary, device_stats, devices, dns_records, doh, health, heatmap, logs, metrics, network_score, ntp, parental, privacy_report, proxy_rules, qr, schedules, security, services, settings, stats, unbound_settings, updater
+from routers import allowlist, app_usage, blocked_services, blocklist, canary, device_stats, devices, dns_records, doh, health, heatmap, logs, metrics, network_score, ntp, parental, privacy_report, proxy_rules, qr, schedules, security, services, settings, speedtest, stats, unbound_settings, updater
 import auth
 
 SINKHOLE_DB = "/data/sinkhole.db"
@@ -140,6 +140,8 @@ app.include_router(network_score.router, prefix="/api")
 app.include_router(unbound_settings.router, prefix="/api")
 app.include_router(services.router, prefix="/api")
 app.include_router(blocked_services.router, prefix="/api")
+app.include_router(speedtest.router, prefix="/api")
+app.include_router(app_usage.router, prefix="/api")
 app.include_router(parental.router)
 app.include_router(metrics.router)
 app.include_router(health.router)

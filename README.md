@@ -32,12 +32,18 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **Blocked services** — AdGuard-style toggleable service blocks: Social Media, Streaming, Messaging, Gaming, Shopping, AI, Adult, Gambling, Tracking & Redirects (affiliate redirects, ad trackers, piracy file hosts)
 - **Login rate limiting** — 5 failed attempts per IP in 5-minute window, then locked out (web + API)
 - **Protected endpoints** — `/metrics` requires auth; `/health` returns minimal data to unauthenticated requests
+- **IoT quarantine** — new device profile that allows only essential DNS (captive portal, NTP, OCSP); auto-quarantine for new devices (opt-in)
+- **Guest mode** — strict blocking profile for temporary/unknown devices
+- **Dark web monitoring** — detects `.onion`/`.i2p` resolution attempts and known Tor infrastructure; logs security events
+- **DNS speed test** — historical latency stats (avg/p50/p95) and live probes against well-known domains
 
 ### Parental Controls
 - **Per-device parental controls** — block social media and gaming domains per device
 - **Screen time budgets** — daily query limits per category (social/gaming); snooze button on warning page
-- **Circadian / bedtime profiles** — schedule-based blocking (Block All / Bedtime / Strict modes)
+- **Circadian / bedtime profiles** — schedule-based blocking with optional grace period (1-60 min warning before hard-block)
 - **Block page** — smart per-device block page showing remaining budget and snooze option
+- **App usage dashboard** — per-device app usage with estimated session time for 18 apps (YouTube, Facebook, TikTok, Netflix, Spotify, etc.)
+- **Family activity digest** — periodic email includes per-device breakdown with queries, blocks, and block rate
 
 ### YouTube
 - **YouTube ad blocking** — transparent HTTPS proxy strips pre/post-roll ads
@@ -54,7 +60,8 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 
 ### Devices
 - **Device fingerprinting** — auto-identifies device type by DNS patterns (Apple, Android, Windows, Samsung TV, Xbox, MikroTik, Xiaomi, Router, and more); improved accuracy by excluding Chrome-triggered signals from Android detection and boosting OS-exclusive signals
-- **Per-device blocking profiles** — Normal, Strict, or Passthrough
+- **Per-device blocking profiles** — Normal, Strict, Passthrough, Quarantine, or Guest
+- **Bandwidth estimation** — per-device estimated bandwidth saved and used
 - **MAC/vendor info** — ARP-correlated vendor names shown per device
 - **Ghost detection** — devices with ARP entries but no DNS queries in 24h marked with ghost icon
 - **Schedule rules** — time-based blocking per device or network-wide
