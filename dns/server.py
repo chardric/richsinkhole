@@ -689,21 +689,53 @@ _DEVICE_SIGNATURES: list[tuple[str, str, int]] = [
     ("dahuasecurity.com",                       "Dahua Camera",     10),
     ("tuya.com",                                "Tuya IoT",         10),
     ("tuyaeu.com",                              "Tuya IoT",         10),
-    # OS connectivity fingerprints
-    ("msftconnecttest.com",                     "Windows",          12),
+    # ── Windows-exclusive ────────────────────────────────────────────────
+    ("msftconnecttest.com",                     "Windows",          15),
+    ("dns.msftncsi.com",                        "Windows",          15),
     ("windowsupdate.com",                       "Windows",          12),
+    ("prod.do.dsp.mp.microsoft.com",            "Windows",          12),
+    ("v10.events.data.microsoft.com",           "Windows",          12),
+    ("settings-win.data.microsoft.com",         "Windows",          12),
+    ("client.wns.windows.com",                  "Windows",          12),
+    ("activation.sls.microsoft.com",            "Windows",          10),
     ("login.live.com",                          "Windows",          6),
     ("microsoft.com",                           "Windows",          2),
-    # Android-exclusive domains (not triggered by Chrome on desktop)
+    # ── Android-exclusive (GMS system services, NOT Chrome on desktop) ──
+    ("checkin.googleapis.com",                  "Android",          15),
     ("connectivitycheck.android.com",           "Android",          12),
-    ("android.clients.google.com",              "Android",          12),
-    ("mtalk.google.com",                        "Android",          10),
-    ("android.googleapis.com",                  "Android",          10),
-    ("play.google.com",                         "Android",          4),
-    # connectivitycheck.gstatic.com excluded — Chrome on any OS queries it
-    ("connectivity-check.ubuntu.com",           "Linux",            10),
-    ("nmcheck.gnome.org",                       "Linux",            10),
-    ("nmcheck.fedoraproject.org",               "Linux",            10),
+    ("android.googleapis.com",                  "Android",          12),
+    ("play.googleapis.com",                     "Android",          10),
+    ("ota.googlezip.net",                       "Android",          12),
+    ("device-provisioning.googleapis.com",      "Android",          12),
+    ("android-context-data.googleapis.com",     "Android",          10),
+    ("app-measurement.com",                     "Android",          8),
+    # Demoted: Chrome on desktop also queries these via Web Push / Google account
+    ("android.clients.google.com",              "Android",          2),
+    ("mtalk.google.com",                        "Android",          2),
+    ("play.google.com",                         "Android",          1),
+    # ── Linux desktop-exclusive ──────────────────────────────────────────
+    ("connectivity-check.ubuntu.com",           "Linux",            12),
+    ("nmcheck.gnome.org",                       "Linux",            12),
+    ("nmcheck.fedoraproject.org",               "Linux",            12),
+    ("archive.ubuntu.com",                      "Linux",            10),
+    ("security.ubuntu.com",                     "Linux",            10),
+    ("ppa.launchpad.net",                       "Linux",            10),
+    ("api.snapcraft.io",                        "Linux",            12),
+    ("dl.flathub.org",                          "Linux",            10),
+    ("livepatch.canonical.com",                 "Linux",            12),
+    ("packages.linuxmint.com",                  "Linux",            10),
+    ("dl.fedoraproject.org",                    "Linux",            10),
+    # ── Apple-exclusive ──────────────────────────────────────────────────
+    ("captive.apple.com",                       "Apple Device",     15),
+    ("albert.apple.com",                        "Apple Device",     15),
+    ("mesu.apple.com",                          "Apple Device",     12),
+    ("mask.icloud.com",                         "Apple Device",     12),
+    ("mask-h2.icloud.com",                      "Apple Device",     12),
+    ("ocsp.apple.com",                          "Apple Device",     8),
+    ("gateway.icloud.com",                      "Apple Device",     10),
+    # ── ChromeOS-exclusive ───────────────────────────────────────────────
+    ("cros-omahaproxy.appspot.com",             "ChromeOS",         20),
+    ("chromeos-omahaproxy.appspot.com",         "ChromeOS",         20),
 ]
 
 _fp_scores:  dict[str, dict[str, int]] = {}   # ip → {device_type: cumulative_weight}
@@ -738,6 +770,46 @@ def _check_fingerprint(client_ip: str, domain: str) -> None:
         _fp_dirty.add(client_ip)
 
 
+# Hostname auto-detection from DNS queries
+_hostname_candidates: dict[str, str] = {}  # ip → best hostname candidate
+_hostname_lock = threading.Lock()
+
+# Bare hostnames / .local to ignore (common noise, not device names)
+_HOSTNAME_IGNORE = frozenset({
+    "wpad", "localhost", "lan", "gateway", "_gateway", "config",
+    "https", "http", "hthttp", "facebook", "url_to_image",
+})
+
+
+def _check_hostname(client_ip: str, domain: str) -> None:
+    """Extract device hostname from bare hostname or .local queries."""
+    # Bare hostname (no dots) — e.g. "chadpc", "rpihole"
+    if "." not in domain:
+        name = domain.lower().strip()
+        if name and name not in _HOSTNAME_IGNORE and len(name) >= 3 and name.isascii():
+            with _hostname_lock:
+                _hostname_candidates[client_ip] = name
+            return
+    # mDNS .local — e.g. "richards-iphone.local"
+    if domain.endswith(".local") and domain.count(".") == 1:
+        name = domain[:-6].lower().strip()
+        if name and len(name) >= 3:
+            with _hostname_lock:
+                _hostname_candidates[client_ip] = name
+
+
+def _get_hostname(ip: str) -> str:
+    """Get the best hostname for an IP: query-derived > reverse DNS > empty."""
+    with _hostname_lock:
+        candidate = _hostname_candidates.get(ip, "")
+    if candidate:
+        return candidate
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except Exception:
+        return ""
+
+
 def _fp_writer() -> None:
     """Background thread: flush fingerprints to SQLite every 30s."""
     log = logging.getLogger("fingerprint")
@@ -758,10 +830,7 @@ def _fp_writer() -> None:
         try:
             with sqlite3.connect(SINKHOLE_DB, timeout=30) as conn:
                 for ip, (dtype, confidence, (first, last)) in snapshot.items():
-                    try:
-                        hostname = socket.gethostbyaddr(ip)[0]
-                    except Exception:
-                        hostname = ""
+                    hostname = _get_hostname(ip)
                     conn.execute(
                         """INSERT INTO device_fingerprints
                                (ip, device_type, confidence, first_seen, last_seen, label)
@@ -1633,6 +1702,7 @@ class SinkholeResolver(BaseResolver):
             _check_dga(client_ip, domain)
             _check_anomaly(client_ip, domain)
             _check_fingerprint(client_ip, domain)
+            _check_hostname(client_ip, domain)
 
             # Redirect chain detection (affiliate hijacking)
             if not passthrough and cfg.get("redirect_chain_detection", True):
@@ -1652,6 +1722,7 @@ class SinkholeResolver(BaseResolver):
             log_query(client_ip, domain, qtype_str, "forwarded", upstream=upstream, response_ms=elapsed_ms)
         elif reply.header.rcode == 3:  # NXDOMAIN
             _nxdomain_update(client_ip)
+            _check_hostname(client_ip, domain)
             self.logger.info("NXDOMAIN %s  (client=%s upstream=%s %dms)", domain, client_ip, upstream, elapsed_ms)
             log_query(client_ip, domain, qtype_str, "nxdomain", upstream=upstream, response_ms=elapsed_ms)
         else:
