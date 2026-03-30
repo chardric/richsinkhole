@@ -8,11 +8,14 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 
 ### Blocking
 - **DNS-level blocking** — blocks ads, trackers, telemetry, and malware for every device on the network
-- **2.2M+ domains blocked** out of the box via curated subscription feeds
-- **Subscription feed manager** — add/remove blocklist URLs; feeds auto-sync on a configurable schedule (daily, weekly, or monthly)
+- **1M+ domains blocked** out of the box via 14 curated default feeds (ads, trackers, popups, phishing, scam, adult content, Samsung/Xiaomi/TikTok native trackers)
+- **Subscription feed manager** — add/remove blocklist URLs; feeds auto-sync on a configurable schedule (daily, weekly, or monthly). Supports hosts file, plain domain list, and AdBlock (`||domain^`) formats
+- **Default sources** — 14 built-in feeds that cannot be removed (Hagezi, ShadowWhisperer, curbengh, BlockListProject, etc.); user can add custom feeds on top
+- **Stale source auto-disable** — sources with unchanged content for N days (configurable, default 90) are automatically disabled; sources with 3+ consecutive fetch failures also auto-disabled
 - **Custom block list** — manually block individual domains
 - **Allowlist** — permanently whitelist domains so they survive feed re-syncs
 - **Threat intel feeds** — URLhaus and ThreatFox malware/phishing domains refreshed every 6 hours
+- **Update progress bar** — real-time progress indicator when updating blocklists (fetching, writing, indexing, finalizing)
 
 ### Security
 - **DNS rebinding shield** — blocks public domains resolving to private IPs
@@ -23,8 +26,12 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **ARP correlation** — enriches devices with MAC/vendor info; ghost detection for ARP-only devices
 - **DNS leak detection** — probes upstream latency and DNSSEC health; flags devices bypassing the sinkhole
 - **Protected brands** — configurable brand list for typosquat protection
-- **Query burst auto-blocking** — rate limiting with per-device IoT thresholds and 60s startup grace period
+- **Query burst auto-blocking** — rate limiting with per-device IoT thresholds and 60s startup grace period; blocked queries excluded from rate/burst counters to prevent ad SDK bursts from penalizing legitimate traffic
 - **NXDOMAIN flood detection** — auto-blocks clients generating excessive NXDOMAIN responses
+- **Redirect chain detection** — real-time detection of affiliate hijacking patterns (unknown domain -> attribution -> deep link within 3 seconds); auto-blocks trigger domains
+- **Blocked services** — AdGuard-style toggleable service blocks: Social Media, Streaming, Messaging, Gaming, Shopping, AI, Adult, Gambling, Tracking & Redirects (affiliate redirects, ad trackers, piracy file hosts)
+- **Login rate limiting** — 5 failed attempts per IP in 5-minute window, then locked out (web + API)
+- **Protected endpoints** — `/metrics` requires auth; `/health` returns minimal data to unauthenticated requests
 
 ### Parental Controls
 - **Per-device parental controls** — block social media and gaming domains per device
@@ -46,17 +53,19 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **HTTPS dashboard** — nginx serves dashboard on port 443 with self-signed cert
 
 ### Devices
-- **Device fingerprinting** — auto-identifies device type by DNS patterns (Apple, Android, Windows, Samsung TV, Xbox, MikroTik, Xiaomi, Router, and more)
+- **Device fingerprinting** — auto-identifies device type by DNS patterns (Apple, Android, Windows, Samsung TV, Xbox, MikroTik, Xiaomi, Router, and more); improved accuracy by excluding Chrome-triggered signals from Android detection and boosting OS-exclusive signals
 - **Per-device blocking profiles** — Normal, Strict, or Passthrough
 - **MAC/vendor info** — ARP-correlated vendor names shown per device
 - **Ghost detection** — devices with ARP entries but no DNS queries in 24h marked with ghost icon
 - **Schedule rules** — time-based blocking per device or network-wide
 
 ### Dashboard & Apps
-- **React web dashboard** — dark theme, real-time query log, stat cards, query activity heatmap, network health score, SSE activity stream
-- **Privacy report** — per-device domain breakdown with 24h/7d time range filter
+- **React web dashboard** — dark theme, real-time query log, stat cards, query activity heatmap, network health score, SSE activity stream; tab persistence via URL hash (refresh stays on current tab)
+- **Privacy report** — per-device domain breakdown with 130+ company mappings (Google, Meta, Microsoft, Amazon, ByteDance, Shopee, Tencent, and more); unmatched domains show parent domain name instead of generic "Other"
+- **Custom modal dialogs** — dark-themed confirm/prompt dialogs replace native browser dialogs
 - **Service controls** — restart Sinkhole, Unbound, and Nginx containers from the Settings tab
 - **Configurable update schedule** — set blocklist sync frequency (daily/weekly/monthly), day, and time from Settings
+- **Email digest** — configurable weekly/monthly/yearly digest reports (replaces daily); won't re-send on restart
 - **Native desktop app** — Electron wrapper for Linux (AppImage + DEB) and Windows (NSIS installer); system tray with minimize-to-tray
 - **Android app** — Capacitor-based APK
 - **Webhook notifications** — alerts for blocklist updates, new devices, and daily summaries
@@ -301,22 +310,24 @@ The script builds `linux/arm64` images, transfers them via `docker save | gzip |
 | `NGINX_CONFIG` | `nginx.conf` | Nginx config file to use |
 | `TZ` | `Asia/Manila` | Timezone for logs and scheduler |
 
-### Blocklist sources (`updater/sources.yml`)
+### Blocklist sources
+
+RichSinkhole ships with 14 default blocklist feeds defined in `updater/default_sources.py` — these cannot be removed from the dashboard (shown with a `default` badge). They cover ads, trackers, popups, phishing, scam, adult content, and native device trackers for Samsung, Xiaomi, and TikTok.
+
+User-added feeds are stored in `updater/sources.yml` and can be managed from the dashboard:
 
 ```yaml
 sources:
-  - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
-  - https://adaway.org/hosts.txt
-  # add more URLs here
-
-update_interval_hours: 24
+  - https://example.com/my-custom-blocklist.txt
 
 whitelist:
   - youtube.com
   - www.youtube.com
 ```
 
-Additional feeds can also be added from the dashboard without editing this file.
+Supported formats: hosts file (`0.0.0.0 domain`), plain domain list (one per line), and AdBlock syntax (`||domain^`).
+
+Sources that fail 3 consecutive fetches or remain unchanged for 90+ days (configurable in Settings) are automatically disabled.
 
 ---
 
@@ -358,7 +369,8 @@ richsinkhole/
 │   └── blocker.py                 # Blocklist lookup engine
 ├── updater/                       # Scheduled background tasks
 │   ├── updater.py                 # Blocklist sync, threat intel, query log prune
-│   └── sources.yml                # Blocklist source URLs and whitelist
+│   ├── default_sources.py         # Built-in blocklist feed URLs (cannot be removed from UI)
+│   └── sources.yml                # User-added blocklist source URLs and whitelist
 ├── youtube-proxy/                 # YouTube transparent proxy
 │   └── proxy.py                   # Ad-stripping reverse proxy
 ├── unbound/                       # Recursive DNS resolver
@@ -408,6 +420,7 @@ All persistent data lives in `./data/` (bind-mounted into containers):
 | `./data/sinkhole.db` | Query log, devices, parental usage, security events |
 | `./data/blocklist.db` | Blocked domains, feeds table, allowlist, NRD domains |
 | `./data/updater_status.json` | Last sync time and domain count |
+| `./data/updater_progress.json` | Real-time blocklist update progress |
 | `./data/config/config.yml` | DNS and feature configuration |
 
 Use `./backup.sh` to snapshot and `./restore.sh` to migrate to a new machine.
@@ -429,14 +442,17 @@ Use `./backup.sh` to snapshot and `./restore.sh` to migrate to a new machine.
 
 ## Security
 
-- No default credentials — password set on first run, stored as PBKDF2 hash
+- No default credentials — password set on first run, stored as PBKDF2-HMAC-SHA256 (200k iterations)
 - Session tokens are HMAC-signed; also accepted as `Authorization: Bearer <token>` for native apps
+- Login rate limiting — 5 failed attempts per IP in 5-minute window, then locked out (web + API)
 - Unbound provides DNSSEC validation and DNS rebinding protection out of the box
 - Nginx handles TLS termination; self-signed CA generated on first install
 - CA private key excluded from git (`.gitignore`)
 - All API inputs validated server-side; internal errors never exposed to clients
+- `/health` returns only `{"status":"ok"}` to unauthenticated requests; `/metrics` requires authentication
 - Rate limiting, burst detection, NXDOMAIN flood detection with per-device thresholds
-- 9 active security features: rebinding, DGA, tunneling, typosquat, NRD, ARP correlation, ghost detection, DNS leak, screen time enforcement
+- Blocked queries excluded from rate/burst counters (prevents ad SDK bursts from penalizing legitimate traffic)
+- 10 active security features: rebinding, DGA, tunneling, typosquat, NRD, ARP correlation, ghost detection, DNS leak, screen time enforcement, redirect chain detection
 
 
 ---
