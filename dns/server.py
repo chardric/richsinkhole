@@ -372,6 +372,111 @@ _auto_block_seen:  set[str] = set()   # domains already enqueued / written
 _auto_block_lock = threading.Lock()
 
 
+# ---------------------------------------------------------------------------
+# Redirect chain detection — catches affiliate hijacking in real time
+# Pattern: unknown_domain → attribution_domain → deeplink_domain within 3s
+# ---------------------------------------------------------------------------
+
+_ATTRIBUTION_DOMAINS = frozenset({
+    "onelink.me", "appsflyer.com", "appsflyersdk.com", "onelink.to",
+    "onelinkl.com", "adjust.com", "adjust.io", "adj.st",
+    "branch.io", "app.link", "bnc.lt", "go.link",
+    "kochava.com", "singular.net", "go.onelink.me",
+    "ironsrc.com", "supersonicads.com",
+})
+
+_DEEPLINK_DOMAINS = frozenset({
+    "shp.ee", "lzd.co", "s.shopee.ph", "s.shopee.com",
+    "c.lazada.com.ph", "c.lazada.com", "click.lazada.com.ph",
+    "affiliate.shopee.ph", "affiliate.shopee.com",
+    "tiktok.com", "vm.tiktok.com", "vt.tiktok.com",
+    "lazada.com.ph", "shopee.ph",
+})
+
+_CHAIN_WINDOW      = 3.0     # seconds
+_CHAIN_MAX_CLIENTS = 2000
+_CHAIN_RING_SIZE   = 8
+_chain_tracker: dict[str, list] = {}
+_chain_lock = threading.Lock()
+
+# Well-known domains that should NOT be treated as "unknown triggers"
+_CHAIN_SAFE_PARENTS = frozenset({
+    "google.com", "googleapis.com", "gstatic.com", "facebook.com",
+    "fbcdn.net", "microsoft.com", "apple.com", "cloudflare.com",
+    "akamai.net", "amazonaws.com", "mozilla.com", "mozilla.org",
+})
+
+
+def _classify_chain(domain: str) -> int:
+    """0=unknown, 1=attribution, 2=deeplink, 3=safe (skip)."""
+    parts = domain.split(".")
+    for i in range(len(parts) - 1):
+        suffix = ".".join(parts[i:])
+        if suffix in _ATTRIBUTION_DOMAINS:
+            return 1
+        if suffix in _DEEPLINK_DOMAINS:
+            return 2
+        if suffix in _CHAIN_SAFE_PARENTS:
+            return 3
+    return 0
+
+
+def _check_redirect_chain(client_ip: str, domain: str) -> tuple[bool, str | None]:
+    """Track query and detect affiliate redirect chain pattern.
+    Returns (detected, trigger_domain)."""
+    now = time.monotonic()
+    cat = _classify_chain(domain)
+    if cat == 3:
+        return False, None  # safe domain, skip tracking
+
+    with _chain_lock:
+        ring = _chain_tracker.get(client_ip)
+        if ring is None:
+            if len(_chain_tracker) >= _CHAIN_MAX_CLIENTS:
+                _chain_tracker.pop(next(iter(_chain_tracker)))
+            ring = []
+            _chain_tracker[client_ip] = ring
+
+        ring.append((now, domain, cat))
+        if len(ring) > _CHAIN_RING_SIZE:
+            ring.pop(0)
+
+        # Only check pattern when we see a deeplink or attribution domain
+        if cat not in (1, 2):
+            return False, None
+
+        cutoff = now - _CHAIN_WINDOW
+        window = [(ts, d, c) for ts, d, c in ring if ts >= cutoff]
+
+        # Pattern: unknown(0) → attribution(1) within window
+        # or: unknown(0) → deeplink(2) within window
+        trigger_domain = None
+        has_attrib = False
+        for _, d, c in window:
+            if c == 0 and trigger_domain is None:
+                trigger_domain = d
+            elif c == 1:
+                has_attrib = True
+
+        if trigger_domain and (has_attrib or cat == 2):
+            return True, trigger_domain
+
+    return False, None
+
+
+def _chain_cleanup_task() -> None:
+    """Evict stale entries from chain tracker every 60s."""
+    while True:
+        time.sleep(60)
+        now = time.monotonic()
+        cutoff = now - _CHAIN_WINDOW * 2
+        with _chain_lock:
+            stale = [ip for ip, ring in _chain_tracker.items()
+                     if ring and ring[-1][0] < cutoff]
+            for ip in stale:
+                del _chain_tracker[ip]
+
+
 def _enqueue_auto_block(domain: str) -> None:
     with _auto_block_lock:
         if domain in _auto_block_seen:
@@ -1528,6 +1633,21 @@ class SinkholeResolver(BaseResolver):
             _check_dga(client_ip, domain)
             _check_anomaly(client_ip, domain)
             _check_fingerprint(client_ip, domain)
+
+            # Redirect chain detection (affiliate hijacking)
+            if not passthrough and cfg.get("redirect_chain_detection", True):
+                chain_hit, chain_trigger = _check_redirect_chain(client_ip, domain)
+                if chain_hit and chain_trigger:
+                    _enqueue_auto_block(chain_trigger)
+                    _log_security_event(
+                        client_ip, chain_trigger, "affiliate_chain",
+                        f"redirect chain: {chain_trigger} -> {domain}",
+                    )
+                    self.logger.warning(
+                        "CHAIN    %s  trigger=%s  (client=%s)",
+                        domain, chain_trigger, client_ip,
+                    )
+
             self.logger.info("FORWARDED %s  (client=%s upstream=%s %dms)", domain, client_ip, upstream, elapsed_ms)
             log_query(client_ip, domain, qtype_str, "forwarded", upstream=upstream, response_ms=elapsed_ms)
         elif reply.header.rcode == 3:  # NXDOMAIN
@@ -1663,6 +1783,10 @@ def start_dns():
     uw = threading.Thread(target=_usage_writer, daemon=True, name="usage-writer")
     uw.start()
     log.info("Usage writer started (flush every 30s)")
+
+    # Start redirect chain cleanup thread
+    cc = threading.Thread(target=_chain_cleanup_task, daemon=True, name="chain-cleanup")
+    cc.start()
 
     dns_logger = DnsLibLogger(prefix=False)
     resolver = SinkholeResolver()

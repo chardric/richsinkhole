@@ -14,6 +14,7 @@ GROUPS = [
     {"id": "ai", "name": "AI Services"},
     {"id": "adult", "name": "Adult Content"},
     {"id": "gambling", "name": "Gambling"},
+    {"id": "tracking", "name": "Tracking & Redirects"},
 ]
 
 SERVICES = [
@@ -363,6 +364,89 @@ SERVICES = [
         "name": "PokerStars",
         "group": "gambling",
         "domains": ["pokerstars.com", "pokerstars.net"],
+    },
+
+    # ── Tracking & Redirects ───────────────────────────────────────────────
+    {
+        "id": "affiliate_redirects",
+        "name": "Affiliate Redirects",
+        "group": "tracking",
+        "domains": [
+            # AppsFlyer — mobile attribution, powers forced app-opens
+            "onelink.me", "appsflyer.com", "appsflyersdk.com",
+            "onelinkl.com", "onelink.to",
+            # Adjust — mobile attribution & deep links
+            "adjust.com", "adjust.io", "adj.st",
+            # Branch.io — deep linking platform
+            "branch.io", "app.link", "bnc.lt",
+            # Kochava — mobile attribution
+            "kochava.com", "control.kochava.com",
+            # Singular — mobile attribution
+            "singular.net",
+            # Shopee affiliate redirects
+            "shp.ee", "affiliate.shopee.ph", "affiliate.shopee.com",
+            "s.shopee.ph", "s.shopee.com",
+            # Lazada affiliate redirects
+            "lzd.co", "c.lazada.com.ph", "c.lazada.com",
+            "click.lazada.com.ph",
+            # General link shorteners used in affiliate chains
+            "go.onelink.me", "go.link",
+            # ironSource / Unity Ads — forced app installs
+            "supersonicads.com", "ironsrc.com", "is.com",
+            # TikTok deep link redirects
+            "vm.tiktok.com", "vt.tiktok.com",
+            # Malvertising / popup domains (rotate frequently)
+            "kiackhaulmy.com", "mevkylin.com", "leucosmutty.com",
+            # Common popup ad networks
+            "popads.net", "popcash.net", "propellerads.com",
+            "pushwoosh.com", "pushengage.com",
+        ],
+    },
+    {
+        "id": "ad_trackers",
+        "name": "Ad Trackers & Analytics",
+        "group": "tracking",
+        "domains": [
+            # CleverTap — push notification / analytics
+            "clevertap-prod.com", "clevertap.com",
+            # MoEngage — engagement platform
+            "moengage.com",
+            # Criteo — retargeting ads
+            "criteo.com", "criteo.net",
+            # Taboola / Outbrain — content recommendation (clickbait)
+            "taboola.com", "taboolasyndication.com",
+            "outbrain.com", "outbrainimg.com",
+            # InMobi — mobile ads
+            "inmobi.com",
+            # AdColony — mobile video ads
+            "adcolony.com",
+            # Fyber / InnerActive — in-app ad exchange
+            "inner-active.mobi", "fyber.com",
+            # Pangle — ByteDance/TikTok ad network
+            "pangle.io", "pangleglobal.com",
+            # Vungle / Liftoff — mobile ads
+            "vungle.com", "liftoff.io",
+            # IronSource — ad mediation
+            "ironsource.com",
+        ],
+    },
+    {
+        "id": "piracy_hosts",
+        "name": "Piracy File Hosts",
+        "group": "tracking",
+        "domains": [
+            # Common file hosts used by piracy sites
+            "downloadwella.com",
+            "sabishare.com",
+            "mixdrop.to", "mixdrop.co",
+            "dood.to", "dood.watch", "dood.so",
+            "streamtape.com",
+            "upstream.to",
+            "mp4upload.com",
+            "vidoza.net",
+            "filemoon.sx",
+            "streamwish.com", "streamwish.to",
+        ],
     },
 ]
 
