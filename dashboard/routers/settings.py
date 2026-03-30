@@ -228,11 +228,12 @@ _VALID_FREQS      = {"daily", "weekly", "monthly"}
 async def get_update_schedule():
     cfg = _read_cfg()
     return {
-        "update_hour":         int(cfg.get("update_hour",         3)),
-        "update_minute":       int(cfg.get("update_minute",       0)),
-        "update_frequency":    str(cfg.get("update_frequency",    "daily")),
-        "update_day_of_week":  int(cfg.get("update_day_of_week",  0)),   # 0=Mon … 6=Sun
-        "update_day_of_month": int(cfg.get("update_day_of_month", 1)),   # 1-28
+        "update_hour":            int(cfg.get("update_hour",            3)),
+        "update_minute":          int(cfg.get("update_minute",          0)),
+        "update_frequency":       str(cfg.get("update_frequency",       "daily")),
+        "update_day_of_week":     int(cfg.get("update_day_of_week",     0)),   # 0=Mon … 6=Sun
+        "update_day_of_month":    int(cfg.get("update_day_of_month",    1)),   # 1-28
+        "source_stale_days":      int(cfg.get("source_stale_days",      90)),  # auto-disable after N days
     }
 
 
@@ -242,6 +243,7 @@ class UpdateScheduleIn(BaseModel):
     update_frequency:    str = "daily"
     update_day_of_week:  int = 0
     update_day_of_month: int = 1
+    source_stale_days:   int = 90
 
 
 @router.post("/settings/update-schedule")
@@ -256,6 +258,8 @@ async def save_update_schedule(body: UpdateScheduleIn):
         raise HTTPException(status_code=400, detail="update_day_of_week must be 0–6")
     if not (1 <= body.update_day_of_month <= 28):
         raise HTTPException(status_code=400, detail="update_day_of_month must be 1–28")
+    if not (30 <= body.source_stale_days <= 365):
+        raise HTTPException(status_code=400, detail="source_stale_days must be 30–365")
 
     cfg = _read_cfg()
     cfg["update_hour"]         = body.update_hour
@@ -263,6 +267,7 @@ async def save_update_schedule(body: UpdateScheduleIn):
     cfg["update_frequency"]    = body.update_frequency
     cfg["update_day_of_week"]  = body.update_day_of_week
     cfg["update_day_of_month"] = body.update_day_of_month
+    cfg["source_stale_days"]   = body.source_stale_days
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
     return {"status": "saved"}

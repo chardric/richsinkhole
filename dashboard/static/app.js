@@ -542,17 +542,24 @@ async function loadSources() {
 
 function renderSources() {
   const el = document.getElementById("sources-list");
-  const urls = sourcesData.sources || [];
-  if (!urls.length) {
+  const defaults = new Set((sourcesData.default_sources || []).map(u => u.toLowerCase()));
+  const userUrls = sourcesData.sources || [];
+  const allUrls = [...(sourcesData.default_sources || []), ...userUrls];
+  if (!allUrls.length) {
     el.innerHTML = `<div class="text-muted small">No sources configured.</div>`;
     return;
   }
-  el.innerHTML = urls.map(url => `
-    <div class="d-flex align-items-center gap-2 mb-1">
+  el.innerHTML = allUrls.map(url => {
+    const isDefault = defaults.has(url.toLowerCase());
+    const removeBtn = isDefault
+      ? `<span class="badge bg-secondary py-0 px-1 flex-shrink-0" style="font-size:.6rem" title="Built-in source">default</span>`
+      : `<button class="btn btn-sm btn-outline-danger py-0 flex-shrink-0 btn-remove-source"
+          data-url="${escHtml(url)}">&#x2715;</button>`;
+    return `<div class="d-flex align-items-center gap-2 mb-1">
       <span class="font-monospace small text-truncate flex-grow-1" title="${escHtml(url)}">${escHtml(url)}</span>
-      <button class="btn btn-sm btn-outline-danger py-0 flex-shrink-0 btn-remove-source"
-        data-url="${escHtml(url)}">&#x2715;</button>
-    </div>`).join("");
+      ${removeBtn}
+    </div>`;
+  }).join("");
 
   el.querySelectorAll(".btn-remove-source").forEach(btn => {
     btn.addEventListener("click", async () => {
@@ -569,13 +576,47 @@ function renderSources() {
   });
 }
 
+let _updatePollTimer = null;
+
 async function triggerUpdate() {
   try {
     await api("POST", "/api/updater/run", {});
-    showToast("Update triggered — status refreshes in ~60s", "info");
+    showToast("Update triggered", "info");
+    document.getElementById("btn-update-now").disabled = true;
+    _startUpdatePoll();
   } catch (e) {
     showToast("Failed to trigger update: " + e.message, "danger");
   }
+}
+
+function _startUpdatePoll() {
+  const wrap = document.getElementById("update-progress-wrap");
+  wrap.classList.remove("d-none");
+  if (_updatePollTimer) clearInterval(_updatePollTimer);
+  _updatePollTimer = setInterval(_pollUpdateProgress, 2000);
+  // Also poll immediately after a short delay (updater needs ~1s to start)
+  setTimeout(_pollUpdateProgress, 1500);
+}
+
+async function _pollUpdateProgress() {
+  try {
+    const p = await api("GET", "/api/updater/progress");
+    const wrap = document.getElementById("update-progress-wrap");
+    if (!p.running) {
+      wrap.classList.add("d-none");
+      clearInterval(_updatePollTimer);
+      _updatePollTimer = null;
+      document.getElementById("btn-update-now").disabled = false;
+      loadUpdaterInfo();
+      return;
+    }
+    wrap.classList.remove("d-none");
+    const stages = { preparing: "Preparing...", fetching: "Fetching sources...", building: "Writing to database...", indexing: "Building indexes...", swapping: "Finalizing..." };
+    document.getElementById("update-progress-stage").textContent = stages[p.stage] || p.stage;
+    document.getElementById("update-progress-pct").textContent = (p.pct || 0) + "%";
+    document.getElementById("update-progress-bar").style.width = (p.pct || 0) + "%";
+    document.getElementById("update-progress-detail").textContent = p.detail || "";
+  } catch (_) {}
 }
 
 // ============================================================
@@ -760,6 +801,7 @@ async function loadUpdateSchedule() {
     document.getElementById("update-minute").value = data.update_minute;
     document.getElementById("update-dow").value    = data.update_day_of_week;
     document.getElementById("update-dom").value    = data.update_day_of_month;
+    document.getElementById("source-stale-days").value = data.source_stale_days ?? 90;
     _updateScheduleFreqUI(freq);
     document.getElementById("update-schedule-display").textContent = _scheduleDisplayText(data);
   } catch (e) {
@@ -2239,6 +2281,7 @@ function bindEvents() {
       update_frequency:    freq,
       update_day_of_week:  parseInt(document.getElementById("update-dow").value,    10),
       update_day_of_month: parseInt(document.getElementById("update-dom").value,    10),
+      source_stale_days:   parseInt(document.getElementById("source-stale-days").value, 10),
     };
     btn.disabled = true;
     try {

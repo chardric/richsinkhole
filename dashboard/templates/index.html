@@ -332,6 +332,16 @@
               <span class="text-muted small fw-semibold">AUTO-UPDATE STATUS</span>
               <button class="btn btn-sm btn-primary" id="btn-update-now">Update Now</button>
             </div>
+            <div id="update-progress-wrap" class="px-3 py-2 d-none" style="background:#161b22">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small fw-semibold" id="update-progress-stage">Preparing...</span>
+                <span class="small text-muted font-monospace" id="update-progress-pct">0%</span>
+              </div>
+              <div class="progress" style="height:6px;background:#30363d">
+                <div class="progress-bar bg-primary" id="update-progress-bar" style="width:0%;transition:width .3s"></div>
+              </div>
+              <div class="text-muted small mt-1" id="update-progress-detail"></div>
+            </div>
             <div class="card-body">
               <dl class="row small mb-0">
                 <dt class="col-5 text-muted">Schedule</dt>
@@ -1262,6 +1272,14 @@
                     <option value="55">:55</option>
                   </select>
                 </div>
+              </div>
+              <div class="d-flex align-items-center gap-2 mt-3">
+                <span class="text-muted small">Auto-disable inactive sources after</span>
+                <input type="number" class="form-control form-control-sm font-monospace" id="source-stale-days"
+                  value="90" min="30" max="365" style="width:5rem" title="Days without content change before a source is auto-disabled (30–365)">
+                <span class="text-muted small">days</span>
+              </div>
+              <div class="mt-3">
                 <button class="btn btn-primary btn-sm px-4" id="btn-save-update-schedule">Save</button>
               </div>
               <p class="text-muted small mt-3 mb-0">

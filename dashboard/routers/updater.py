@@ -5,6 +5,7 @@
 
 import json
 import re
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -12,6 +13,10 @@ import httpx
 import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+if "/app/updater" not in sys.path:
+    sys.path.insert(0, "/app/updater")
+from default_sources import DEFAULT_SOURCES
 
 STATUS_PATH = "/data/updater_status.json"
 FORCE_UPDATE_PATH = "/data/force_update"
@@ -46,9 +51,11 @@ async def get_updater_status():
 async def get_sources():
     try:
         with open(SOURCES_PATH) as f:
-            return yaml.safe_load(f) or {}
+            data = yaml.safe_load(f) or {}
     except FileNotFoundError:
         raise HTTPException(status_code=503, detail="sources.yml not available")
+    data["default_sources"] = DEFAULT_SOURCES
+    return data
 
 
 class SourcesIn(BaseModel):
@@ -174,6 +181,21 @@ async def save_sources(body: SourcesIn):
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
 
     return {"status": "saved"}
+
+
+PROGRESS_PATH = "/data/updater_progress.json"
+
+
+@router.get("/updater/progress")
+async def get_updater_progress():
+    path = Path(PROGRESS_PATH)
+    if not path.exists():
+        return {"running": False}
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {"running": False}
 
 
 @router.post("/updater/run")

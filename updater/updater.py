@@ -33,6 +33,8 @@ LAST_SUMMARY_PATH      = "/data/last_summary_date.txt"
 
 # Threat intel feeds: (url, format)
 # format: "hosts" = standard hosts-file, "threatfox_csv" = ThreatFox CSV export
+_source_failures: dict[str, int] = {}  # url → consecutive failure count
+
 THREAT_INTEL_FEEDS = [
     ("https://urlhaus.abuse.ch/downloads/hostfile/",        "hosts"),
     ("https://threatfox.abuse.ch/export/csv/recent/",       "threatfox_csv"),
@@ -183,12 +185,16 @@ def fetch_domains(url: str, whiteset: set[str]) -> list[str]:
     domains: list[str] = []
     for line in text.splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or line.startswith("!"):
             continue
-        parts = line.split()
-        # Hosts format: "0.0.0.0 domain.com" or "127.0.0.1 domain.com"
-        # Plain format: "domain.com"
-        candidate = (parts[1] if len(parts) >= 2 else parts[0]).lower().rstrip(".")
+        # AdBlock format: "||domain.com^"
+        if line.startswith("||") and line.endswith("^"):
+            candidate = line[2:-1].lower().strip()
+        else:
+            parts = line.split()
+            # Hosts format: "0.0.0.0 domain.com" or "127.0.0.1 domain.com"
+            # Plain format: "domain.com"
+            candidate = (parts[1] if len(parts) >= 2 else parts[0]).lower().rstrip(".")
         if candidate in _SKIP_HOSTS or candidate in whiteset:
             continue
         # Never block subdomains of protected parent domains (e.g. YouTube CDN)
@@ -215,8 +221,36 @@ def run_update() -> None:
         _write_status(0, 0, "config_error")
         return
 
-    urls: list[str] = cfg.get("sources", [])
+    from default_sources import DEFAULT_SOURCES
+    user_urls: list[str] = cfg.get("sources", [])
+    # Merge default + user sources, dedup, defaults first
+    seen = set()
+    urls = []
+    for u in DEFAULT_SOURCES + user_urls:
+        key = u.strip().lower()
+        if key not in seen:
+            seen.add(key)
+            urls.append(u)
     whiteset: set[str] = {d.lower() for d in cfg.get("whitelist", [])}
+
+    _write_progress("preparing", f"{len(urls)} sources", 0)
+
+    # Skip sources that have failed 3+ consecutive times
+    urls = [u for u in urls if _source_failures.get(u, 0) < 3]
+
+    # Skip sources disabled in DB (stale 90+ days or manually disabled)
+    try:
+        with sqlite3.connect(BLOCKLIST_DB, timeout=5) as conn:
+            disabled = {r[0] for r in conn.execute(
+                "SELECT url FROM blocklist_feeds WHERE enabled=0"
+            ).fetchall()}
+        if disabled:
+            before = len(urls)
+            urls = [u for u in urls if u not in disabled]
+            if len(urls) < before:
+                log.info("Skipped %d disabled source(s)", before - len(urls))
+    except Exception:
+        pass
 
     if not urls:
         log.warning("No source URLs configured")
@@ -230,15 +264,25 @@ def run_update() -> None:
     def _fetch_one(url: str) -> tuple[str, list[str]]:
         return url, fetch_domains(url, whiteset)
 
+    fetched_count = 0
+    total_sources = len(urls)
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {pool.submit(_fetch_one, u): u for u in urls}
         for future in as_completed(futures):
+            fetched_count += 1
+            pct = int(fetched_count / total_sources * 50)  # fetch = 0-50%
             try:
                 url, domains = future.result()
                 per_url[url] = domains
                 all_domains.update(domains)
+                _source_failures.pop(url, None)  # reset on success
+                _write_progress("fetching", f"{fetched_count}/{total_sources} sources ({len(all_domains):,} domains)", pct)
             except Exception as exc:
                 log.error("Fetch failed for %s: %s", futures[future], exc)
+                _source_failures[url] = _source_failures.get(url, 0) + 1
+                if _source_failures[url] >= 3:
+                    log.warning("Source disabled after 3 failures: %s", url)
+                _write_progress("fetching", f"{fetched_count}/{total_sources} sources", pct)
 
     t_fetch = time.monotonic()
     log.info("Fetched %d unique domains from %d sources in %.1fs",
@@ -248,6 +292,8 @@ def run_update() -> None:
         log.warning("No domains fetched from any source — skipping DB update")
         _write_status(0, 0, "no_domains")
         return
+
+    _write_progress("building", f"Writing {len(all_domains):,} domains to DB", 55)
 
     # ── Phase 2: Table-swap (Pi-hole gravity style) ──────────────────────
     # Build new table without index → bulk insert → add index → swap.
@@ -311,6 +357,7 @@ def run_update() -> None:
                              min(i + CHUNK, len(domain_list)), len(domain_list),
                              time.monotonic() - t_db)
 
+            _write_progress("indexing", "Building indexes", 80)
             log.info("DB swap: building indexes...")
             # Add unique index on fully populated table (single sort pass)
             conn.execute("DROP INDEX IF EXISTS idx_bdn_domain")
@@ -326,6 +373,7 @@ def run_update() -> None:
             conn.execute("DROP INDEX IF EXISTS idx_bdn_source")
             conn.execute("CREATE INDEX idx_bdn_source ON blocked_domains_new(source)")
 
+            _write_progress("swapping", "Swapping tables", 90)
             log.info("DB swap: renaming tables...")
             # Atomic swap
             conn.execute("DROP TABLE IF EXISTS blocked_domains_old")
@@ -340,16 +388,42 @@ def run_update() -> None:
                 "SELECT COUNT(*) FROM blocked_domains"
             ).fetchone()
 
-            # Update blocklist_feeds metadata for each built-in source URL
+            # Update blocklist_feeds metadata for each source URL
+            # Add last_changed column if missing (tracks when domain_count changed)
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(blocklist_feeds)")}
+            if "last_changed" not in cols:
+                conn.execute("ALTER TABLE blocklist_feeds ADD COLUMN last_changed TEXT")
+
             for url, domains in per_url.items():
+                count = len(domains)
+                existing = conn.execute(
+                    "SELECT domain_count FROM blocklist_feeds WHERE url=?", (url,)
+                ).fetchone()
+                changed = (existing is None or existing[0] != count)
                 conn.execute("""
-                    INSERT INTO blocklist_feeds (url, domain_count, last_synced, enabled, is_builtin)
-                    VALUES (?, ?, ?, 1, 1)
+                    INSERT INTO blocklist_feeds (url, domain_count, last_synced, enabled, is_builtin, last_changed)
+                    VALUES (?, ?, ?, 1, 1, ?)
                     ON CONFLICT(url) DO UPDATE SET
                         domain_count = excluded.domain_count,
                         last_synced  = excluded.last_synced,
-                        is_builtin   = 1
-                """, (url, len(domains), now))
+                        is_builtin   = 1,
+                        last_changed = CASE WHEN excluded.last_changed IS NOT NULL
+                                            THEN excluded.last_changed
+                                            ELSE blocklist_feeds.last_changed END
+                """, (url, count, now, now if changed else None))
+
+            # Auto-disable sources stale for N+ days (content unchanged)
+            stale_days = int(cfg.get("source_stale_days", 90))
+            stale = conn.execute("""
+                SELECT url FROM blocklist_feeds
+                WHERE last_changed IS NOT NULL
+                  AND last_changed < datetime('now', ? || ' days')
+                  AND enabled = 1
+            """, (f"-{stale_days}",)).fetchall()
+            for (stale_url,) in stale:
+                conn.execute("UPDATE blocklist_feeds SET enabled=0 WHERE url=?", (stale_url,))
+                log.warning("Auto-disabled stale source (unchanged 90+ days): %s", stale_url)
+
             conn.commit()
 
     except Exception as exc:
@@ -375,6 +449,9 @@ def run_update() -> None:
     notify_daily_summary(cfg)
 
 
+PROGRESS_PATH = "/data/updater_progress.json"
+
+
 def _write_status(added: int, total: int, status: str) -> None:
     data = {
         "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -385,8 +462,19 @@ def _write_status(added: int, total: int, status: str) -> None:
     try:
         with open(STATUS_PATH, "w") as f:
             json.dump(data, f)
+        # Clear progress when done
+        with open(PROGRESS_PATH, "w") as f:
+            json.dump({"running": False}, f)
     except Exception as exc:
         log.error("Failed to write status file: %s", exc)
+
+
+def _write_progress(stage: str, detail: str = "", pct: int = 0) -> None:
+    try:
+        with open(PROGRESS_PATH, "w") as f:
+            json.dump({"running": True, "stage": stage, "detail": detail, "pct": pct}, f)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +581,7 @@ def _write_threat_intel_status(added: int, total: int, status: str) -> None:
             json.dump(data, f)
     except Exception as exc:
         log.error("Failed to write threat intel status: %s", exc)
+
 
 
 def prune_query_log(retain_days: int = 30) -> None:
