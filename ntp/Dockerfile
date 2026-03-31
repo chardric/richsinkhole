@@ -7,4 +7,4 @@ COPY chrony.conf /etc/chrony/chrony.conf
 
 EXPOSE 123/udp
 
-CMD ["chronyd", "-d", "-f", "/etc/chrony/chrony.conf"]
+CMD ["sh", "-c", "rm -f /var/run/chrony/chronyd.pid && chronyd -d -f /etc/chrony/chrony.conf"]

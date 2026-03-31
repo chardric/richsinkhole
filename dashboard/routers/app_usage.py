@@ -103,9 +103,15 @@ async def device_app_usage(ip: str, range: str = Query("24h", pattern="^(24h|7d)
             last_session.append(ts)
 
     # Calculate estimated usage time per app
+    # Minimum 5 queries per app to count as real usage (filters out
+    # background prefetches, embedded widgets, and browser hints)
+    _MIN_QUERIES = 5
+
     result = []
     for app, sessions in app_sessions.items():
         total_queries = sum(len(s) for s in sessions)
+        if total_queries < _MIN_QUERIES:
+            continue  # likely a prefetch or embedded widget, not real usage
         session_count = len([s for s in sessions if s])
         # Estimate time: each session = (last_ts - first_ts) + 2 min baseline
         total_minutes = 0
