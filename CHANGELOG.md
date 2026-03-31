@@ -24,7 +24,12 @@ All notable changes to RichSinkhole are documented here.
 - **Quarantine/Guest profiles** in device profile dropdown — two new options alongside Normal/Strict/Passthrough
 - **Dark web events** visible in Security tab — new `darkweb_attempt` and `darkweb_access` event types from `.onion`/`.i2p` detection
 
+### Added
+- **NTP synced clients UI** — Settings tab > NTP Server > "Show Clients" button shows table of devices syncing with the sinkhole NTP (IP, label, device type, sync count, last sync with color-coded recency); Docker internal IPs filtered out
+
 ### Fixed
+- **JS syntax error broke entire dashboard** — escaped backtick in NTP clients template literal caused app.js parse failure; rewrote as string concatenation
+- **NTP clients parsing** — Docker exec stream header byte prepended to first IP (showed `0172.16.10.3`); fixed with regex IP extraction
 - **App usage false positives** — minimum 5 queries per app required to show in usage report; filters out browser prefetches and embedded widgets (e.g. Discord showing from 2 CDN queries)
 - **NTP server crash loop** — stale PID file from previous run prevented chronyd from starting; now cleaned on container start
 - **Device fingerprint accuracy overhaul** — removed false-positive Android signals (`android.clients.google.com`, `mtalk.google.com`) that Chrome on any OS queries; added truly OS-exclusive signals: Android GMS (`checkin.googleapis.com`, `play.googleapis.com`, `ota.googlezip.net`), Windows (`dns.msftncsi.com`, `prod.do.dsp.mp.microsoft.com`, `client.wns.windows.com`), Linux (`archive.ubuntu.com`, `api.snapcraft.io`, `packages.linuxmint.com`), Apple (`captive.apple.com`, `albert.apple.com`, `mesu.apple.com`), ChromeOS (`cros-omahaproxy.appspot.com`)

@@ -814,9 +814,15 @@
                 <div class="form-check form-switch mb-0 mt-1">
                   <input class="form-check-input" type="checkbox" id="ntp-enabled" role="switch" style="width:2.5em;height:1.25em">
                 </div>
-                <div>
-                  <div class="fw-semibold">NTP Server <span class="badge bg-secondary ms-1" style="font-size:.65rem;vertical-align:middle">port 123/UDP</span></div>
-                  <div class="text-muted small mt-1">Serves accurate time to all LAN devices. Syncs from <code>pool.ntp.org</code>, <code>time.cloudflare.com</code>, and <code>time.google.com</code>. Point your router or devices' NTP setting to this server's IP.</div>
+                <div class="flex-grow-1">
+                  <div class="fw-semibold">NTP Server <span class="badge bg-secondary ms-1" style="font-size:.65rem;vertical-align:middle">port 123/UDP</span>
+                    <button class="btn btn-sm btn-outline-secondary py-0 ms-2" id="btn-ntp-clients" style="font-size:.7rem">Show Clients</button>
+                  </div>
+                  <div class="text-muted small mt-1">Serves accurate time to all LAN devices. Syncs from <code>pool.ntp.org</code>, <code>time.cloudflare.com</code>, and <code>time.google.com</code>.</div>
+                  <div id="ntp-clients-wrap" class="d-none mt-2">
+                    <div class="text-muted small mb-1 fw-semibold">Synced Devices</div>
+                    <div id="ntp-clients-list" class="small"></div>
+                  </div>
                 </div>
               </div>
 

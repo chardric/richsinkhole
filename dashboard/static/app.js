@@ -2401,6 +2401,51 @@ function bindEvents() {
     }
   });
 
+  // NTP clients toggle
+  document.getElementById("btn-ntp-clients").addEventListener("click", async () => {
+    const wrap = document.getElementById("ntp-clients-wrap");
+    const list = document.getElementById("ntp-clients-list");
+    const btn = document.getElementById("btn-ntp-clients");
+    if (!wrap.classList.contains("d-none")) {
+      wrap.classList.add("d-none");
+      btn.textContent = "Show Clients";
+      return;
+    }
+    btn.disabled = true;
+    list.innerHTML = '<span class="text-muted">Loading...</span>';
+    wrap.classList.remove("d-none");
+    try {
+      const data = await api("GET", "/api/ntp/clients");
+      if (!data.clients?.length) {
+        list.innerHTML = '<span class="text-muted">No clients syncing yet.</span>';
+        btn.textContent = "Hide Clients";
+        return;
+      }
+      const rows = data.clients.map(c => {
+        const name = c.label || c.device_type || "";
+        const ago = c.last_sync_ago >= 0
+          ? c.last_sync_ago < 60 ? c.last_sync_ago + "s ago"
+          : c.last_sync_ago < 3600 ? Math.round(c.last_sync_ago / 60) + "m ago"
+          : Math.round(c.last_sync_ago / 3600) + "h ago"
+          : "—";
+        const color = c.last_sync_ago >= 0 && c.last_sync_ago < 300 ? "text-success" : c.last_sync_ago < 3600 ? "text-warning" : "text-muted";
+        return "<tr><td>" + escHtml(name || "—") + "</td>"
+          + '<td class="font-monospace">' + escHtml(c.ip) + "</td>"
+          + '<td class="text-end">' + c.ntp_packets + "</td>"
+          + '<td class="text-end ' + color + '">' + ago + "</td></tr>";
+      }).join("");
+      list.innerHTML = '<table class="table table-sm table-borderless mb-0 small">'
+        + '<thead><tr class="text-muted" style="font-size:.7rem">'
+        + "<th>Device</th><th>IP</th><th class='text-end'>Syncs</th><th class='text-end'>Last Sync</th>"
+        + "</tr></thead><tbody>" + rows + "</tbody></table>";
+      btn.textContent = "Hide Clients";
+    } catch (e) {
+      list.innerHTML = '<span class="text-danger small">Failed to load NTP clients.</span>';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // Service restart buttons
   document.querySelectorAll(".svc-restart-btn").forEach(btn => {
     btn.addEventListener("click", () => restartService(btn.dataset.service, btn));
