@@ -1082,6 +1082,8 @@ async function loadDevices() {
         style="font-size:.7rem;width:auto;min-width:100px;background:#161b22;border-color:#30363d">
         <option value="normal"      ${d.profile === "normal"      ? "selected" : ""}>Normal</option>
         <option value="strict"      ${d.profile === "strict"      ? "selected" : ""}>Strict</option>
+        <option value="guest"       ${d.profile === "guest"       ? "selected" : ""}>Guest</option>
+        <option value="quarantine"  ${d.profile === "quarantine"  ? "selected" : ""}>Quarantine</option>
         <option value="passthrough" ${d.profile === "passthrough" ? "selected" : ""}>Passthrough</option>
       </select>`;
       const parentalBtn = d.parental_enabled
@@ -1252,7 +1254,7 @@ async function loadSchedules() {
         <td class="small font-monospace">${escHtml(r.start_time)} – ${escHtml(r.end_time)}</td>
         <td>${statusBadge}</td>
         <td class="pe-3 text-end">
-          <button class="btn btn-sm btn-outline-secondary py-0 me-1 btn-edit-schedule" data-id="${r.id}" data-label="${escHtml(r.label)}" data-ip="${escHtml(r.client_ip)}" data-days="${escHtml(r.days)}" data-start="${escHtml(r.start_time)}" data-end="${escHtml(r.end_time)}" data-enabled="${r.enabled}">Edit</button>
+          <button class="btn btn-sm btn-outline-secondary py-0 me-1 btn-edit-schedule" data-id="${r.id}" data-label="${escHtml(r.label)}" data-ip="${escHtml(r.client_ip)}" data-days="${escHtml(r.days)}" data-start="${escHtml(r.start_time)}" data-end="${escHtml(r.end_time)}" data-enabled="${r.enabled}" data-grace="${r.grace_minutes || 0}">Edit</button>
           <button class="btn btn-sm btn-outline-danger py-0 btn-del-schedule" data-id="${r.id}">Delete</button>
         </td>
       </tr>`;
@@ -1268,13 +1270,14 @@ async function loadSchedules() {
 
     tbody.querySelectorAll(".btn-edit-schedule").forEach(btn => {
       btn.addEventListener("click", () => openScheduleModal({
-        id:      btn.dataset.id,
-        label:   btn.dataset.label,
-        ip:      btn.dataset.ip,
-        days:    btn.dataset.days,
-        start:   btn.dataset.start,
-        end:     btn.dataset.end,
-        enabled: btn.dataset.enabled === "true",
+        id:            btn.dataset.id,
+        label:         btn.dataset.label,
+        ip:            btn.dataset.ip,
+        days:          btn.dataset.days,
+        start:         btn.dataset.start,
+        end:           btn.dataset.end,
+        enabled:       btn.dataset.enabled === "true",
+        grace_minutes: parseInt(btn.dataset.grace || "0", 10),
       }));
     });
   } catch (_) {
@@ -1330,6 +1333,10 @@ function openScheduleModal(rule = {}) {
               <input type="time" class="form-control form-control-sm" id="sched-end" value="${escHtml(rule.end || "07:00")}">
             </div>
           </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Grace Period <span class="text-muted fw-normal">(minutes of warning before block)</span></label>
+            <input type="number" class="form-control form-control-sm" id="sched-grace" value="${rule.grace_minutes || 0}" min="0" max="60" style="width:6rem">
+          </div>
           <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" id="sched-enabled" ${rule.enabled !== false ? "checked" : ""}>
             <label class="form-check-label small" for="sched-enabled">Enabled</label>
@@ -1352,12 +1359,13 @@ function openScheduleModal(rule = {}) {
     const selectedDays = Array.from(document.querySelectorAll("[id^='sday-']:checked")).map(c => c.value).join("");
     if (!selectedDays) { showToast("Select at least one day", "warning"); return; }
     const body = {
-      label:      document.getElementById("sched-label").value.trim(),
-      client_ip:  document.getElementById("sched-ip").value.trim() || "*",
-      days:       selectedDays,
-      start_time: document.getElementById("sched-start").value,
-      end_time:   document.getElementById("sched-end").value,
-      enabled:    document.getElementById("sched-enabled").checked,
+      label:         document.getElementById("sched-label").value.trim(),
+      client_ip:     document.getElementById("sched-ip").value.trim() || "*",
+      days:          selectedDays,
+      start_time:    document.getElementById("sched-start").value,
+      end_time:      document.getElementById("sched-end").value,
+      enabled:       document.getElementById("sched-enabled").checked,
+      grace_minutes: parseInt(document.getElementById("sched-grace").value, 10) || 0,
     };
     try {
       if (isEdit) {
@@ -1568,6 +1576,33 @@ function _dsDomainList(items, badgeCls) {
     </div>`).join("");
 }
 
+async function _loadAppUsage(ip) {
+  const el = document.getElementById("ds-tab-apps");
+  if (!el) return;
+  try {
+    const data = await api("GET", `/api/app-usage/${encodeURIComponent(ip)}?range=24h`);
+    if (!data.apps?.length) {
+      el.innerHTML = '<div class="text-muted small py-3 text-center">No app activity in the last 24 hours.</div>';
+      return;
+    }
+    el.innerHTML = data.apps.map(a => {
+      const hrs = Math.floor(a.estimated_minutes / 60);
+      const mins = Math.round(a.estimated_minutes % 60);
+      const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+      return `<div class="d-flex align-items-center gap-2 mb-2">
+        <span class="fw-semibold small" style="width:100px">${escHtml(a.app)}</span>
+        <div class="progress flex-grow-1" style="height:6px">
+          <div class="progress-bar bg-info" style="width:${Math.min(100, Math.round(a.estimated_minutes / (data.apps[0].estimated_minutes || 1) * 100))}%"></div>
+        </div>
+        <span class="text-muted small" style="width:50px;text-align:right">${timeStr}</span>
+        <span class="text-muted small" style="width:50px;text-align:right">${a.queries.toLocaleString()}q</span>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<div class="text-muted small py-3 text-center">Failed to load app usage.</div>';
+  }
+}
+
 async function openDeviceStats(ip) {
   document.getElementById("device-stats-modal")?.remove();
   const modal = document.createElement("div");
@@ -1639,6 +1674,16 @@ async function openDeviceStats(ip) {
           <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em">Block Rate</div>
         </div>
       </div>
+      <div class="row g-2 mb-3">
+        <div class="col-6 text-center">
+          <div class="fw-semibold text-success">${(d.bandwidth_saved_mb || 0).toLocaleString()} MB</div>
+          <div class="text-muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em">Bandwidth Saved</div>
+        </div>
+        <div class="col-6 text-center">
+          <div class="fw-semibold text-info">${(d.bandwidth_used_mb || 0).toLocaleString()} MB</div>
+          <div class="text-muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em">Est. Bandwidth Used</div>
+        </div>
+      </div>
 
       <!-- Activity bar -->
       <div class="mb-3" title="Forwarded ${fwdPct}% · Blocked ${blockedPct}% · Other ${otherPct}%">
@@ -1658,6 +1703,7 @@ async function openDeviceStats(ip) {
       <ul class="nav nav-tabs nav-tabs-sm border-secondary mb-3" id="ds-tabs">
         <li class="nav-item"><button class="nav-link active py-1 px-3 small" data-ds-tab="blocked">Top Blocked</button></li>
         <li class="nav-item"><button class="nav-link py-1 px-3 small" data-ds-tab="forwarded">Top Forwarded</button></li>
+        <li class="nav-item"><button class="nav-link py-1 px-3 small" data-ds-tab="apps">App Usage</button></li>
         <li class="nav-item"><button class="nav-link py-1 px-3 small" data-ds-tab="recent">Recent Queries</button></li>
       </ul>
 
@@ -1666,6 +1712,9 @@ async function openDeviceStats(ip) {
       </div>
       <div id="ds-tab-forwarded" style="max-height:220px;overflow-y:auto;display:none">
         ${_dsDomainList(d.top_forwarded_domains, "bg-success")}
+      </div>
+      <div id="ds-tab-apps" style="max-height:220px;overflow-y:auto;display:none">
+        <div class="text-center text-muted py-3 small">Loading app usage...</div>
       </div>
       <div id="ds-tab-recent" style="max-height:220px;overflow-y:auto;display:none">
         <table class="table table-sm table-borderless mb-0">
@@ -1678,9 +1727,14 @@ async function openDeviceStats(ip) {
       btn.addEventListener("click", () => {
         modal.querySelectorAll("[data-ds-tab]").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
-        ["blocked","forwarded","recent"].forEach(t => {
+        ["blocked","forwarded","apps","recent"].forEach(t => {
           document.getElementById(`ds-tab-${t}`).style.display = t === btn.dataset.dsTab ? "" : "none";
         });
+        // Lazy-load app usage on first click
+        if (btn.dataset.dsTab === "apps" && !btn._loaded) {
+          btn._loaded = true;
+          _loadAppUsage(ip);
+        }
       });
     });
 
@@ -2271,6 +2325,36 @@ function bindEvents() {
     loadServiceStatus();
     loadWhitelist();
     loadUpdateSchedule();
+  });
+
+  document.getElementById("btn-run-speedtest").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-run-speedtest");
+    const status = document.getElementById("speedtest-status");
+    btn.disabled = true;
+    status.textContent = "Testing...";
+    try {
+      const data = await api("GET", "/api/speedtest");
+      const h = data.historical;
+      document.getElementById("st-avg").textContent = h.avg_ms ?? "--";
+      document.getElementById("st-p50").textContent = h.p50_ms ?? "--";
+      document.getElementById("st-p95").textContent = h.p95_ms ?? "--";
+      document.getElementById("st-max").textContent = h.max_ms ?? "--";
+      document.getElementById("speedtest-avg").textContent = h.avg_ms ? `Avg ${h.avg_ms}ms` : "";
+      const probesEl = document.getElementById("speedtest-probes");
+      probesEl.innerHTML = data.live.probes.map(p => {
+        const color = p.latency_ms === null ? "text-danger" : p.latency_ms < 50 ? "text-success" : p.latency_ms < 150 ? "text-warning" : "text-danger";
+        return `<div class="d-flex justify-content-between small mb-1">
+          <span class="font-monospace">${escHtml(p.domain)}</span>
+          <span class="${color} fw-semibold">${p.latency_ms !== null ? p.latency_ms + " ms" : "timeout"}</span>
+        </div>`;
+      }).join("");
+      if (data.live.avg_ms) probesEl.innerHTML += `<div class="text-muted small mt-2 fw-semibold">Average: ${data.live.avg_ms} ms</div>`;
+      status.textContent = "";
+    } catch (e) {
+      status.textContent = "Failed";
+    } finally {
+      btn.disabled = false;
+    }
   });
   document.getElementById("btn-save-update-schedule").addEventListener("click", async () => {
     const btn  = document.getElementById("btn-save-update-schedule");

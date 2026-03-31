@@ -1112,6 +1112,42 @@
 
         <!-- Row 4: Service Controls -->
         <div class="col-12">
+          <!-- DNS Speed Test -->
+          <div class="card mb-3">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#speedtest-collapse">
+              DNS SPEED TEST
+              <span class="text-muted small" id="speedtest-avg" style="font-size:.75rem"></span>
+            </div>
+            <div class="collapse" id="speedtest-collapse">
+            <div class="card-body">
+              <div class="row g-3 mb-3" id="speedtest-historical">
+                <div class="col text-center">
+                  <div class="fw-bold text-info" id="st-avg">--</div>
+                  <div class="text-muted" style="font-size:.68rem">Avg (ms)</div>
+                </div>
+                <div class="col text-center">
+                  <div class="fw-bold text-success" id="st-p50">--</div>
+                  <div class="text-muted" style="font-size:.68rem">p50 (ms)</div>
+                </div>
+                <div class="col text-center">
+                  <div class="fw-bold text-warning" id="st-p95">--</div>
+                  <div class="text-muted" style="font-size:.68rem">p95 (ms)</div>
+                </div>
+                <div class="col text-center">
+                  <div class="fw-bold text-danger" id="st-max">--</div>
+                  <div class="text-muted" style="font-size:.68rem">Max (ms)</div>
+                </div>
+              </div>
+              <div class="text-muted small mb-2">Live Probes</div>
+              <div id="speedtest-probes" class="mb-3">
+                <div class="text-muted small">Click Run to test DNS latency</div>
+              </div>
+              <button class="btn btn-sm btn-primary" id="btn-run-speedtest">Run Speed Test</button>
+              <span class="text-muted small ms-2" id="speedtest-status"></span>
+            </div>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#services-collapse">
               SERVICE CONTROLS
