@@ -58,7 +58,8 @@ DEFAULT_BLOCKLIST = "/dns/blocklists/default.txt"
 # DNS response cache  (LRU, TTL-respecting, thread-safe)
 # ---------------------------------------------------------------------------
 
-_CACHE_MAX = 5000
+_CACHE_MAX = 15000
+_CACHE_MIN_TTL = 300   # enforce minimum 5-minute cache for all DNS responses
 _dns_cache: OrderedDict = OrderedDict()   # (domain, qtype) → (packed_bytes, expiry, upstream)
 _cache_lock = threading.Lock()
 
@@ -83,14 +84,16 @@ def _cache_get(domain: str, qtype: int, request_id: int):
 
 
 def _cache_put(domain: str, qtype: int, reply, upstream: str) -> None:
-    """Cache a successful reply using the minimum TTL from its answer records."""
+    """Cache a successful reply. Enforces a minimum TTL to reduce upstream queries."""
     if not reply.rr:
         return
     min_ttl = min((rr.ttl for rr in reply.rr), default=0)
     if min_ttl <= 0:
         return
+    # Enforce minimum cache TTL — CDNs often return 60s which causes excessive re-queries
+    ttl = max(min_ttl, _CACHE_MIN_TTL)
     packed = reply.pack()
-    expiry = time.monotonic() + min_ttl
+    expiry = time.monotonic() + ttl
     with _cache_lock:
         if key := (domain, qtype) in _dns_cache:
             _dns_cache.move_to_end((domain, qtype))

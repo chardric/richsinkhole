@@ -6,6 +6,9 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-01
 
+### Improved
+- **DNS caching** — sinkhole cache increased from 5k to 15k entries; minimum TTL enforced at 300s (5 min) to reduce re-queries for low-TTL CDN domains; Unbound serve-expired-ttl raised to 24h with 1.8s client timeout for instant stale responses; freed 96MB RAM on Pi by reducing Unbound cache sizes
+
 ### Fixed
 - **YouTube thumbnails blocked** — `i.ytimg.com` was a stale blocklist entry; added YouTube CDN domains (`i.ytimg.com`, `i1.ytimg.com`, `s.ytimg.com`, `yt3.ggpht.com`, `s.youtube.com`) to permanent allowlist
 - **Microsoft Teams blocked** — CNAME cloaking detection false positive: `config.edge.skype.com` CNAME'd to `*.trafficmanager.net` which was in blocklist feeds; added Teams/Skype/Office essential domains to allowlist and `trafficmanager.net`
