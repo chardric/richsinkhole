@@ -35,6 +35,7 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **IoT quarantine** — new device profile that allows only essential DNS (captive portal, NTP, OCSP); auto-quarantine for new devices (opt-in)
 - **Guest mode** — strict blocking profile for temporary/unknown devices
 - **Dark web monitoring** — detects `.onion`/`.i2p` resolution attempts and known Tor infrastructure; logs security events
+- **DNS-over-HTTPS bypass detection** — blocks devices from resolving known DoH/DoT providers (30+ domains); prevents encrypted DNS bypass of the sinkhole; configurable modes: block, log, or off
 - **DNS speed test** — historical latency stats (avg/p50/p95) and live probes against well-known domains
 
 ### Parental Controls

@@ -1311,6 +1311,72 @@ def _check_darkweb(client_ip: str, domain: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# DNS-over-HTTPS / DNS-over-TLS bypass detection
+# Detects devices trying to use external encrypted DNS to bypass the sinkhole.
+# These are blocked and logged as security events.
+# ---------------------------------------------------------------------------
+
+_DOH_DOT_DOMAINS = frozenset({
+    # Google DoH/DoT
+    "dns.google", "dns.google.com", "dns64.dns.google",
+    "8888.google",
+    # Cloudflare DoH/DoT
+    "cloudflare-dns.com", "one.one.one.one",
+    "1dot1dot1dot1.cloudflare-dns.com",
+    "dns.cloudflare.com",
+    # Quad9 DoH/DoT
+    "dns.quad9.net", "dns9.quad9.net", "dns10.quad9.net",
+    "dns11.quad9.net",
+    # Mozilla/Firefox DoH (Trusted Recursive Resolver)
+    "mozilla.cloudflare-dns.com",
+    "use-application-dns.net",  # Firefox canary domain — if blocked, Firefox disables DoH
+    # NextDNS
+    "dns.nextdns.io",
+    # AdGuard DoH
+    "dns.adguard.com", "dns-family.adguard.com",
+    "dns-unfiltered.adguard.com",
+    # Mullvad DoH
+    "dns.mullvad.net", "adblock.dns.mullvad.net",
+    # OpenDNS / Cisco
+    "doh.opendns.com", "dns.opendns.com",
+    # Comodo / Neustar
+    "doh.cleanbrowsing.org", "dns.cleanbrowsing.org",
+    # Other common DoH providers
+    "doh.applied-privacy.net",
+    "doh.dns.sb", "dns.sb",
+    "dns.twnic.tw",
+    "ordns.he.net",
+    "dns.switch.ch",
+})
+
+# Config key to control behavior: "block" (default), "log", or "off"
+_DOH_MODE_KEY = "doh_bypass_mode"
+
+
+def _check_doh_bypass(client_ip: str, domain: str, cfg: dict) -> bool:
+    """Detect and optionally block DNS-over-HTTPS/DoT bypass attempts.
+    Returns True if the query should be blocked."""
+    mode = cfg.get(_DOH_MODE_KEY, "block")
+    if mode == "off":
+        return False
+
+    matched = False
+    for dd in _DOH_DOT_DOMAINS:
+        if domain == dd or domain.endswith("." + dd):
+            matched = True
+            break
+    if not matched:
+        return False
+
+    _log_security_event(client_ip, domain, "doh_bypass",
+                        f"DNS bypass attempt via {domain}")
+
+    if mode == "block":
+        return True  # caller should block the query
+    return False  # log-only mode
+
+
+# ---------------------------------------------------------------------------
 # Custom local DNS records (A / CNAME overrides)
 # ---------------------------------------------------------------------------
 
@@ -1705,6 +1771,14 @@ class SinkholeResolver(BaseResolver):
         # 3a. Strict profile: extra keyword-based blocking for tracking/analytics domains
         if not passthrough and profile in ("strict", "guest") and _is_strict_blocked(domain):
             self.logger.info("STRICT   %s -> 0.0.0.0  (client=%s)", domain, client_ip)
+            log_query(client_ip, domain, qtype_str, "blocked")
+            _rate_uncount(client_ip)
+            _burst_uncount(client_ip)
+            return self._redirect_response(request, "0.0.0.0")
+
+        # 3c. DNS-over-HTTPS / DNS-over-TLS bypass detection (skipped for passthrough)
+        if not passthrough and _check_doh_bypass(client_ip, domain, cfg):
+            self.logger.warning("DOH-BYPASS %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
             _rate_uncount(client_ip)
             _burst_uncount(client_ip)

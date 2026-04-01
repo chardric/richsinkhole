@@ -6,6 +6,9 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-01
 
+### Added
+- **DNS-over-HTTPS bypass detection** — blocks devices from resolving known DoH/DoT providers (dns.google, cloudflare-dns.com, dns.quad9.net, dns.nextdns.io, dns.adguard.com, and 25+ more); prevents malware and browsers from bypassing the sinkhole via encrypted DNS. Three modes: `block` (default), `log` (monitor only), `off`. Configurable via `doh_bypass_mode` in config. Logged as `doh_bypass` security events. Includes Firefox canary domain (`use-application-dns.net`) which disables Firefox's built-in DoH when blocked.
+
 ### Improved
 - **DNS caching** — sinkhole cache increased from 5k to 15k entries; minimum TTL enforced at 300s (5 min) to reduce re-queries for low-TTL CDN domains; Unbound serve-expired-ttl raised to 24h with 1.8s client timeout for instant stale responses; freed 96MB RAM on Pi by reducing Unbound cache sizes
 
