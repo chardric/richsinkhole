@@ -4,6 +4,16 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-01
+
+### Fixed
+- **YouTube thumbnails blocked** — `i.ytimg.com` was a stale blocklist entry; added YouTube CDN domains (`i.ytimg.com`, `i1.ytimg.com`, `s.ytimg.com`, `yt3.ggpht.com`, `s.youtube.com`) to permanent allowlist
+- **Microsoft Teams blocked** — CNAME cloaking detection false positive: `config.edge.skype.com` CNAME'd to `*.trafficmanager.net` which was in blocklist feeds; added Teams/Skype/Office essential domains to allowlist and `trafficmanager.net`
+- **Teams telemetry blocked** — parent domain `data.microsoft.com` (custom entry) caught `teams.events.data.microsoft.com` via parent matching; added to allowlist
+- **CNAME cloaking bypass for allowed domains** — CNAME cloaking check now skips if the original domain is in the allowlist, preventing false positives where allowed domains CNAME to blocked infrastructure (e.g. Azure Traffic Manager, Akamai CDN)
+
+---
+
 ## 2026-03-31
 
 ### Added

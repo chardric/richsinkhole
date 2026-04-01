@@ -1768,7 +1768,8 @@ class SinkholeResolver(BaseResolver):
                             return rb_reply
 
             # CNAME Cloaking detection: block if CNAME chain leads to a blocked domain
-            if not passthrough:
+            # Skip if the original domain is explicitly allowlisted
+            if not passthrough and not blocker.is_allowed(domain):
                 for rr in reply.rr:
                     if rr.rtype == QTYPE.CNAME:
                         cname_target = str(rr.rdata).rstrip(".")
