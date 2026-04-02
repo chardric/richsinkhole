@@ -4,19 +4,14 @@ A self-hosted DNS sinkhole and ad blocker for your home network. Blocks ads, tra
 
 ## Features
 
-**DNS Blocking** — 1M+ domains blocked out of the box from 9 curated feeds. Custom blocklist, allowlist, and service toggles (Social Media, Streaming, Gaming, etc.). Auto-syncing on a configurable schedule with real-time progress.
-
-**Security** — DNS rebinding shield, DGA detection, tunneling detection, typosquat protection, rate limiting, redirect chain detection, DoH bypass detection, GeoIP country blocking (default: China), spyware/surveillance detection, and dark web monitoring.
-
-**Parental Controls** — Per-device blocking profiles (Normal, Strict, Guest, Quarantine, Passthrough). Screen time budgets, bedtime schedules with grace periods, app usage tracking for 18 apps, and family activity digest emails.
-
-**YouTube Ad Blocking** — Transparent HTTPS proxy strips pre/post-roll ads via SNI routing. One-time CA cert install per device; devices without the cert are unaffected.
-
-**Privacy** — Per-device privacy report with 130+ company mappings. GeoIP blocks Chinese telemetry from IoT devices. Spyware domains blocked unconditionally for all devices.
-
-**Network** — Captive portal, reverse proxy manager (`.lan` hostnames), DNS-over-HTTPS endpoint, NTP server, and HTTPS dashboard.
-
-**Dashboard & Apps** — Dark-themed web dashboard with real-time query log, stats, heatmap, network score, and device fingerprinting. Native apps for Linux (AppImage/DEB), Windows (NSIS), and Android (APK).
+- **DNS blocking** — 1M+ domains blocked from 9 curated feeds; custom blocklist, allowlist, and service toggles (Social Media, Streaming, Gaming, etc.)
+- **Security** — DNS rebinding shield, DGA detection, tunneling detection, typosquat protection, DoH bypass detection, GeoIP country blocking, spyware detection
+- **Parental controls** — per-device profiles (Normal, Strict, Guest, Quarantine, Passthrough); screen time budgets, bedtime schedules, app usage tracking, family activity digest emails
+- **YouTube ad blocking** — transparent HTTPS proxy strips pre/post-roll ads via SNI routing
+- **Privacy** — per-device privacy report with 130+ company mappings; GeoIP blocks Chinese telemetry from IoT devices
+- **Network** — captive portal, reverse proxy manager (`.lan` hostnames), DNS-over-HTTPS endpoint, NTP server
+- **Dashboard** — dark-themed web UI with real-time query log, stats, heatmap, network score, and device fingerprinting
+- **Native apps** — Linux (AppImage/DEB), Windows (NSIS), Android (APK)
 
 ## Prerequisites
 
@@ -24,7 +19,7 @@ A self-hosted DNS sinkhole and ad blocker for your home network. Blocks ads, tra
 - Docker Engine 24+ and Docker Compose v2+
 - A static LAN IP address
 
-## Quick Start
+## Installation
 
 ```bash
 git clone https://github.com/chardric/richsinkhole.git
@@ -36,53 +31,23 @@ cp .env.example .env
 
 Point your router's primary DNS to the `HOST_IP`. Open the dashboard at `http://<HOST_IP>/richsinkhole/`.
 
-## Configuration
+## Usage
 
-Edit `.env` for basic settings:
+1. **Dashboard** — view real-time DNS queries, blocked domains, and network statistics
+2. **Settings** — configure blocklists, allowlists, service toggles, and sync schedule
+3. **Parental Controls** — create per-device profiles with screen time and bedtime rules
+4. **Native Apps** — build from `apps/` directory: `npm install && npm run build`
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOST_IP` | *(required)* | LAN IP of the host machine |
-| `HTTP_PORT` | `80` | Port for nginx |
-| `TZ` | `Asia/Manila` | Timezone |
-
-Everything else is configurable from the dashboard (Settings tab).
-
-## Native Apps
-
-Build from the `apps/` directory:
-
-```bash
-cd apps && npm install && npm run build
-./build-linux.sh     # AppImage + DEB
-./build-windows.sh   # NSIS installer
-./build-android.sh   # APK
-```
-
-Installers are output to `installer/linux/`, `installer/windows/`, and `installer/mobile/`.
-
-## Deploying to Raspberry Pi
-
-```bash
-# One-time setup for cross-compilation
-docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-docker buildx create --name multiarch --driver docker-container --use
-
-# Deploy
-./deploy.sh              # all services
-./deploy.sh sinkhole     # single service
-```
-
-## Backup & Restore
+### Backup & Restore
 
 ```bash
 ./backup.sh              # saves to ./backups/
 ./restore.sh ./backups/richsinkhole-2026-03-09.tar.gz
 ```
 
-## Tech Stack
+## License
 
-Python, FastAPI, dnslib, Unbound, chrony, nginx, Docker Compose, SQLite, React + TypeScript (native apps), Electron, Capacitor.
+Licensed under the [Apache License 2.0](LICENSE).
 
 ---
 
