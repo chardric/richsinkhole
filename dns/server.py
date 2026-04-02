@@ -501,7 +501,7 @@ def _auto_block_writer() -> None:
         try:
             with sqlite3.connect(BLOCKLIST_DB, timeout=30) as conn:
                 conn.executemany(
-                    "INSERT OR IGNORE INTO blocked_domains (domain) VALUES (?)",
+                    "INSERT OR IGNORE INTO blocked_domains (domain, source) VALUES (?, 'auto')",
                     [(d,) for d in batch],
                 )
                 conn.commit()
@@ -1844,24 +1844,23 @@ class SinkholeResolver(BaseResolver):
                             rb_reply.header.rcode = 3  # NXDOMAIN
                             return rb_reply
 
-            # CNAME Cloaking detection: block if CNAME chain leads to a blocked domain
-            # Skip if the original domain is explicitly allowlisted
+            # CNAME Cloaking detection: log when CNAME chain leads to a blocked domain.
+            # Log-only — blocking here caused too many false positives (GCash -> adzerk,
+            # Maya -> hubspot, Teams -> trafficmanager). Legitimate apps frequently
+            # CNAME to shared CDN/ad/marketing infrastructure.
             if not passthrough and not blocker.is_allowed(domain):
                 for rr in reply.rr:
                     if rr.rtype == QTYPE.CNAME:
                         cname_target = str(rr.rdata).rstrip(".")
                         if blocker.is_blocked(cname_target):
-                            self.logger.warning(
-                                "CNAME-CLOAK %s -> %s BLOCKED (client=%s)",
+                            self.logger.info(
+                                "CNAME-CLOAK %s -> %s (logged, not blocked)  (client=%s)",
                                 domain, cname_target, client_ip,
                             )
                             _log_security_event(
                                 client_ip, domain, "cname_cloaking",
                                 f"CNAME chain: {domain} → {cname_target}",
                             )
-                            log_query(client_ip, domain, qtype_str, "blocked",
-                                      upstream=upstream, response_ms=elapsed_ms)
-                            return self._redirect_response(request, "0.0.0.0")
 
             _cache_put(domain, request.q.qtype, reply, upstream)
             _check_auto_block(domain)
