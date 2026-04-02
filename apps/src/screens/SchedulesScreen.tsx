@@ -9,36 +9,25 @@ import { useToast } from '../context/ToastContext'
 
 interface Schedule {
   id: number
-  name: string
+  label: string
+  client_ip: string
   start_time: string
   end_time: string
-  days: string
-  target_profile: string
+  days: string         // digit string: "0123456"
+  days_label: string
   enabled: boolean
+  grace_minutes: number
 }
 
-const ALL_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
-const DAY_LABELS: Record<string, string> = {
-  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun',
-}
-
-const PROFILE_META: Record<string, { label: string; cls: string }> = {
-  block:   { label: 'Block All', cls: 'bg-red-900/50 text-red-300' },
-  bedtime: { label: 'Bedtime',   cls: 'bg-purple-900/50 text-purple-300' },
-  strict:  { label: 'Strict',    cls: 'bg-orange-900/50 text-orange-300' },
-}
-
-function profileBadge(profile: string) {
-  const meta = PROFILE_META[profile] || { label: profile, cls: 'bg-[#21262d] text-muted' }
-  return <span className={`pill ${meta.cls}`}>{meta.label}</span>
-}
+const DAY_DIGITS = ['0', '1', '2', '3', '4', '5', '6'] as const
+const DAY_NAMES  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
 function formatDays(days: string): string {
-  const list = days.split(',').map(d => d.trim()).filter(Boolean)
-  if (list.length === 7) return 'Every day'
-  if (list.length === 5 && !list.includes('sat') && !list.includes('sun')) return 'Weekdays'
-  if (list.length === 2 && list.includes('sat') && list.includes('sun')) return 'Weekends'
-  return list.map(d => DAY_LABELS[d] || d).join(', ')
+  // days is a digit string like "0123456"
+  if (days.length === 7) return 'Every day'
+  if (days === '01234') return 'Weekdays'
+  if (days === '56') return 'Weekends'
+  return days.split('').map(d => DAY_NAMES[parseInt(d)] || d).join(', ')
 }
 
 // ── Toggle component ──────────────────────────────────────────────────────────
@@ -72,14 +61,15 @@ function ScheduleModal({
   const { showToast } = useToast()
   const isEdit = schedule !== null
 
-  const [name,          setName]          = useState(schedule?.name || '')
+  const [label,         setLabel]         = useState(schedule?.label || '')
+  const [clientIp,      setClientIp]      = useState(schedule?.client_ip || '*')
   const [startTime,     setStartTime]     = useState(schedule?.start_time || '22:00')
   const [endTime,       setEndTime]       = useState(schedule?.end_time || '06:00')
   const [selectedDays,  setSelectedDays]  = useState<Set<string>>(() => {
-    if (schedule?.days) return new Set(schedule.days.split(',').map(d => d.trim()))
-    return new Set(ALL_DAYS)
+    if (schedule?.days) return new Set(schedule.days.split(''))
+    return new Set(DAY_DIGITS)
   })
-  const [targetProfile, setTargetProfile] = useState(schedule?.target_profile || 'block')
+  const [graceMinutes,  setGraceMinutes]  = useState(schedule?.grace_minutes || 0)
   const [saving,        setSaving]        = useState(false)
   const [deleting,      setDeleting]      = useState(false)
 
@@ -94,15 +84,16 @@ function ScheduleModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim() || selectedDays.size === 0) return
+    if (selectedDays.size === 0) return
     setSaving(true)
     const body = {
-      name: name.trim(),
+      label: label.trim(),
+      client_ip: clientIp.trim() || '*',
       start_time: startTime,
       end_time: endTime,
-      days: ALL_DAYS.filter(d => selectedDays.has(d)).join(','),
-      target_profile: targetProfile,
+      days: DAY_DIGITS.filter(d => selectedDays.has(d)).join(''),
       enabled: schedule?.enabled ?? true,
+      grace_minutes: graceMinutes,
     }
     try {
       if (isEdit) {
@@ -147,17 +138,31 @@ function ScheduleModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* Name */}
+          {/* Label */}
           <div>
-            <label className="block text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-1.5">Name</label>
+            <label className="block text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-1.5">Label</label>
             <input
               type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
+              value={label}
+              onChange={e => setLabel(e.target.value)}
               placeholder="e.g. Bedtime, School Hours"
               className="input-base"
               maxLength={64}
               autoFocus
+            />
+          </div>
+
+          {/* Device IP */}
+          <div>
+            <label className="block text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-1.5">Device IP
+              <span className="font-normal text-[#6e7681] ml-1">(* for all devices)</span>
+            </label>
+            <input
+              type="text"
+              value={clientIp}
+              onChange={e => setClientIp(e.target.value)}
+              placeholder="*"
+              className="input-base font-mono"
             />
           </div>
 
@@ -187,54 +192,36 @@ function ScheduleModal({
           <div>
             <label className="block text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-1.5">Days</label>
             <div className="flex gap-1.5 flex-wrap">
-              {ALL_DAYS.map(day => (
+              {DAY_DIGITS.map((digit, i) => (
                 <button
-                  key={day}
+                  key={digit}
                   type="button"
-                  onClick={() => toggleDay(day)}
+                  onClick={() => toggleDay(digit)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors min-h-[36px] border ${
-                    selectedDays.has(day)
+                    selectedDays.has(digit)
                       ? 'bg-primary/20 border-primary text-primary'
                       : 'bg-[#0d1117] border-border text-muted hover:text-[#e6edf3]'
                   }`}
                 >
-                  {DAY_LABELS[day]}
+                  {DAY_NAMES[i]}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Profile */}
+          {/* Grace period */}
           <div>
-            <label className="block text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-2">Mode</label>
-            <div className="space-y-2">
-              {(['block', 'bedtime', 'strict'] as const).map(p => {
-                const meta = PROFILE_META[p]
-                return (
-                  <label
-                    key={p}
-                    className="flex items-center gap-3 p-3 bg-[#0d1117] border border-border rounded-lg cursor-pointer min-h-[44px]"
-                  >
-                    <input
-                      type="radio"
-                      name="target_profile"
-                      value={p}
-                      checked={targetProfile === p}
-                      onChange={() => setTargetProfile(p)}
-                      className="accent-primary"
-                    />
-                    <div className="flex items-center gap-2">
-                      <span className={`pill ${meta.cls} text-[11px]`}>{meta.label}</span>
-                      <span className="text-xs text-muted">
-                        {p === 'block'   && 'Block all DNS queries'}
-                        {p === 'bedtime' && 'Allowlist-only mode'}
-                        {p === 'strict'  && 'Strict DNS filtering'}
-                      </span>
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
+            <label className="block text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-1.5">Grace Period
+              <span className="font-normal text-[#6e7681] ml-1">(minutes of warning before block)</span>
+            </label>
+            <input
+              type="number"
+              value={graceMinutes}
+              onChange={e => setGraceMinutes(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
+              min={0}
+              max={60}
+              className="input-base w-24"
+            />
           </div>
 
           {/* Actions */}
@@ -253,7 +240,7 @@ function ScheduleModal({
             <button type="button" onClick={onClose} className="btn-secondary px-4 py-2 text-sm" disabled={saving || deleting}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary px-4 py-2 text-sm" disabled={saving || deleting || !name.trim() || selectedDays.size === 0}>
+            <button type="submit" className="btn-primary px-4 py-2 text-sm" disabled={saving || deleting || !label.trim() || selectedDays.size === 0}>
               {saving ? <LoadingSpinner size={14} /> : isEdit ? 'Save' : 'Create'}
             </button>
           </div>
@@ -352,9 +339,14 @@ export function SchedulesScreen() {
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-sm font-medium ${sched.enabled ? 'text-[#e6edf3]' : 'text-muted'}`}>
-                      {sched.name}
+                      {sched.label || sched.client_ip}
                     </span>
-                    {profileBadge(sched.target_profile)}
+                    {sched.grace_minutes > 0 && (
+                      <span className="pill bg-purple-900/50 text-purple-300">{sched.grace_minutes}m grace</span>
+                    )}
+                    {sched.client_ip !== '*' && (
+                      <span className="pill bg-[#21262d] text-muted font-mono">{sched.client_ip}</span>
+                    )}
                   </div>
                   <p className={`text-xs mt-0.5 ${sched.enabled ? 'text-muted' : 'text-muted/50'}`}>
                     {sched.start_time} – {sched.end_time} · {formatDays(sched.days)}

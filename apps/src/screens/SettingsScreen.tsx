@@ -165,7 +165,7 @@ export function SettingsScreen() {
   const [settings,      setSettings]     = useState<AppSettings | null>(null)
   const [ntpRunning,    setNtpRunning]   = useState<boolean | null>(null)
   const [services,      setServices]     = useState<ServicesStatus | null>(null)
-  const [schedule,      setSchedule]     = useState<UpdateSchedule>({ update_hour: 3, update_minute: 0, update_frequency: 'daily', update_day_of_week: 0, update_day_of_month: 1 })
+  const [schedule,      setSchedule]     = useState<UpdateSchedule>({ update_hour: 3, update_minute: 0, update_frequency: 'daily', update_day_of_week: 0, update_day_of_month: 1, source_stale_days: 90 })
   const [savingSched,   setSavingSched]  = useState(false)
   const [restarting,    setRestarting]   = useState<string | null>(null)
   const [loading,       setLoading]      = useState(true)
@@ -483,12 +483,28 @@ export function SettingsScreen() {
                 </select>
               </div>
 
+            </div>
+
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-xs text-muted">Auto-disable inactive sources after</span>
+              <input
+                type="number"
+                min={30}
+                max={365}
+                value={schedule.source_stale_days}
+                onChange={e => setSchedule(s => ({ ...s, source_stale_days: Number(e.target.value) }))}
+                className="input-base w-20 text-center"
+              />
+              <span className="text-xs text-muted">days</span>
+            </div>
+
+            <div className="mt-3">
               <button onClick={saveSchedule} disabled={savingSched} className="btn-primary px-4 py-2">
                 {savingSched ? <LoadingSpinner size={14} /> : 'Save'}
               </button>
             </div>
 
-            <p className="text-xs text-muted">
+            <p className="text-xs text-muted mt-2">
               Current: <span className="text-[#e6edf3]">{scheduleLabel(schedule)}</span>
               <span className="text-muted ml-1">(Asia/Manila)</span>
             </p>

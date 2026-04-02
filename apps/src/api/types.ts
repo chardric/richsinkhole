@@ -114,6 +114,14 @@ export interface UpdateSchedule {
   update_frequency: 'daily' | 'weekly' | 'monthly'
   update_day_of_week: number    // 0=Mon … 6=Sun
   update_day_of_month: number   // 1-28
+  source_stale_days: number     // 30-365
+}
+
+export interface UpdaterProgress {
+  running: boolean
+  stage?: string
+  detail?: string
+  pct?: number
 }
 
 export interface SecurityStats {
@@ -137,12 +145,14 @@ export interface ParentalSettings {
 
 export interface Schedule {
   id: number
-  name: string
+  label: string
+  client_ip: string
   start_time: string
   end_time: string
   days: string
-  target_profile: string
+  days_label: string
   enabled: boolean
+  grace_minutes: number
 }
 
 export interface NetworkScore {
@@ -178,4 +188,91 @@ export interface ProxyRule {
   target: string
   enabled: boolean
   created_at: string
+}
+
+// Blocked services (AdGuard-style toggleable service blocks)
+export interface BlockedServiceGroup {
+  id: string
+  name: string
+}
+
+export interface BlockedService {
+  id: string
+  name: string
+  group: string
+  domain_count: number
+  enabled: boolean
+}
+
+export interface BlockedServicesResponse {
+  groups: BlockedServiceGroup[]
+  services: BlockedService[]
+}
+
+// DNS speed test
+export interface SpeedTestResult {
+  historical: {
+    total_queries: number
+    avg_ms: number | null
+    min_ms: number | null
+    max_ms: number | null
+    p50_ms: number | null
+    p95_ms: number | null
+  }
+  live: {
+    probes: Array<{ domain: string; latency_ms: number | null }>
+    avg_ms: number | null
+  }
+}
+
+// App usage per device
+export interface AppUsage {
+  app: string
+  queries: number
+  sessions: number
+  estimated_minutes: number
+}
+
+export interface AppUsageResponse {
+  ip: string
+  range: string
+  apps: AppUsage[]
+}
+
+// Device stats (extended)
+export interface DeviceStats {
+  ip: string
+  label: string | null
+  device_type: string | null
+  total: number
+  blocked: number
+  forwarded: number
+  block_pct: number
+  bandwidth_saved_mb: number
+  bandwidth_used_mb: number
+  top_blocked_domains: Array<{ domain: string; count: number }>
+  top_forwarded_domains: Array<{ domain: string; count: number }>
+  recent_queries: Array<{ ts: string; domain: string; qtype: string; action: string }>
+}
+
+// NTP clients
+export interface NtpClient {
+  ip: string
+  ntp_packets: number
+  last_sync_ago: number
+  label: string
+  device_type: string
+}
+
+export interface NtpClientsResponse {
+  clients: NtpClient[]
+}
+
+// Privacy report (updated)
+export interface PrivacyReportDevice {
+  ip: string
+  label: string
+  device_type: string
+  total_forwarded: number
+  companies: Array<{ company: string; count: number; pct: number }>
 }

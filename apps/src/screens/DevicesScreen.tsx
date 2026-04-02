@@ -16,6 +16,8 @@ function isGhost(lastSeen: string): boolean {
 function profileBadge(profile: string) {
   switch (profile) {
     case 'strict':      return <span className="pill bg-red-900/50 text-red-300">Strict</span>
+    case 'guest':       return <span className="pill bg-yellow-900/50 text-yellow-300">Guest</span>
+    case 'quarantine':  return <span className="pill bg-orange-900/50 text-orange-300">Quarantine</span>
     case 'passthrough': return <span className="pill bg-green-900/50 text-green-300">Passthrough</span>
     default:            return <span className="pill bg-blue-900/50 text-blue-300">Normal</span>
   }
@@ -131,7 +133,7 @@ function DeviceSheet({
           <div>
             <label className="block text-sm font-medium text-[#e6edf3] mb-2">Blocking Profile</label>
             <div className="space-y-2">
-              {(['normal', 'strict', 'passthrough'] as const).map(p => (
+              {(['normal', 'strict', 'guest', 'quarantine', 'passthrough'] as const).map(p => (
                 <label
                   key={p}
                   className="flex items-center gap-3 p-3 bg-[#0d1117] border border-border rounded-lg cursor-pointer min-h-[44px]"

@@ -6,6 +6,12 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-01
 
+### Native Apps
+- **Updated types.ts** — added BlockedServices, SpeedTest, AppUsage, DeviceStats, NtpClients, UpdaterProgress, PrivacyReportDevice types
+- **Devices screen** — added Guest and Quarantine to profile dropdown and badge
+- **Schedules screen** — rewritten to match current API (label, client_ip, digit-string days, grace_minutes); removed old profile mode radio buttons
+- **Settings screen** — added source_stale_days input in update schedule section
+
 ### Changed
 - **Default sources reduced from 14 to 9** — removed ShadowWhisperer Tracking (~97k, broke Teams/YouTube/Shopee/GCash), Hagezi referral (broke GCash via adzerk CNAME), Hagezi Samsung/Xiaomi/TikTok native trackers (too aggressive). Kept: ads (3), porn (3), phishing/scam (2), popups (1)
 - **CNAME cloaking changed to log-only** — was blocking legitimate apps that CNAME to shared CDN/ad infrastructure (GCash->adzerk, Maya->hubspot, Teams->trafficmanager). Now logs as security event without blocking
