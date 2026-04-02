@@ -24,10 +24,10 @@ interface NetworkScore {
 
 interface PrivacyDevice {
   ip: string
-  label: string | null
-  total: number
-  blocked: number
-  categories: Record<string, number>
+  label: string
+  device_type: string
+  total_forwarded: number
+  companies: Array<{ company: string; count: number; pct: number }>
 }
 
 interface HeatmapData {
@@ -101,7 +101,7 @@ export function PrivacyScreen() {
         apiGet<HeatmapData>('/api/heatmap'),
       ])
       setScore(s)
-      setDevices(d.sort((a, b) => b.total - a.total))
+      setDevices(d.sort((a, b) => b.total_forwarded - a.total_forwarded))
       setHeatmap(h.hours)
     } catch {
       // silent — keep last data
@@ -210,48 +210,36 @@ export function PrivacyScreen() {
             </div>
           ) : (
             <div className="bg-surface border border-border rounded-xl divide-y divide-border overflow-hidden">
-              {devices.map(dev => {
-                const blockPct = dev.total > 0 ? ((dev.blocked / dev.total) * 100).toFixed(1) : '0.0'
-                const cats = Object.entries(dev.categories)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 5)
-
-                return (
+              {devices.map(dev => (
                   <div key={dev.ip} className="px-4 py-3">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
-                        <span className="text-sm font-mono text-[#e6edf3]">
+                        <span className="text-sm font-medium text-[#e6edf3]">
                           {dev.label || dev.ip}
                         </span>
-                        {dev.label && (
-                          <span className="text-xs text-muted ml-2">{dev.ip}</span>
+                        {dev.device_type && (
+                          <span className="text-[10px] text-muted ml-2">{dev.device_type}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-muted">
-                          {dev.total.toLocaleString()} queries
-                        </span>
-                        <span className="pill pill-blocked text-[10px]">
-                          {blockPct}% blocked
-                        </span>
-                      </div>
+                      <span className="text-xs text-muted flex-shrink-0">
+                        {dev.total_forwarded.toLocaleString()} fwd
+                      </span>
                     </div>
-                    {cats.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {cats.map(([cat, count]) => (
-                          <span
-                            key={cat}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-[#21262d] text-muted"
-                          >
-                            {cat}
-                            <span className="text-[#58a6ff]">{count}</span>
-                          </span>
+                    {dev.companies.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {dev.companies.slice(0, 6).map(c => (
+                          <div key={c.company} className="flex items-center gap-2 text-xs">
+                            <span className="w-20 truncate text-muted">{c.company}</span>
+                            <div className="flex-1 h-1 bg-[#21262d] rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${c.pct}%` }} />
+                            </div>
+                            <span className="text-muted w-10 text-right">{c.pct}%</span>
+                          </div>
                         ))}
                       </div>
                     )}
                   </div>
-                )
-              })}
+              ))}
             </div>
           )}
         </section>

@@ -11,7 +11,8 @@ All notable changes to RichSinkhole are documented here.
 - **Devices screen** — added Guest/Quarantine profiles; device detail now shows bandwidth stats (saved/used MB) and app usage chart (top 8 apps with estimated time)
 - **Schedules screen** — rewritten to match current API (label, client_ip, digit-string days, grace_minutes); removed old profile mode radio buttons
 - **Settings screen** — added DNS Speed Test panel (historical p50/p95 + live probes), NTP synced clients display, source_stale_days setting
-- **Blocklist screen** — added Update Now button with real-time progress bar (stage, detail, percentage)
+- **Blocklist screen** — added Update Now button with real-time progress bar; new "Services" tab with toggleable blocked services grid (Social Media, Streaming, Gaming, Shopping, AI, Adult, Gambling, Tracking)
+- **Privacy screen** — updated to match current API format (companies with progress bars instead of old categories); shows device_type and company percentages
 
 ### Changed
 - **Default sources reduced from 14 to 9** — removed ShadowWhisperer Tracking (~97k, broke Teams/YouTube/Shopee/GCash), Hagezi referral (broke GCash via adzerk CNAME), Hagezi Samsung/Xiaomi/TikTok native trackers (too aggressive). Kept: ads (3), porn (3), phishing/scam (2), popups (1)

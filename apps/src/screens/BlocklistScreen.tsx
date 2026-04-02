@@ -2,13 +2,13 @@
 // All rights reserved.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiDelete, apiGet, apiPost } from '../api/client'
+import { api, apiDelete, apiGet, apiPost } from '../api/client'
 import type { AllowlistDomain, BlocklistFeed, UpdaterProgress } from '../api/types'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../context/ToastContext'
 
-type Tab = 'subscriptions' | 'custom' | 'allowlist'
+type Tab = 'subscriptions' | 'custom' | 'allowlist' | 'services'
 
 function relativeTime(ts: string | null): string {
   if (!ts) return 'Never'
@@ -595,6 +595,91 @@ function AllowlistTab() {
   )
 }
 
+// ── Blocked Services tab ─────────────────────────────────────────────────────
+interface ServiceGroup { id: string; name: string }
+interface Service { id: string; name: string; group: string; domain_count: number; enabled: boolean }
+interface ServicesResponse { groups: ServiceGroup[]; services: Service[] }
+
+function ServicesTab() {
+  const { showToast } = useToast()
+  const [data, setData] = useState<ServicesResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const fetchServices = useCallback(async () => {
+    try {
+      const d = await apiGet<ServicesResponse>('/api/blocked-services')
+      setData(d)
+    } catch {
+      showToast('error', 'Failed to load services')
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
+
+  useEffect(() => { fetchServices() }, [fetchServices])
+
+  async function toggleService(serviceId: string) {
+    if (!data) return
+    const updated = data.services.map(s =>
+      s.id === serviceId ? { ...s, enabled: !s.enabled } : s
+    )
+    setData({ ...data, services: updated })
+    setSaving(true)
+    try {
+      const enabledIds = updated.filter(s => s.enabled).map(s => s.id)
+      await api('PUT', '/api/blocked-services', { ids: enabledIds })
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Save failed')
+      fetchServices() // revert
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="flex items-center justify-center flex-1"><LoadingSpinner size={28} /></div>
+  if (!data) return <EmptyState title="Failed to load services" />
+
+  const enabledCount = data.services.filter(s => s.enabled).length
+
+  return (
+    <div className="flex-1 scroll-area">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <span className="text-sm font-semibold text-[#e6edf3]">{enabledCount} of {data.services.length} blocked</span>
+        {saving && <LoadingSpinner size={14} />}
+      </div>
+      <div className="p-4 space-y-5">
+        {data.groups.map(group => {
+          const groupServices = data.services.filter(s => s.group === group.id)
+          if (groupServices.length === 0) return null
+          return (
+            <div key={group.id}>
+              <h3 className="text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-2">{group.name}</h3>
+              <div className="flex flex-wrap gap-2">
+                {groupServices.map(svc => (
+                  <button
+                    key={svc.id}
+                    onClick={() => toggleService(svc.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors min-h-[36px] ${
+                      svc.enabled
+                        ? 'bg-primary/15 border-primary/50 text-primary'
+                        : 'bg-[#0d1117] border-border text-muted'
+                    }`}
+                  >
+                    {svc.name}
+                    <span className="text-[10px] opacity-60">{svc.domain_count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 export function BlocklistScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('subscriptions')
@@ -611,6 +696,10 @@ export function BlocklistScreen() {
     {
       id: 'allowlist', label: 'Allowlist',
       icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+    },
+    {
+      id: 'services', label: 'Services',
+      icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
     },
   ]
 
@@ -632,6 +721,7 @@ export function BlocklistScreen() {
       {activeTab === 'subscriptions' && <SubscriptionsTab />}
       {activeTab === 'custom'        && <CustomTab />}
       {activeTab === 'allowlist'     && <AllowlistTab />}
+      {activeTab === 'services'      && <ServicesTab />}
     </div>
   )
 }
