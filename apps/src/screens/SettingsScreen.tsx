@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiGet, apiPost, getServerUrl } from '../api/client'
-import type { AppSettings, NtpStatus, ServicesStatus, UpdateSchedule } from '../api/types'
+import type { AppSettings, NtpStatus, NtpClient, NtpClientsResponse, ServicesStatus, SpeedTestResult, UpdateSchedule } from '../api/types'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
@@ -172,6 +172,11 @@ export function SettingsScreen() {
   const [togglingNtp,   setTogglingNtp]  = useState(false)
   const [togglingYt,    setTogglingYt]   = useState(false)
   const [togglingCap,   setTogglingCap]  = useState(false)
+  const [speedTest,     setSpeedTest]    = useState<SpeedTestResult | null>(null)
+  const [testingSpeed,  setTestingSpeed] = useState(false)
+  const [ntpClients,    setNtpClients]   = useState<NtpClient[]>([])
+  const [showNtpClients, setShowNtpClients] = useState(false)
+  const [loadingNtp,    setLoadingNtp]   = useState(false)
   const [showChangePw,  setShowChangePw] = useState(false)
 
   const fetchAll = useCallback(async () => {
@@ -265,6 +270,31 @@ export function SettingsScreen() {
     }
   }
 
+  async function runSpeedTest() {
+    setTestingSpeed(true)
+    try {
+      const result = await apiGet<SpeedTestResult>('/api/speedtest')
+      setSpeedTest(result)
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Speed test failed')
+    } finally {
+      setTestingSpeed(false)
+    }
+  }
+
+  async function loadNtpClients() {
+    setLoadingNtp(true)
+    try {
+      const data = await apiGet<NtpClientsResponse>('/api/ntp/clients')
+      setNtpClients(data.clients || [])
+      setShowNtpClients(true)
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to load NTP clients')
+    } finally {
+      setLoadingNtp(false)
+    }
+  }
+
   async function restartService(name: string) {
     setRestarting(name)
     try {
@@ -319,6 +349,35 @@ export function SettingsScreen() {
                 : <Toggle value={ntpRunning} onChange={toggleNtp} disabled={togglingNtp} />
             }
           />
+          {ntpRunning && (
+            <div className="px-4 pb-3">
+              <button onClick={showNtpClients ? () => setShowNtpClients(false) : loadNtpClients} disabled={loadingNtp} className="text-xs text-primary">
+                {loadingNtp ? 'Loading...' : showNtpClients ? 'Hide Clients' : 'Show Synced Clients'}
+              </button>
+              {showNtpClients && ntpClients.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {ntpClients.map(c => {
+                    const ago = c.last_sync_ago >= 0
+                      ? c.last_sync_ago < 60 ? `${c.last_sync_ago}s ago`
+                      : c.last_sync_ago < 3600 ? `${Math.round(c.last_sync_ago / 60)}m ago`
+                      : `${Math.round(c.last_sync_ago / 3600)}h ago`
+                      : '—'
+                    const color = c.last_sync_ago >= 0 && c.last_sync_ago < 300 ? 'text-green-400' : c.last_sync_ago < 3600 ? 'text-yellow-400' : 'text-muted'
+                    return (
+                      <div key={c.ip} className="flex justify-between text-xs">
+                        <span className="text-muted">{c.label || c.device_type || c.ip}</span>
+                        <span className="font-mono">{c.ntp_packets} syncs</span>
+                        <span className={color}>{ago}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {showNtpClients && ntpClients.length === 0 && (
+                <p className="text-xs text-muted mt-2">No clients syncing yet.</p>
+              )}
+            </div>
+          )}
           <SettingRow
             label="YouTube Ad Filter"
             subtitle="Redirect YouTube through ad-stripping proxy"
@@ -358,6 +417,51 @@ export function SettingsScreen() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           </button>
+        </SectionCard>
+
+        {/* DNS Speed Test */}
+        <SectionCard title="DNS Speed Test">
+          <div className="p-4">
+            {speedTest && (
+              <div className="grid grid-cols-4 gap-2 mb-4 text-center">
+                <div>
+                  <div className="text-lg font-bold text-blue-400">{speedTest.historical.avg_ms ?? '—'}</div>
+                  <div className="text-[10px] text-muted uppercase">Avg (ms)</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-green-400">{speedTest.historical.p50_ms ?? '—'}</div>
+                  <div className="text-[10px] text-muted uppercase">p50 (ms)</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-yellow-400">{speedTest.historical.p95_ms ?? '—'}</div>
+                  <div className="text-[10px] text-muted uppercase">p95 (ms)</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-red-400">{speedTest.historical.max_ms ?? '—'}</div>
+                  <div className="text-[10px] text-muted uppercase">Max (ms)</div>
+                </div>
+              </div>
+            )}
+            {speedTest?.live?.probes && (
+              <div className="mb-4 space-y-1">
+                <p className="text-xs text-muted font-semibold mb-1">Live Probes</p>
+                {speedTest.live.probes.map(p => (
+                  <div key={p.domain} className="flex justify-between text-xs">
+                    <span className="font-mono text-muted">{p.domain}</span>
+                    <span className={p.latency_ms === null ? 'text-red-400' : p.latency_ms < 50 ? 'text-green-400' : p.latency_ms < 150 ? 'text-yellow-400' : 'text-red-400'}>
+                      {p.latency_ms !== null ? `${p.latency_ms} ms` : 'timeout'}
+                    </span>
+                  </div>
+                ))}
+                {speedTest.live.avg_ms && (
+                  <p className="text-xs text-muted mt-1">Average: <span className="text-[#e6edf3]">{speedTest.live.avg_ms} ms</span></p>
+                )}
+              </div>
+            )}
+            <button onClick={runSpeedTest} disabled={testingSpeed} className="btn-primary px-4 py-2 text-sm">
+              {testingSpeed ? <LoadingSpinner size={14} /> : 'Run Speed Test'}
+            </button>
+          </div>
         </SectionCard>
 
         {/* Service Controls */}

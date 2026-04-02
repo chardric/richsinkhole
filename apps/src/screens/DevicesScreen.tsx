@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiDelete, apiGet, apiPatch, apiPost } from '../api/client'
-import type { Device, ParentalSettings } from '../api/types'
+import type { Device, DeviceStats, AppUsageResponse, ParentalSettings } from '../api/types'
 import { LoadingSpinner, FullPageSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../context/ToastContext'
@@ -70,6 +70,8 @@ function DeviceSheet({
   const [loadingP,    setLoadingP]    = useState(false)
   const [saving,      setSaving]      = useState(false)
   const [deleting,    setDeleting]    = useState(false)
+  const [stats,       setStats]       = useState<DeviceStats | null>(null)
+  const [appUsage,    setAppUsage]    = useState<AppUsageResponse | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -78,6 +80,13 @@ function DeviceSheet({
       .then(data => { if (!cancelled) setParental(data) })
       .catch(() => { /* parental not set up */ })
       .finally(() => { if (!cancelled) setLoadingP(false) })
+    // Load device stats + app usage in parallel
+    apiGet<DeviceStats>(`/api/devices/${encodeURIComponent(device.ip)}/stats`)
+      .then(data => { if (!cancelled) setStats(data) })
+      .catch(() => {})
+    apiGet<AppUsageResponse>(`/api/app-usage/${encodeURIComponent(device.ip)}?range=24h`)
+      .then(data => { if (!cancelled) setAppUsage(data) })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [device.ip])
 
@@ -228,6 +237,47 @@ function DeviceSheet({
             <div className="text-xs text-muted">
               {device.mac && <span className="font-mono">{device.mac}</span>}
               {device.vendor && <span className="ml-2">· {device.vendor}</span>}
+            </div>
+          )}
+
+          {/* Stats */}
+          {stats && (
+            <div className="p-3 bg-[#0d1117] border border-border rounded-lg">
+              <p className="text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-2">Statistics</p>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs mb-2">
+                <div><div className="font-bold text-blue-400">{stats.total.toLocaleString()}</div><div className="text-muted">Total</div></div>
+                <div><div className="font-bold text-green-400">{stats.forwarded.toLocaleString()}</div><div className="text-muted">Fwd</div></div>
+                <div><div className="font-bold text-red-400">{stats.blocked.toLocaleString()}</div><div className="text-muted">Blocked</div></div>
+                <div><div className="font-bold text-yellow-400">{stats.block_pct}%</div><div className="text-muted">Block %</div></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                <div><span className="text-green-400">{stats.bandwidth_saved_mb.toLocaleString()} MB</span> <span className="text-muted">saved</span></div>
+                <div><span className="text-blue-400">{stats.bandwidth_used_mb.toLocaleString()} MB</span> <span className="text-muted">used</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* App Usage */}
+          {appUsage && appUsage.apps.length > 0 && (
+            <div className="p-3 bg-[#0d1117] border border-border rounded-lg">
+              <p className="text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-2">App Usage (24h)</p>
+              <div className="space-y-1.5">
+                {appUsage.apps.slice(0, 8).map(a => {
+                  const hrs = Math.floor(a.estimated_minutes / 60)
+                  const mins = Math.round(a.estimated_minutes % 60)
+                  const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+                  const maxMin = appUsage.apps[0]?.estimated_minutes || 1
+                  return (
+                    <div key={a.app} className="flex items-center gap-2 text-xs">
+                      <span className="w-16 font-medium text-[#e6edf3] truncate">{a.app}</span>
+                      <div className="flex-1 h-1.5 bg-[#21262d] rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.round(a.estimated_minutes / maxMin * 100)}%` }} />
+                      </div>
+                      <span className="text-muted w-12 text-right">{timeStr}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 

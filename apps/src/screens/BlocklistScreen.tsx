@@ -1,9 +1,9 @@
 // Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
 // All rights reserved.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiDelete, apiGet, apiPost } from '../api/client'
-import type { AllowlistDomain, BlocklistFeed } from '../api/types'
+import type { AllowlistDomain, BlocklistFeed, UpdaterProgress } from '../api/types'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../context/ToastContext'
@@ -233,6 +233,8 @@ function SubscriptionsTab() {
   const [deleting,     setDeleting]     = useState<number | null>(null)
   const [syncing,      setSyncing]      = useState<number | null>(null)
   const [totalDomains, setTotalDomains] = useState(0)
+  const [updating,     setUpdating]     = useState(false)
+  const [progress,     setProgress]     = useState<{ stage: string; detail: string; pct: number } | null>(null)
 
   const fetchFeeds = useCallback(async () => {
     try {
@@ -250,6 +252,36 @@ function SubscriptionsTab() {
   }, [showToast])
 
   useEffect(() => { fetchFeeds() }, [fetchFeeds])
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function triggerUpdate() {
+    setUpdating(true)
+    try {
+      await apiPost('/api/updater/run', {})
+      showToast('info', 'Update triggered')
+      // Start polling progress
+      pollRef.current = setInterval(async () => {
+        try {
+          const p = await apiGet<UpdaterProgress>('/api/updater/progress')
+          if (!p.running) {
+            setProgress(null)
+            setUpdating(false)
+            if (pollRef.current) clearInterval(pollRef.current)
+            pollRef.current = null
+            fetchFeeds()
+            return
+          }
+          setProgress({ stage: p.stage || '', detail: p.detail || '', pct: p.pct || 0 })
+        } catch { /* ignore */ }
+      }, 2000)
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Update failed')
+      setUpdating(false)
+    }
+  }
+
+  useEffect(() => { return () => { if (pollRef.current) clearInterval(pollRef.current) } }, [])
 
   async function handleDelete(feed: BlocklistFeed) {
     setDeleting(feed.id)
@@ -291,13 +323,32 @@ function SubscriptionsTab() {
           <span className="text-sm font-semibold text-[#e6edf3]">{formatCount(totalDomains)} domains</span>
           <span className="text-xs text-muted ml-2">from {feeds.length} source{feeds.length !== 1 ? 's' : ''}</span>
         </div>
-        <button onClick={() => setShowAdd(true)} className="btn-primary px-3 py-1.5 text-xs gap-1.5">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Feed
-        </button>
+        <div className="flex gap-2">
+          <button onClick={triggerUpdate} disabled={updating} className="btn-secondary px-3 py-1.5 text-xs">
+            {updating ? <LoadingSpinner size={12} /> : 'Update Now'}
+          </button>
+          <button onClick={() => setShowAdd(true)} className="btn-primary px-3 py-1.5 text-xs gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Feed
+          </button>
+        </div>
       </div>
+
+      {/* Update progress bar */}
+      {progress && (
+        <div className="px-4 py-2 border-b border-border bg-[#161b22]">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-[#e6edf3]">{progress.stage}</span>
+            <span className="text-muted font-mono">{progress.pct}%</span>
+          </div>
+          <div className="w-full h-1.5 bg-[#21262d] rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progress.pct}%` }} />
+          </div>
+          {progress.detail && <p className="text-[10px] text-muted mt-1">{progress.detail}</p>}
+        </div>
+      )}
 
       <div className="flex-1 scroll-area">
         {feeds.length === 0 ? (
