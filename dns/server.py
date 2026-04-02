@@ -590,6 +590,99 @@ def _is_private_ip(ip_str: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# GeoIP country lookup (lightweight — uses ip2country TSV database)
+# ---------------------------------------------------------------------------
+_GEOIP_DB_PATH = "/data/geoip-country.csv"
+_GEOIP_URL = "https://raw.githubusercontent.com/sapics/ip-location-db/main/geo-whois-asn-country/geo-whois-asn-country-ipv4.csv"
+_geoip_ranges: list[tuple[int, int, str]] = []  # (start_int, end_int, country_code)
+_geoip_loaded = False
+_geoip_lock = threading.Lock()
+
+# Domains exempt from geo-blocking (apps that use Chinese CDN but are legitimate)
+_GEO_EXEMPT_DOMAINS = frozenset({
+    "shopee.ph", "shopee.com", "shopee.sg", "shopee.io",
+    "shopeemobile.com", "susercontent.com",
+    "lazada.com.ph", "lazada.com", "lazcdn.com",
+    "tiktok.com", "tiktokcdn.com",
+    "alibaba.com",  # some PH logistics use Alibaba
+    "aliexpress.com",
+    "gcash.com", "mynt.xyz", "paymaya.com",
+})
+
+
+def _load_geoip() -> None:
+    """Load ip2country TSV into sorted list for binary search."""
+    global _geoip_ranges, _geoip_loaded
+    import struct
+    ranges = []
+    try:
+        # Download if not cached
+        if not os.path.exists(_GEOIP_DB_PATH):
+            import urllib.request
+            logging.getLogger("geoip").info("Downloading GeoIP database...")
+            try:
+                urllib.request.urlretrieve(_GEOIP_URL, _GEOIP_DB_PATH)
+            except Exception as dl_err:
+                logging.getLogger("geoip").warning("GeoIP download failed (will retry): %s", dl_err)
+                return
+        with open(_GEOIP_DB_PATH) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split(",")
+                if len(parts) < 3:
+                    continue
+                try:
+                    start_ip = int(ipaddress.ip_address(parts[0].strip()))
+                    end_ip   = int(ipaddress.ip_address(parts[1].strip()))
+                    country  = parts[2].upper().strip()
+                    ranges.append((start_ip, end_ip, country))
+                except (ValueError, TypeError):
+                    continue
+        ranges.sort()
+        with _geoip_lock:
+            _geoip_ranges = ranges
+            _geoip_loaded = True
+        logging.getLogger("geoip").info("GeoIP loaded: %d ranges", len(ranges))
+    except Exception as exc:
+        logging.getLogger("geoip").error("Failed to load GeoIP: %s", exc)
+
+
+def _geoip_country(ip_str: str) -> str:
+    """Return 2-letter country code for an IP, or empty string if unknown."""
+    if not _geoip_loaded:
+        return ""  # not loaded yet — skip silently until background load finishes
+    if not _geoip_ranges:
+        return ""
+    try:
+        ip_int = int(ipaddress.ip_address(ip_str))
+    except ValueError:
+        return ""
+    # Binary search
+    with _geoip_lock:
+        lo, hi = 0, len(_geoip_ranges) - 1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            start, end, country = _geoip_ranges[mid]
+            if ip_int < start:
+                hi = mid - 1
+            elif ip_int > end:
+                lo = mid + 1
+            else:
+                return country
+    return ""
+
+
+def _is_geo_exempt(domain: str) -> bool:
+    """Check if domain is exempt from geo-blocking."""
+    for exempt in _GEO_EXEMPT_DOMAINS:
+        if domain == exempt or domain.endswith("." + exempt):
+            return True
+    return False
+
+
 def _is_local_domain(domain: str) -> bool:
     return domain == "localhost" or any(domain.endswith(s) for s in _LOCAL_SUFFIXES)
 
@@ -1294,6 +1387,25 @@ _DARKWEB_DOMAINS = frozenset({
     "check.torproject.org", "dist.torproject.org",
 })
 
+# Known spyware / surveillance infrastructure domains
+_SPYWARE_DOMAINS = frozenset({
+    # NSO Group (Pegasus)
+    "nsogroup.com",
+    # Known Pegasus C2 infrastructure patterns (research by Citizen Lab / Amnesty)
+    "amazon-seo.net", "pure-ede.com", "safari-web.com",
+    # Predator spyware (Cytrox/Intellexa)
+    "cytrox.com", "intellexa.com",
+    # Common stalkerware apps
+    "mspy.com", "flexispy.com", "hoverwatch.com",
+    "cocospy.com", "spyic.com", "minspy.com",
+    "spyzie.com", "clevguard.com", "eyezy.com",
+    "pctatttletale.com", "spyera.com",
+    # Chinese surveillance SDKs
+    "igexin.com",  # Igexin SDK — known spyware in Android apps
+    "adups.com",   # ADUPS FOTA — preinstalled on some Chinese phones, exfiltrates data
+    "ragentek.com", # Ragentek OTA — unencrypted backdoor on BLU, Infinix phones
+})
+
 
 def _check_darkweb(client_ip: str, domain: str) -> bool:
     """Detect .onion/.i2p queries and known Tor infrastructure. Returns True if detected."""
@@ -1306,6 +1418,12 @@ def _check_darkweb(client_ip: str, domain: str) -> bool:
         if domain == dd or domain.endswith("." + dd):
             _log_security_event(client_ip, domain, "darkweb_access",
                                 f"Accessed Tor infrastructure: {domain}")
+            return True
+    # Spyware / surveillance detection
+    for sd in _SPYWARE_DOMAINS:
+        if domain == sd or domain.endswith("." + sd):
+            _log_security_event(client_ip, domain, "spyware_detected",
+                                f"Spyware/surveillance domain: {domain}")
             return True
     return False
 
@@ -1760,6 +1878,15 @@ class SinkholeResolver(BaseResolver):
             _burst_uncount(client_ip)
             return self._redirect_response(request, "0.0.0.0")
 
+        # 3d. Spyware / darkweb / surveillance — applies to ALL devices (never exempt)
+        for sd in _SPYWARE_DOMAINS:
+            if domain == sd or domain.endswith("." + sd):
+                self.logger.warning("SPYWARE  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
+                _log_security_event(client_ip, domain, "spyware_detected",
+                                    f"Spyware/surveillance domain: {domain}")
+                log_query(client_ip, domain, qtype_str, "blocked")
+                return self._redirect_response(request, "0.0.0.0")
+
         # 4. Blocklist check (allowlist takes precedence inside is_blocked; skipped for passthrough)
         if not passthrough and blocker.is_blocked(domain):
             self.logger.info("BLOCKED  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
@@ -1843,6 +1970,29 @@ class SinkholeResolver(BaseResolver):
                             rb_reply = request.reply()
                             rb_reply.header.rcode = 3  # NXDOMAIN
                             return rb_reply
+
+            # Geo-blocking: block domains resolving to blocked countries (e.g. CN)
+            # Applies to ALL devices including passthrough — country-level blocks are absolute
+            if cfg.get("geo_block_enabled", True) and not _is_geo_exempt(domain) and not blocker.is_allowed(domain):
+                blocked_countries = set(cfg.get("geo_block_countries", ["CN"]))
+                if blocked_countries and request.q.qtype == QTYPE.A:
+                    for rr in reply.rr:
+                        if rr.rtype == QTYPE.A:
+                            rip = str(rr.rdata)
+                            country = _geoip_country(rip)
+                            if country in blocked_countries:
+                                self.logger.warning(
+                                    "GEO-BLOCK %s -> %s [%s]  (client=%s)",
+                                    domain, rip, country, client_ip,
+                                )
+                                _log_security_event(
+                                    client_ip, domain, "geo_block",
+                                    f"Resolved to {country} IP {rip}",
+                                    rip,
+                                )
+                                log_query(client_ip, domain, qtype_str, "blocked",
+                                          upstream=upstream, response_ms=elapsed_ms)
+                                return self._redirect_response(request, "0.0.0.0")
 
             # CNAME Cloaking detection: log when CNAME chain leads to a blocked domain.
             # Log-only — blocking here caused too many false positives (GCash -> adzerk,
@@ -1971,6 +2121,10 @@ def start_dns():
     """
     bootstrap_config()
     reload_config()
+
+    # Pre-load GeoIP database in background
+    geoip_thread = threading.Thread(target=_load_geoip, daemon=True, name="geoip-loader")
+    geoip_thread.start()
 
     cfg = get_config()
     setup_logging(cfg.get("log_level", "info"))

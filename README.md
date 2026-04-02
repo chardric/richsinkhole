@@ -36,6 +36,8 @@ A self-hosted DNS sinkhole and ad blocker for your home network, built with Pyth
 - **Guest mode** — strict blocking profile for temporary/unknown devices
 - **Dark web monitoring** — detects `.onion`/`.i2p` resolution attempts and known Tor infrastructure; logs security events
 - **DNS-over-HTTPS bypass detection** — blocks devices from resolving known DoH/DoT providers (30+ domains); prevents encrypted DNS bypass of the sinkhole; configurable modes: block, log, or off
+- **GeoIP country blocking** — blocks domains resolving to specified countries (default: China) using a 326k-range ip2country database; catches Chinese telemetry from IoT devices even on unknown domains
+- **Spyware/surveillance detection** — blocks known stalkerware, Chinese surveillance SDKs, and commercial spyware (NSO Pegasus, Predator); applies to ALL devices unconditionally
 - **DNS speed test** — historical latency stats (avg/p50/p95) and live probes against well-known domains
 
 ### Parental Controls

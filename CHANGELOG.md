@@ -14,6 +14,11 @@ All notable changes to RichSinkhole are documented here.
 - **Blocklist screen** — added Update Now button with real-time progress bar; new "Services" tab with toggleable blocked services grid (Social Media, Streaming, Gaming, Shopping, AI, Adult, Gambling, Tracking)
 - **Privacy screen** — updated to match current API format (companies with progress bars instead of old categories); shows device_type and company percentages
 
+### Added
+- **GeoIP country blocking** — blocks domains resolving to Chinese IPs using a 326k-range ip2country database (auto-downloaded from GitHub). Applies to ALL devices including passthrough. Exempt list protects Shopee, GCash, Lazada, TikTok, Maya. Configurable via `geo_block_enabled` and `geo_block_countries` in config.
+- **Spyware/surveillance detection** — blocks known stalkerware (mSpy, FlexiSpy, Cocospy, Spyera, etc.), Chinese surveillance SDKs (Igexin, ADUPS, Ragentek), and commercial spyware (NSO Group Pegasus, Cytrox Predator). Applies to ALL devices — never exempt. Logged as `spyware_detected` security events.
+- **Chinese telemetry blocklist** — 40 domains covering Alibaba Cloud, Tencent, Baidu, Xiaomi, Huawei, Oppo/Vivo, ByteDance, Qihoo 360, and Chinese ad networks
+
 ### Changed
 - **Default sources reduced from 14 to 9** — removed ShadowWhisperer Tracking (~97k, broke Teams/YouTube/Shopee/GCash), Hagezi referral (broke GCash via adzerk CNAME), Hagezi Samsung/Xiaomi/TikTok native trackers (too aggressive). Kept: ads (3), porn (3), phishing/scam (2), popups (1)
 - **CNAME cloaking changed to log-only** — was blocking legitimate apps that CNAME to shared CDN/ad infrastructure (GCash->adzerk, Maya->hubspot, Teams->trafficmanager). Now logs as security event without blocking
