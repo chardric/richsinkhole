@@ -886,6 +886,7 @@ async function loadRateLimits() {
     document.getElementById("rl-block-duration").value = cfg.block_duration;
     document.getElementById("rl-burst-normal").value  = cfg.burst_max_normal;
     document.getElementById("rl-burst-iot").value     = cfg.burst_max_iot;
+    document.getElementById("rl-exempt-ips").value   = (cfg.rate_limit_exempt_ips || []).join(", ");
   } catch (e) {
     showToast("Failed to load rate limit settings: " + e.message, "danger");
   }
@@ -903,6 +904,7 @@ async function saveRateLimits() {
       block_duration:   parseInt(document.getElementById("rl-block-duration").value, 10),
       burst_max_normal: parseInt(document.getElementById("rl-burst-normal").value, 10),
       burst_max_iot:    parseInt(document.getElementById("rl-burst-iot").value, 10),
+      rate_limit_exempt_ips: document.getElementById("rl-exempt-ips").value.split(",").map(s => s.trim()).filter(Boolean),
     });
     status.textContent = "Saved ✓";
     setTimeout(() => { status.textContent = ""; }, 3000);
@@ -2328,12 +2330,17 @@ function bindEvents() {
   });
 
   // Backup config save
-  document.getElementById("btn-save-backup-dir").addEventListener("click", async () => {
+  document.getElementById("btn-save-backup-config").addEventListener("click", async () => {
     const dir = document.getElementById("backup-dir").value.trim();
     if (!dir) return;
     try {
-      await api("POST", "/api/backups/config", { backup_dir: dir });
-      showToast("Backup path saved", "success");
+      await api("POST", "/api/backups/config", {
+        backup_dir: dir,
+        backup_hour: parseInt(document.getElementById("backup-hour").value, 10),
+        backup_minute: parseInt(document.getElementById("backup-minute").value, 10),
+        backup_retention_days: parseInt(document.getElementById("backup-retention").value, 10),
+      });
+      showToast("Backup settings saved", "success");
     } catch (e) {
       showToast("Save failed: " + e.message, "danger");
     }
@@ -2341,10 +2348,13 @@ function bindEvents() {
 
   // Backup list + config load
   document.getElementById("backup-collapse").addEventListener("show.bs.collapse", async () => {
-    // Load backup dir config
+    // Load backup config
     try {
       const cfg = await api("GET", "/api/backups/config");
       document.getElementById("backup-dir").value = cfg.backup_dir;
+      document.getElementById("backup-hour").value = cfg.backup_hour ?? 2;
+      document.getElementById("backup-minute").value = cfg.backup_minute ?? 0;
+      document.getElementById("backup-retention").value = cfg.backup_retention_days ?? 30;
     } catch (_) {}
     const list = document.getElementById("backup-list");
     const countEl = document.getElementById("backup-count");
@@ -2481,6 +2491,59 @@ function bindEvents() {
   // Auto-save proxy/captive toggles on change
   document.getElementById("yt-enabled").addEventListener("change", saveSettings);
   document.getElementById("cp-enabled").addEventListener("change", saveSettings);
+
+  // Tuya Pairing Mode
+  async function refreshPairingStatus() {
+    try {
+      const data = await api("GET", "/api/settings/pairing-mode");
+      const badge = document.getElementById("pairing-badge");
+      const startBtn = document.getElementById("btn-pairing-start");
+      const stopBtn = document.getElementById("btn-pairing-stop");
+      if (data.active) {
+        badge.textContent = "Active";
+        badge.className = "badge bg-warning";
+        startBtn.classList.add("d-none");
+        stopBtn.classList.remove("d-none");
+      } else {
+        badge.textContent = "Off";
+        badge.className = "badge bg-secondary";
+        startBtn.classList.remove("d-none");
+        stopBtn.classList.add("d-none");
+      }
+    } catch (_) {}
+  }
+
+  document.getElementById("btn-pairing-start").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-pairing-start");
+    const mins = parseInt(document.getElementById("pairing-duration").value, 10) || 30;
+    btn.disabled = true;
+    try {
+      await api("POST", "/api/settings/pairing-mode", { enabled: true, duration_minutes: mins });
+      showToast("Tuya pairing enabled for " + mins + " minutes", "success");
+      refreshPairingStatus();
+    } catch (e) {
+      showToast("Failed: " + e.message, "danger");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("btn-pairing-stop").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-pairing-stop");
+    btn.disabled = true;
+    try {
+      await api("POST", "/api/settings/pairing-mode", { enabled: false });
+      showToast("Tuya pairing disabled — domains re-blocked", "success");
+      refreshPairingStatus();
+    } catch (e) {
+      showToast("Failed: " + e.message, "danger");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Load pairing status on settings tab open
+  document.getElementById("tab-settings-btn").addEventListener("shown.bs.tab", refreshPairingStatus);
 
   // NTP enable/disable toggle
   document.getElementById("ntp-enabled").addEventListener("change", async function () {

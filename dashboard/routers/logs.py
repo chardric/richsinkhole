@@ -7,12 +7,24 @@ import asyncio
 import json
 
 import aiosqlite
+import yaml
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
 SINKHOLE_DB = "/data/sinkhole.db"
+CONFIG_PATH = "/config/config.yml"
 
 router = APIRouter()
+
+
+def _hidden_ips() -> set:
+    """IPs to hide from query logs (routers/infrastructure)."""
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        return set(cfg.get("rate_limit_exempt_ips", []))
+    except Exception:
+        return set()
 
 
 def _row_to_dict(r):
@@ -25,19 +37,30 @@ def _row_to_dict(r):
 
 @router.get("/logs")
 async def get_logs(limit: int = Query(100, ge=1, le=1000)):
+    hidden = _hidden_ips()
     async with aiosqlite.connect(SINKHOLE_DB) as db:
+        # Fetch extra rows to compensate for filtered IPs
+        fetch_limit = limit * 3 if hidden else limit
         rows = await db.execute_fetchall(
             """SELECT id, ts, client_ip, domain, qtype, action,
                       COALESCE(upstream,''), response_ms
                FROM query_log ORDER BY id DESC LIMIT ?""",
-            (limit,),
+            (fetch_limit,),
         )
-    return [_row_to_dict(r) for r in rows]
+    result = []
+    for r in rows:
+        if r[2] in hidden:
+            continue
+        result.append(_row_to_dict(r))
+        if len(result) >= limit:
+            break
+    return result
 
 
 @router.get("/logs/stream")
 async def stream_logs():
     async def event_generator():
+        hidden = _hidden_ips()
         async with aiosqlite.connect(SINKHOLE_DB) as db:
             row = (await db.execute_fetchall("SELECT COALESCE(MAX(id), 0) FROM query_log"))[0]
             last_id = row[0]
@@ -51,6 +74,8 @@ async def stream_logs():
                     )
                     for r in rows:
                         last_id = r[0]
+                        if r[2] in hidden:
+                            continue
                         yield f"data: {json.dumps(_row_to_dict(r))}\n\n"
                     await asyncio.sleep(0.5)
             except (asyncio.CancelledError, GeneratorExit):

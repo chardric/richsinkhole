@@ -1777,8 +1777,9 @@ class SinkholeResolver(BaseResolver):
                 log_query(client_ip, domain, qtype_str, "blocked")
                 return self._redirect_response(request, "0.0.0.0")
 
-        # 0. Rate limit / flood protection (skipped for passthrough)
-        if not passthrough:
+        # 0. Rate limit / flood protection (skipped for passthrough and exempt IPs)
+        _rl_exempt = set(cfg.get("rate_limit_exempt_ips", []))
+        if not passthrough and client_ip not in _rl_exempt:
             refuse, rl_reason = _rate_check(client_ip)
             if refuse:
                 self.logger.warning("REFUSED  %s  [%s]  (client=%s)", domain, rl_reason, client_ip)
@@ -1787,8 +1788,8 @@ class SinkholeResolver(BaseResolver):
                 reply.header.rcode = 5  # REFUSED
                 return reply
 
-        # 0a. IoT / device burst detection (skipped for passthrough)
-        if not passthrough:
+        # 0a. IoT / device burst detection (skipped for passthrough and exempt IPs)
+        if not passthrough and client_ip not in _rl_exempt:
             burst, burst_detail = _burst_check(client_ip)
             if burst:
                 self.logger.warning("BURST    %s  (client=%s) %s", domain, client_ip, burst_detail)

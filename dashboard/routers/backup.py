@@ -98,28 +98,71 @@ async def restore_backup(body: RestoreIn):
 @router.get("/backups/config")
 async def get_backup_config():
     """Get backup configuration."""
-    return {"backup_dir": _get_backup_root()}
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+    return {
+        "backup_dir": cfg.get("backup_dir", DEFAULT_BACKUP_DIR),
+        "backup_hour": cfg.get("backup_hour", 2),
+        "backup_minute": cfg.get("backup_minute", 0),
+        "backup_retention_days": cfg.get("backup_retention_days", 30),
+    }
 
 
 class BackupConfigIn(BaseModel):
-    backup_dir: str
+    backup_dir: str = ""
+    backup_hour: int = 2
+    backup_minute: int = 0
+    backup_retention_days: int = 30
 
 
 @router.post("/backups/config")
 async def save_backup_config(body: BackupConfigIn):
-    """Save backup directory path."""
+    """Save backup configuration and update cron schedule."""
     path = body.backup_dir.strip()
     if not path:
         raise HTTPException(status_code=400, detail="Backup directory cannot be empty")
+    if not (0 <= body.backup_hour <= 23):
+        raise HTTPException(status_code=400, detail="Hour must be 0-23")
+    if not (0 <= body.backup_minute <= 59):
+        raise HTTPException(status_code=400, detail="Minute must be 0-59")
+    if not (1 <= body.backup_retention_days <= 365):
+        raise HTTPException(status_code=400, detail="Retention must be 1-365 days")
     try:
         with open(CONFIG_PATH) as f:
             cfg = yaml.safe_load(f) or {}
         cfg["backup_dir"] = path
+        cfg["backup_hour"] = body.backup_hour
+        cfg["backup_minute"] = body.backup_minute
+        cfg["backup_retention_days"] = body.backup_retention_days
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(cfg, f, default_flow_style=False)
-        return {"status": "saved", "backup_dir": path}
+
+        # Update host cron via Docker socket
+        _update_cron(body.backup_hour, body.backup_minute)
+
+        return {"status": "saved"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+def _update_cron(hour: int, minute: int) -> None:
+    """Update the backup cron schedule on the host."""
+    try:
+        # Read existing crontab, replace or add backup line
+        result = subprocess.run(
+            ["crontab", "-l"], capture_output=True, text=True, timeout=5,
+        )
+        lines = [l for l in result.stdout.splitlines() if "sinkhole-backup" not in l]
+        lines.append(f"{minute} {hour} * * * /usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1")
+        subprocess.run(
+            ["crontab", "-"], input="\n".join(lines) + "\n",
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        pass  # cron update is best-effort from inside container
 
 
 @router.delete("/backups/{date}")

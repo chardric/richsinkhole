@@ -5,6 +5,9 @@
 
 import asyncio
 import os
+import sqlite3
+import time
+import threading
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -180,7 +183,9 @@ _RL_DEFAULTS = {
 @router.get("/settings/rate-limits")
 async def get_rate_limits():
     cfg = _read_cfg()
-    return {k: int(cfg.get(k, v)) for k, v in _RL_DEFAULTS.items()}
+    result = {k: int(cfg.get(k, v)) for k, v in _RL_DEFAULTS.items()}
+    result["rate_limit_exempt_ips"] = cfg.get("rate_limit_exempt_ips", [])
+    return result
 
 
 class RateLimitsIn(BaseModel):
@@ -189,6 +194,7 @@ class RateLimitsIn(BaseModel):
     burst_max_normal: int = 30
     burst_max_iot:    int = 10
     block_duration:   int = 300
+    rate_limit_exempt_ips: list[str] = []
 
 
 @router.post("/settings/rate-limits")
@@ -212,6 +218,7 @@ async def save_rate_limits(body: RateLimitsIn):
         "burst_max_normal": body.burst_max_normal,
         "burst_max_iot":    body.burst_max_iot,
         "block_duration":   body.block_duration,
+        "rate_limit_exempt_ips": [ip.strip() for ip in body.rate_limit_exempt_ips if ip.strip()],
     })
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
@@ -271,3 +278,80 @@ async def save_update_schedule(body: UpdateScheduleIn):
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
     return {"status": "saved"}
+
+
+# ── Tuya Pairing Mode ───────────────────────────────────────────────────────
+
+BLOCKLIST_DB = "/data/blocklist.db"
+
+_TUYA_DOMAINS = [
+    "iotbing.com", "tuya.com", "tuyacn.com", "tuyaeu.com",
+    "tuyaus.com", "smartlife.com", "smart-life.com", "voltsmart.com",
+]
+
+_pairing_timer: threading.Timer | None = None
+_pairing_active = False
+
+
+def _end_pairing() -> None:
+    """Re-block Tuya domains after timeout."""
+    global _pairing_active
+    try:
+        with sqlite3.connect(BLOCKLIST_DB, timeout=30) as conn:
+            for d in _TUYA_DOMAINS:
+                conn.execute(
+                    "INSERT OR IGNORE INTO blocked_domains (domain, source) VALUES (?, 'custom')",
+                    (d,),
+                )
+            conn.commit()
+    except Exception:
+        pass
+    _pairing_active = False
+
+
+@router.get("/settings/pairing-mode")
+async def get_pairing_mode():
+    return {"active": _pairing_active}
+
+
+class PairingModeIn(BaseModel):
+    enabled: bool
+    duration_minutes: int = 30
+
+
+@router.post("/settings/pairing-mode")
+async def set_pairing_mode(body: PairingModeIn):
+    global _pairing_timer, _pairing_active
+
+    if body.enabled:
+        if not (5 <= body.duration_minutes <= 120):
+            raise HTTPException(400, "Duration must be 5-120 minutes")
+
+        # Unblock Tuya domains
+        try:
+            with sqlite3.connect(BLOCKLIST_DB, timeout=30) as conn:
+                for d in _TUYA_DOMAINS:
+                    conn.execute("DELETE FROM blocked_domains WHERE domain=?", (d,))
+                conn.commit()
+        except Exception as exc:
+            raise HTTPException(500, f"Failed to unblock: {exc}")
+
+        # Cancel existing timer
+        if _pairing_timer:
+            _pairing_timer.cancel()
+
+        # Set auto-reblock timer
+        _pairing_timer = threading.Timer(body.duration_minutes * 60, _end_pairing)
+        _pairing_timer.daemon = True
+        _pairing_timer.start()
+        _pairing_active = True
+
+        return {"status": "enabled", "expires_in_minutes": body.duration_minutes}
+
+    else:
+        # Manually disable — re-block immediately
+        if _pairing_timer:
+            _pairing_timer.cancel()
+            _pairing_timer = None
+        _end_pairing()
+        return {"status": "disabled"}
