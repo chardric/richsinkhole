@@ -75,6 +75,8 @@ class RestoreIn(BaseModel):
 @router.post("/backups/restore")
 async def restore_backup(body: RestoreIn):
     """Restore from a dated backup folder."""
+    if ".." in body.date or "/" in body.date:
+        raise HTTPException(status_code=400, detail="Invalid backup name")
     backup_path = os.path.join(_get_backup_root(), body.date)
     if not os.path.isdir(backup_path):
         raise HTTPException(status_code=404, detail=f"Backup {body.date} not found")
@@ -123,9 +125,10 @@ async def save_backup_config(body: BackupConfigIn):
 @router.delete("/backups/{date}")
 async def delete_backup(date: str):
     """Delete a backup folder by date."""
-    # Validate date format to prevent path traversal
-    if not date.replace("-", "").isdigit() or len(date) != 10:
-        raise HTTPException(status_code=400, detail="Invalid date format")
+    # Validate format to prevent path traversal (YYYY-MM-DD or YYYY-MM-DD_HH-MM)
+    clean = date.replace("-", "").replace("_", "")
+    if not clean.isdigit() or len(date) not in (10, 16) or ".." in date or "/" in date:
+        raise HTTPException(status_code=400, detail="Invalid backup name")
     backup_path = os.path.join(_get_backup_root(), date)
     if not os.path.isdir(backup_path):
         raise HTTPException(status_code=404, detail=f"Backup {date} not found")
