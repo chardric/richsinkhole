@@ -61,6 +61,16 @@ def _is_whitelisted(ip: str) -> bool:
 
 
 def _whitelist_ip(ip: str) -> None:
+    # Never whitelist infrastructure/router IPs — they forward DNS on behalf of
+    # many clients, so whitelisting them would redirect YouTube for all clients
+    try:
+        import yaml
+        with open("/config/config.yml") as f:
+            cfg = yaml.safe_load(f) or {}
+        if ip in set(cfg.get("rate_limit_exempt_ips", [])):
+            return
+    except Exception:
+        pass
     with sqlite3.connect(SINKHOLE_DB) as conn:
         conn.execute(
             "INSERT OR IGNORE INTO captive_whitelist (ip, ts) VALUES (?, datetime('now'))",
