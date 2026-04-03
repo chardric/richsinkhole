@@ -2327,6 +2327,102 @@ function bindEvents() {
     loadUpdateSchedule();
   });
 
+  // Backup config save
+  document.getElementById("btn-save-backup-dir").addEventListener("click", async () => {
+    const dir = document.getElementById("backup-dir").value.trim();
+    if (!dir) return;
+    try {
+      await api("POST", "/api/backups/config", { backup_dir: dir });
+      showToast("Backup path saved", "success");
+    } catch (e) {
+      showToast("Save failed: " + e.message, "danger");
+    }
+  });
+
+  // Backup list + config load
+  document.getElementById("backup-collapse").addEventListener("show.bs.collapse", async () => {
+    // Load backup dir config
+    try {
+      const cfg = await api("GET", "/api/backups/config");
+      document.getElementById("backup-dir").value = cfg.backup_dir;
+    } catch (_) {}
+    const list = document.getElementById("backup-list");
+    const countEl = document.getElementById("backup-count");
+    list.innerHTML = '<span class="text-muted">Loading...</span>';
+    try {
+      const data = await api("GET", "/api/backups");
+      const latest = data.backups[0];
+      countEl.textContent = latest ? "Latest: " + latest.date + " (" + latest.size_mb + " MB)" : "No backups";
+      if (!data.backups.length) {
+        list.innerHTML = '<span class="text-muted">No backups yet. Click "Backup Now" to create one.</span>';
+        return;
+      }
+      list.innerHTML = data.backups.map(b =>
+        '<div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary">'
+        + '<div><span class="fw-semibold">' + escHtml(b.date) + '</span>'
+        + ' <span class="text-muted">(' + b.size_mb + ' MB, ' + b.files.length + ' files)</span></div>'
+        + '<div class="d-flex gap-1">'
+        + '<button class="btn btn-sm btn-outline-warning py-0 btn-restore" data-date="' + escHtml(b.date) + '" style="font-size:.7rem">Restore</button>'
+        + '<button class="btn btn-sm btn-outline-danger py-0 btn-del-backup" data-date="' + escHtml(b.date) + '" style="font-size:.7rem">Delete</button>'
+        + '</div>'
+        + '</div>'
+      ).join("");
+      list.querySelectorAll(".btn-restore").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!await confirmDialog("Restore backup from <strong>" + btn.dataset.date + "</strong>?<br>This will overwrite current databases. The sinkhole will need a restart.", { danger: true })) return;
+          btn.disabled = true;
+          try {
+            await api("POST", "/api/backups/restore", { date: btn.dataset.date });
+            showToast("Restored from " + btn.dataset.date + ". Restart sinkhole to apply.", "success");
+          } catch (e) {
+            showToast("Restore failed: " + e.message, "danger");
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+      list.querySelectorAll(".btn-del-backup").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!await confirmDialog("Delete backup <strong>" + btn.dataset.date + "</strong>?", { danger: true })) return;
+          btn.disabled = true;
+          try {
+            await api("DELETE", "/api/backups/" + btn.dataset.date);
+            showToast("Backup " + btn.dataset.date + " deleted", "success");
+            document.getElementById("backup-collapse").dispatchEvent(new Event("show.bs.collapse"));
+          } catch (e) {
+            showToast("Delete failed: " + e.message, "danger");
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      list.innerHTML = '<span class="text-danger small">Failed to load backups</span>';
+    }
+  });
+
+  document.getElementById("btn-backup-now").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-backup-now");
+    const status = document.getElementById("backup-status");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Backing up...';
+    try {
+      const result = await api("POST", "/api/backups/run");
+      btn.innerHTML = "Backup Now";
+      showToast("Backup completed", "success");
+      // Refresh backup list if panel is open
+      const collapse = document.getElementById("backup-collapse");
+      if (collapse.classList.contains("show")) {
+        collapse.dispatchEvent(new Event("show.bs.collapse"));
+      }
+    } catch (e) {
+      btn.innerHTML = "Backup Now";
+      showToast("Backup failed: " + e.message, "danger");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   document.getElementById("btn-run-speedtest").addEventListener("click", async () => {
     const btn = document.getElementById("btn-run-speedtest");
     const status = document.getElementById("speedtest-status");

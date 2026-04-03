@@ -20,7 +20,7 @@ def _host_ip() -> str:
         return ip
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
+        s.connect(("9.9.9.9", 80))
         ip = s.getsockname()[0]
         s.close()
         return ip

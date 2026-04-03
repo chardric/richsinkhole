@@ -14,6 +14,23 @@ All notable changes to RichSinkhole are documented here.
 - **Blocklist screen** — added Update Now button with real-time progress bar; new "Services" tab with toggleable blocked services grid (Social Media, Streaming, Gaming, Shopping, AI, Adult, Gambling, Tracking)
 - **Privacy screen** — updated to match current API format (companies with progress bars instead of old categories); shows device_type and company percentages
 
+## 2026-04-03
+
+### Added
+- **Backup & Restore UI** — Settings tab panel with Backup Now button (spinner), backup list with date+time folders, Restore and Delete per backup, configurable backup directory path
+- **Backup API** — `/api/backups` (list), `/api/backups/run` (trigger), `/api/backups/restore` (restore), `/api/backups/{date}` (delete), `/api/backups/config` (get/set backup dir)
+- **NAS data storage** — sinkhole data and backups stored on NAS via NFS; configurable via `DATA_DIR` and `BACKUP_DIR` env vars in docker-compose
+
+### Changed
+- **Captive portal one-shot** — redirects new devices only ONCE to show cert install page, then stops so connectivity checks pass normally; no more persistent "no internet"
+- **Replaced Google DNS everywhere** — switched to Quad9 (9.9.9.9) + Cloudflare (1.1.1.1) in docker-compose, dashboard, and QR code generator
+- **Docker-compose data volumes** — configurable via `DATA_DIR` and `BACKUP_DIR` env vars; supports NAS mount paths
+
+### Fixed
+- **Fresh install allowlist** — restored 30 essential domains (YouTube CDN, Shopee, GCash, Maya, Lazada, Garena, Apple, Firebase) for Philippine apps on new installs
+
+---
+
 ### Added
 - **GeoIP country blocking** — blocks domains resolving to Chinese IPs using a 326k-range ip2country database (auto-downloaded from GitHub). Applies to ALL devices including passthrough. Exempt list protects Shopee, GCash, Lazada, TikTok, Maya. Configurable via `geo_block_enabled` and `geo_block_countries` in config.
 - **Spyware/surveillance detection** — blocks known stalkerware (mSpy, FlexiSpy, Cocospy, Spyera, etc.), Chinese surveillance SDKs (Igexin, ADUPS, Ragentek), and commercial spyware (NSO Group Pegasus, Cytrox Predator). Applies to ALL devices — never exempt. Logged as `spyware_detected` security events.

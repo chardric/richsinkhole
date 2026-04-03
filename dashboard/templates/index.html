@@ -1118,6 +1118,29 @@
 
         <!-- Row 4: Service Controls -->
         <div class="col-12">
+          <!-- Backup & Restore -->
+          <div class="card mb-3">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#backup-collapse">
+              BACKUP & RESTORE
+              <span class="text-muted small" id="backup-count" style="font-size:.75rem"></span>
+            </div>
+            <div class="collapse" id="backup-collapse">
+            <div class="card-body">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <label class="text-muted small flex-shrink-0">Backup Path</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-dir" value="/mnt/nas/richsinkhole-backups" style="font-size:.75rem">
+                <button class="btn btn-sm btn-outline-secondary py-0 flex-shrink-0" id="btn-save-backup-dir" style="font-size:.7rem">Save</button>
+              </div>
+              <div class="d-flex gap-2 mb-3">
+                <button class="btn btn-sm btn-primary" id="btn-backup-now">Backup Now</button>
+              </div>
+              <div id="backup-list" class="small">
+                <span class="text-muted">Click to load backups</span>
+              </div>
+            </div>
+            </div>
+          </div>
+
           <!-- DNS Speed Test -->
           <div class="card mb-3">
             <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#speedtest-collapse">

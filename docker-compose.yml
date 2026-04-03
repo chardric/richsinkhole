@@ -54,15 +54,17 @@ services:
       ROOT_PATH: /richsinkhole
       NGINX_CONTAINER: richsinkhole-nginx-1
     volumes:
-      - ./data:/data
-      - ./data/config:/config
+      - ${DATA_DIR:-./data}:/data
+      - ${DATA_DIR:-./data}/config:/config
       - ./updater/sources.yml:/updater/sources.yml
       - ./nginx/certs:/certs:ro
       - ./nginx/conf.d:/nginx/conf.d
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${BACKUP_DIR:-/mnt/nas/richsinkhole-backups}:/mnt/nas/richsinkhole-backups
+      - /usr/local/bin/sinkhole-backup.sh:/usr/local/bin/sinkhole-backup.sh:ro
     dns:
-      - 8.8.8.8
-      - 8.8.4.4
+      - 9.9.9.9
+      - 1.1.1.1
     restart: unless-stopped
     cap_add:
       - NET_BIND_SERVICE

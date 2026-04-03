@@ -32,20 +32,16 @@ import blocker
 # Well-known captive portal detection domains for iOS, Android, Windows, macOS, Linux
 CAPTIVE_PORTAL_DOMAINS = {
     "captive.apple.com",
-    # www.apple.com is intentionally excluded — iOS uses it for HTTPS services
-    # (App Store, iCloud, Apple Pay). Redirecting it causes TLS mismatch errors
-    # and breaks all Apple services, making the device report "no internet".
-    # Firefox: detectportal.firefox.com is intentionally excluded —
-    # intercepting it causes a persistent "Open network login page" banner.
-    # Let Firefox reach Mozilla directly for its captive check.
     "connectivitycheck.gstatic.com",
     "connectivitycheck.android.com",
     "clients3.google.com",
-    # Windows NCSI domains excluded — intercepting them causes a persistent
-    # "No Internet" status in Windows taskbar. Let them resolve normally.
     "nmcheck.gnome.org",
     "nmcheck.fedoraproject.org",
 }
+
+# Track devices that already saw the captive portal (one-shot — show once then stop)
+_captive_shown: set[str] = set()  # IPs that already got one captive redirect
+_captive_lock = threading.Lock()
 
 CONFIG_PATH = "/config/config.yml"
 CONFIG_DEFAULT = "/dns/config.yml"
@@ -1835,15 +1831,20 @@ class SinkholeResolver(BaseResolver):
                     return self._redirect_response(request, host_ip)
 
         # 1. Captive portal detection domains (skipped for passthrough)
+        # One-shot: redirect ONCE per device to show the cert install page,
+        # then auto-whitelist so subsequent connectivity checks pass normally.
         cp_enabled = cfg.get("captive_portal_enabled", False)
         cp_ip = cfg.get("captive_portal_ip") or cfg.get("youtube_redirect_ip", "")
         if not passthrough and cp_enabled and cp_ip and domain in CAPTIVE_PORTAL_DOMAINS:
-            # Skip redirect for whitelisted clients — their OS connectivity checks
-            # must reach real servers or the OS will keep showing "no internet".
             if not _is_cert_installed(client_ip):
-                self.logger.info("CAPTIVE  %s -> %s  (client=%s)", domain, cp_ip, client_ip)
-                log_query(client_ip, domain, qtype_str, "captive")
-                return self._redirect_response(request, cp_ip)
+                with _captive_lock:
+                    already_shown = client_ip in _captive_shown
+                if not already_shown:
+                    with _captive_lock:
+                        _captive_shown.add(client_ip)
+                    self.logger.info("CAPTIVE  %s -> %s  (client=%s, one-shot)", domain, cp_ip, client_ip)
+                    log_query(client_ip, domain, qtype_str, "captive")
+                    return self._redirect_response(request, cp_ip)
 
         # 2. YouTube redirect — only for clients with cert installed (skipped for passthrough)
         yt_enabled = cfg.get("youtube_redirect_enabled", False)
