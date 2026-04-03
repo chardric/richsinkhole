@@ -21,6 +21,7 @@ All notable changes to RichSinkhole are documented here.
 - **Configurable backup schedule** — hour, minute, and retention days editable from dashboard; updates host cron automatically
 - **Rate limit exempt IPs** — configurable in Settings > Rate Limits; infrastructure devices (routers) skip rate limiting but still get blocklist/GeoIP filtering
 - **Hidden infrastructure in logs** — exempt IPs hidden from live query log and log API; only client devices shown
+- **Infrastructure whitelist protection** — exempt IPs (routers) can never be captive-whitelisted, preventing YouTube redirect from breaking all clients behind the router
 - **Backup & Restore UI** — Settings tab panel with Backup Now button (spinner), backup list with date+time folders, Restore and Delete per backup, configurable backup directory path
 - **Backup API** — `/api/backups` (list), `/api/backups/run` (trigger), `/api/backups/restore` (restore), `/api/backups/{date}` (delete), `/api/backups/config` (get/set backup dir)
 - **NAS data storage** — sinkhole data and backups stored on NAS via NFS; configurable via `DATA_DIR` and `BACKUP_DIR` env vars in docker-compose
