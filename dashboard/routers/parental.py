@@ -189,7 +189,10 @@ async def _get_warning_info(client_ip: str, blocked_host: str, db: aiosqlite.Con
 
 @router.get("/parental-block", response_class=HTMLResponse)
 async def parental_block_page(request: Request):
-    blocked_host = request.headers.get("x-blocked-host", "")
+    import re as _re
+    raw_host = request.headers.get("x-blocked-host", "")
+    # Sanitize — only allow valid hostname characters to prevent reflected XSS
+    blocked_host = raw_host if _re.match(r'^[a-zA-Z0-9\.\-]+$', raw_host) else ""
     client_ip    = request.headers.get("x-real-ip", "")
     if not client_ip and request.client:
         client_ip = request.client.host

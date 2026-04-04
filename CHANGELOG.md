@@ -4,6 +4,28 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-04
+
+### Security Patches
+- **CORS hardened** — removed wildcard `allow_origins=["*"]`; same-origin only
+- **Sensitive fields stripped** — `GET /api/settings` no longer exposes session_secret, admin_password_hash, or SMTP password
+- **Auth bypass fixed** — `/api/parental/snooze` now requires authentication
+- **Session secret hardened** — removed "changeme" fallback; auto-generates if missing
+- **Unbound upstream IP validation** — rejects non-IP input to prevent config injection
+- **Backup path traversal fixed** — restricted `backup_dir` to safe prefixes (`/mnt/`, `/data/backups`)
+- **Proxy rule injection fixed** — tightened URL regex to block nginx config metacharacters
+- **DNS reply validation** — verifies upstream source IP and transaction ID to mitigate cache poisoning
+- **Unbounded dict pruning** — periodic cleanup of rate/burst/anomaly counters; 10K IP cap prevents OOM
+- **Pattern cache race fix** — added lock to blocker pattern reload
+- **IPv6 rate limit bypass fixed** — normalizes `::ffff:` mapped addresses
+- **DOM XSS fixed** — `confirmDialog` and `promptDialog` now escape all HTML
+- **Host header injection fixed** — `install-cert.sh` sanitizes IP/hostname input
+- **Parental block page XSS fixed** — `x-blocked-host` header sanitized
+- **Verbose errors removed** — generic messages for backup config and pairing mode errors
+- **Nginx security headers** — X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy
+- **Docker hardening** — `cap_drop: ALL` + selective `cap_add` on all containers; `no-new-privileges` on sinkhole/ntp/nginx; pinned nginx image to `1.27-alpine`
+- **Forwarded-allow-ips restricted** — only trusts proxy headers from private network ranges (was `*`)
+
 ## 2026-04-01
 
 ### Native Apps

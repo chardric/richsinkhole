@@ -210,8 +210,20 @@ async def update_unbound_settings(body: UnboundUpdate):
     cfg = _load_settings()
 
     if body.upstreams is not None:
-        # Validate IPs
-        clean = [a.strip() for a in body.upstreams if a.strip()]
+        # Validate IPs — must be valid IPv4/IPv6 addresses
+        import ipaddress as _ip
+        clean = []
+        for a in body.upstreams:
+            a = a.strip()
+            if not a:
+                continue
+            # Accept IP or IP@port (e.g. 9.9.9.9@853)
+            ip_part = a.split("@")[0].split("#")[0].strip()
+            try:
+                _ip.ip_address(ip_part)
+            except ValueError:
+                raise HTTPException(400, f"Invalid upstream IP: {a}")
+            clean.append(a)
         if not clean:
             raise HTTPException(400, "At least one upstream DNS server required")
         cfg["upstreams"] = clean

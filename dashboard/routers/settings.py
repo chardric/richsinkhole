@@ -30,10 +30,21 @@ def _host_ip() -> str:
     return os.environ.get("HOST_IP", "")
 
 
+_SENSITIVE_KEYS = {
+    "session_secret", "admin_password_hash",
+}
+
 @router.get("/settings")
 async def get_settings():
     cfg = _read_cfg()
     cfg["server_ip"] = _host_ip()
+    # Strip sensitive fields
+    for k in _SENSITIVE_KEYS:
+        cfg.pop(k, None)
+    # Mask SMTP password
+    email = cfg.get("email_notifications")
+    if isinstance(email, dict) and email.get("smtp_password"):
+        email["smtp_password"] = "••••••••"
     return cfg
 
 
@@ -334,7 +345,7 @@ async def set_pairing_mode(body: PairingModeIn):
                     conn.execute("DELETE FROM blocked_domains WHERE domain=?", (d,))
                 conn.commit()
         except Exception as exc:
-            raise HTTPException(500, f"Failed to unblock: {exc}")
+            raise HTTPException(500, "Failed to unblock Tuya domains")
 
         # Cancel existing timer
         if _pairing_timer:

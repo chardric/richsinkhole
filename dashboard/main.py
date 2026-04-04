@@ -118,9 +118,9 @@ app = FastAPI(title="RichSinkhole Dashboard", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[],          # same-origin only; no cross-origin access
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -219,7 +219,10 @@ async def captive_portal(request: Request):
 
 @app.get("/install-cert.sh")
 async def install_cert_script(request: Request):
-    server_ip = HOST_IP or request.headers.get("host", "").split(":")[0]
+    raw_ip = HOST_IP or request.headers.get("host", "").split(":")[0]
+    # Sanitize — only allow valid IP/hostname characters to prevent shell injection
+    import re as _re
+    server_ip = raw_ip if _re.match(r'^[a-zA-Z0-9\.\-]+$', raw_ip) else "10.254.254.4"
     script = f"""#!/usr/bin/env bash
 set -e
 

@@ -124,6 +124,11 @@ async def save_backup_config(body: BackupConfigIn):
     path = body.backup_dir.strip()
     if not path:
         raise HTTPException(status_code=400, detail="Backup directory cannot be empty")
+    # Restrict to safe prefixes — prevent arbitrary filesystem access
+    _SAFE_PREFIXES = ("/mnt/", "/data/backups", "/backups")
+    resolved = os.path.realpath(path)
+    if not any(resolved.startswith(p) for p in _SAFE_PREFIXES):
+        raise HTTPException(status_code=400, detail="Backup directory must be under /mnt/, /data/backups, or /backups")
     if not (0 <= body.backup_hour <= 23):
         raise HTTPException(status_code=400, detail="Hour must be 0-23")
     if not (0 <= body.backup_minute <= 59):
@@ -144,8 +149,8 @@ async def save_backup_config(body: BackupConfigIn):
         _update_cron(body.backup_hour, body.backup_minute)
 
         return {"status": "saved"}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to save backup config")
 
 
 def _update_cron(hour: int, minute: int) -> None:

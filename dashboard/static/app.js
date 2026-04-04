@@ -41,8 +41,8 @@ function _modalDialog(html) {
 function confirmDialog(message, { danger = false } = {}) {
   const btnClass = danger ? "btn-danger" : "btn-primary";
   const parts = message.split("\n\n");
-  const title = parts[0];
-  const detail = parts.length > 1 ? `<div class="text-muted mt-2" style="font-size:.8rem">${parts.slice(1).join("<br>")}</div>` : "";
+  const title = escHtml(parts[0]);
+  const detail = parts.length > 1 ? `<div class="text-muted mt-2" style="font-size:.8rem">${escHtml(parts.slice(1).join("\n"))}</div>` : "";
   return _modalDialog(`
     <div class="modal-body">${title}${detail}</div>
     <div class="modal-footer border-secondary py-2">
@@ -54,8 +54,8 @@ function confirmDialog(message, { danger = false } = {}) {
 function promptDialog(message, defaultValue = "") {
   return _modalDialog(`
     <div class="modal-body">
-      <div class="mb-2">${message}</div>
-      <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary" data-modal-input value="${defaultValue.replace(/"/g, "&quot;")}">
+      <div class="mb-2">${escHtml(message)}</div>
+      <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary" data-modal-input value="${escHtml(defaultValue)}">
     </div>
     <div class="modal-footer border-secondary py-2">
       <button class="btn btn-sm btn-outline-secondary" data-action="cancel">Cancel</button>

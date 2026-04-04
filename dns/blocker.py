@@ -7,6 +7,7 @@ import fnmatch
 import re
 import sqlite3
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 _pattern_cache: list[re.Pattern] = []
 _pattern_cache_time: float = 0.0
 _PATTERN_CACHE_TTL = 60
+_pattern_lock = threading.Lock()
 
 
 def get_connection():
@@ -65,15 +67,18 @@ def _get_pattern_cache() -> list[re.Pattern]:
     global _pattern_cache, _pattern_cache_time
     now = time.monotonic()
     if now - _pattern_cache_time > _PATTERN_CACHE_TTL:
-        try:
-            with get_connection() as conn:
-                rows = conn.execute("SELECT pattern FROM blocked_patterns WHERE enabled = 1").fetchall()
-            _pattern_cache = [
-                re.compile(fnmatch.translate(r[0]), re.IGNORECASE) for r in rows
-            ]
-            _pattern_cache_time = now
-        except Exception as exc:
-            logger.warning("Failed to load blocked patterns: %s", exc)
+        with _pattern_lock:
+            # Double-check after acquiring lock
+            if now - _pattern_cache_time > _PATTERN_CACHE_TTL:
+                try:
+                    with get_connection() as conn:
+                        rows = conn.execute("SELECT pattern FROM blocked_patterns WHERE enabled = 1").fetchall()
+                    _pattern_cache = [
+                        re.compile(fnmatch.translate(r[0]), re.IGNORECASE) for r in rows
+                    ]
+                    _pattern_cache_time = now
+                except Exception as exc:
+                    logger.warning("Failed to load blocked patterns: %s", exc)
     return _pattern_cache
 
 

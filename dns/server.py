@@ -1631,6 +1631,57 @@ _client_blocks:    dict[str, float] = {}              # ip → expiry (monotonic
 _block_write_queue: dict[str, dict] = {}              # pending DB writes
 _rl_lock = threading.Lock()
 
+# Maximum tracked IPs per dict — prevents OOM via spoofed source IPs
+_MAX_TRACKED_IPS = 10_000
+
+
+def _prune_stale_dicts() -> None:
+    """Periodic cleanup of unbounded in-memory dicts. Runs every 60s."""
+    while True:
+        time.sleep(60)
+        now = time.monotonic()
+        try:
+            # Prune rate counters — drop entries older than 2x window
+            rl = _rl_cfg()
+            window = rl.get("rate_window", 10) * 2
+            with _rl_lock:
+                stale = [ip for ip, (_, ws) in _rate_counters.items()
+                         if now - ws > window]
+                for ip in stale:
+                    _rate_counters.pop(ip, None)
+                    _rate_violations.pop(ip, None)
+                stale_nx = [ip for ip, (_, ws) in _nxdomain_counters.items()
+                            if now - ws > window]
+                for ip in stale_nx:
+                    _nxdomain_counters.pop(ip, None)
+                # Prune expired blocks
+                exp = [ip for ip, expiry in _client_blocks.items()
+                       if now > expiry]
+                for ip in exp:
+                    _client_blocks.pop(ip, None)
+                # Hard cap — evict oldest if over limit
+                for d in (_rate_counters, _nxdomain_counters, _rate_violations):
+                    while len(d) > _MAX_TRACKED_IPS:
+                        d.pop(next(iter(d)))
+            # Prune burst counters
+            with _burst_lock:
+                stale_b = [ip for ip, (_, ws) in _burst_counters.items()
+                           if now - ws > 10]
+                for ip in stale_b:
+                    _burst_counters.pop(ip, None)
+                while len(_burst_counters) > _MAX_TRACKED_IPS:
+                    _burst_counters.pop(next(iter(_burst_counters)))
+            # Prune anomaly windows — drop entries older than 10min
+            with _anomaly_lock:
+                stale_a = [ip for ip, (_, ws) in _anomaly_windows.items()
+                           if now - ws > 600]
+                for ip in stale_a:
+                    _anomaly_windows.pop(ip, None)
+                while len(_anomaly_windows) > _MAX_TRACKED_IPS:
+                    _anomaly_windows.pop(next(iter(_anomaly_windows)))
+        except Exception:
+            pass  # never crash the pruner
+
 
 def _rate_check(client_ip: str) -> tuple[bool, str]:
     """
@@ -1764,6 +1815,10 @@ class SinkholeResolver(BaseResolver):
         qname = str(request.q.qname)
         qtype_str = QTYPE[request.q.qtype]
         client_ip = handler.client_address[0]
+        # Normalize IPv4-mapped IPv6 (::ffff:x.x.x.x → x.x.x.x) to prevent
+        # rate-limit bypass via dual-stack addressing
+        if client_ip.startswith("::ffff:"):
+            client_ip = client_ip[7:]
         domain = qname.lower().rstrip(".")
 
         # Determine device blocking profile (early — needed by burst/rate checks)
@@ -2064,14 +2119,31 @@ class SinkholeResolver(BaseResolver):
         """Forward query to upstream. Returns (reply, elapsed_ms)."""
         t0 = time.monotonic()
         try:
+            # Resolve hostname to IP once for source validation
+            upstream_ip = socket.gethostbyname(upstream)
             raw = request.pack()
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.settimeout(3)
-            sock.sendto(raw, (upstream, 53))
-            data, _ = sock.recvfrom(4096)
+            sock.sendto(raw, (upstream_ip, 53))
+            data, sender = sock.recvfrom(4096)
             sock.close()
-            from dnslib import DNSRecord
-            reply = DNSRecord.parse(data)
+            # Validate reply source — mitigate cache poisoning
+            if sender[0] != upstream_ip:
+                self.logger.warning(
+                    "DNS reply from unexpected source %s (expected %s), dropping",
+                    sender[0], upstream_ip)
+                reply = request.reply()
+                reply.header.rcode = 2  # SERVFAIL
+            else:
+                from dnslib import DNSRecord
+                reply = DNSRecord.parse(data)
+                # Validate transaction ID matches
+                if reply.header.id != request.header.id:
+                    self.logger.warning(
+                        "DNS reply ID mismatch: got %d, expected %d",
+                        reply.header.id, request.header.id)
+                    reply = request.reply()
+                    reply.header.rcode = 2
         except Exception as exc:
             self.logger.error("Upstream DNS error for %s: %s", request.q.qname, exc)
             reply = request.reply()
@@ -2165,6 +2237,11 @@ def start_dns():
     ct_writer = threading.Thread(target=_canary_writer, daemon=True, name="canary")
     ct_writer.start()
     log.info("Canary token writer started")
+
+    # Start dict pruner to prevent OOM from spoofed IPs
+    pruner = threading.Thread(target=_prune_stale_dicts, daemon=True, name="dict-pruner")
+    pruner.start()
+    log.info("Dict pruner started (cleanup every 60s)")
 
     # Start client block writer + restore previous session blocks
     bw = threading.Thread(target=_block_writer_task, daemon=True, name="block-writer")

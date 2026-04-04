@@ -33,5 +33,6 @@ COPY sinkhole/main.py /app/sinkhole_main.py
 
 EXPOSE 53/udp 53/tcp 8080 8000
 
+# Only trust proxy headers from Docker internal network (nginx container)
 CMD ["uvicorn", "sinkhole_main:app", "--host", "0.0.0.0", "--port", "8080", \
-     "--proxy-headers", "--forwarded-allow-ips=*", "--loop", "asyncio"]
+     "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12,192.168.0.0/16,10.0.0.0/8", "--loop", "asyncio"]

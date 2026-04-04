@@ -47,7 +47,8 @@ _ENSURE_DNS_TABLE = """
 """
 
 _HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$")
-_TARGET_RE   = re.compile(r"^https?://[^\s/$.?#].\S*$")
+# Only allow safe URL characters — block nginx config metacharacters ({};#\n)
+_TARGET_RE   = re.compile(r"^https?://[a-zA-Z0-9\-\.:]+(?:/[a-zA-Z0-9\-\._~:/?#\[\]@!$&'()*+,;=%]*)?$")
 
 
 class ProxyRuleIn(BaseModel):

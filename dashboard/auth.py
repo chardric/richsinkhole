@@ -24,7 +24,7 @@ CONFIG_PATH = "/config/config.yml"
 # Paths that don't require auth
 _PUBLIC = {"/login", "/health", "/static", "/captive", "/captive-portal",
            "/ca.crt", "/ca.mobileconfig", "/install-cert.sh", "/dns-query",
-           "/parental-block", "/api/parental/snooze", "/api/auth"}
+           "/parental-block", "/api/auth"}
 # Note: /metrics intentionally NOT in _PUBLIC — requires auth
 
 
@@ -72,7 +72,12 @@ def ensure_session_secret():
 
 
 def get_session_secret() -> str:
-    return _cfg().get("session_secret", "changeme")
+    secret = _cfg().get("session_secret", "")
+    if not secret or secret == "changeme":
+        # Force generation if missing — never fall back to a weak default
+        ensure_session_secret()
+        secret = _cfg().get("session_secret", "")
+    return secret
 
 
 # ── Password management ────────────────────────────────────────────────────
