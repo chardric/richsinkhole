@@ -17,7 +17,8 @@ import yaml
 
 CONFIG_PATH = "/config/config.yml"
 BACKUP_SCRIPT = "/usr/local/bin/sinkhole-backup.sh"
-DATA_DIR = "/data"
+DATA_DIR = "/data"       # NAS-backed: sinkhole.db (query log)
+LOCAL_DIR = "/local"     # SD-backed: blocklist.db, geoip-country.csv
 DEFAULT_BACKUP_DIR = "/mnt/nas/richsinkhole-backups"
 
 
@@ -82,13 +83,18 @@ async def restore_backup(body: RestoreIn):
         raise HTTPException(status_code=404, detail=f"Backup {body.date} not found")
 
     restored = []
-    for filename in ["sinkhole.db", "blocklist.db", "config.yml", "geoip-country.csv"]:
+    # File → target dir mapping (some files live on NAS, others on local SD)
+    _restore_paths = {
+        "sinkhole.db":        DATA_DIR,
+        "blocklist.db":       LOCAL_DIR,
+        "geoip-country.csv":  LOCAL_DIR,
+        "config.yml":         os.path.join(LOCAL_DIR, "config"),
+    }
+    for filename, target_dir in _restore_paths.items():
         src = os.path.join(backup_path, filename)
-        if filename == "config.yml":
-            dst = os.path.join(DATA_DIR, "config", filename)
-        else:
-            dst = os.path.join(DATA_DIR, filename)
+        dst = os.path.join(target_dir, filename)
         if os.path.isfile(src):
+            os.makedirs(target_dir, exist_ok=True)
             shutil.copy2(src, dst)
             restored.append(filename)
 

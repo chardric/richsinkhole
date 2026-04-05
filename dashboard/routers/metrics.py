@@ -12,7 +12,7 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
 SINKHOLE_DB  = "/data/sinkhole.db"
-BLOCKLIST_DB = "/data/blocklist.db"
+BLOCKLIST_DB = "/local/blocklist.db"
 
 router = APIRouter()
 

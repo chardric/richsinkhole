@@ -4,6 +4,26 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-05
+
+### Added
+- **Host-level mDNS/NetBIOS device probe** (`/usr/local/bin/rs-host-probe`) — runs hourly via cron to auto-label devices on the network. Uses multicast mDNS on directly-connected interfaces (eth0, eth1, eth2) and NetBIOS unicast for Windows PCs. Discovers real hostnames like `jellyfin`, `rpi3-home`, `chard-optiplex` without requiring changes to devices.
+- **Hostname pattern inference** for device type classification — matches patterns like `rpi-*`, `jellyfin`, `eap225-*`, `raspberrypi` to auto-classify devices.
+- **40+ new device signatures** — Tuya (iotbing.com), Xiaomi IoT, Raspberry Pi, Shelly, Sonoff, Philips Hue, Roku, Ring, Nest, Samsung/LG TVs, PlayStation, Xbox, Debian/Arch/Alpine Linux distros, and more.
+- **Infrastructure device-type lock** — once a device matches network gear signatures (MikroTik, TP-Link, Ubiquiti), consumer-OS signals are ignored. Prevents routers from being mis-classified as Android/Apple due to DNS forwarding.
+
+### Changed — NAS Resilience (Hybrid Storage)
+- **`blocklist.db` + `geoip-country.csv` + `config/` moved to local SD** — critical files now survive NAS outages. If the NAS goes down, DNS resolution continues working; only query logging is affected.
+- **`sinkhole.db` (query log) stays on NAS** — heavy writes still go to RAID-backed storage to protect the SD card from wear.
+- New `LOCAL_DATA` env var and `/local` volume mount in docker-compose.
+- Updated 12 source files to read blocklist/geoip from `/local/` instead of `/data/`.
+- Updated `backup.sh` and restore logic to handle split data directories.
+
+### Fixed
+- **Broken auto-labelling** — garbage labels like `xggd&F|x&gzo` were captured from malformed DNS queries. Now validates hostnames against RFC 1123 format and rejects hex hashes/UUIDs.
+- **Omada router mis-classified as Android** — TP-Link signatures drowned out by Android queries being forwarded through the router. Fixed with infrastructure type lock.
+- **mDNS parser skipped responses with qdcount=0** — mDNS responders may omit the question section; parser now handles this correctly.
+
 ## 2026-04-04
 
 ### Security Patches

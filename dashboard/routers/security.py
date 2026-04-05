@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 SINKHOLE_DB          = "/data/sinkhole.db"
-BLOCKLIST_DB         = "/data/blocklist.db"
+BLOCKLIST_DB         = "/local/blocklist.db"
 THREAT_INTEL_STATUS  = "/data/threat_intel_status.json"
 
 router = APIRouter()

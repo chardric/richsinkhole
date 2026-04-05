@@ -72,7 +72,10 @@ services:
       NGINX_CONTAINER: richsinkhole-nginx-1
     volumes:
       - ${DATA_DIR:-./data}:/data
-      - ${DATA_DIR:-./data}/config:/config
+      # Local SD-backed data — critical files that must survive NAS outages
+      # (blocklist.db, geoip-country.csv, config). Stays on fast local storage.
+      - ${LOCAL_DATA:-./local-data}:/local
+      - ${LOCAL_DATA:-./local-data}/config:/config
       - ./updater/sources.yml:/updater/sources.yml
       - ./nginx/certs:/certs:ro
       - ./nginx/conf.d:/nginx/conf.d

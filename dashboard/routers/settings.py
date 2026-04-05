@@ -293,7 +293,7 @@ async def save_update_schedule(body: UpdateScheduleIn):
 
 # ── Tuya Pairing Mode ───────────────────────────────────────────────────────
 
-BLOCKLIST_DB = "/data/blocklist.db"
+BLOCKLIST_DB = "/local/blocklist.db"
 
 _TUYA_DOMAINS = [
     "iotbing.com", "tuya.com", "tuyacn.com", "tuyaeu.com",

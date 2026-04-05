@@ -1,0 +1,26 @@
+# MikroTik — Force all DNS traffic to RichSinkhole (10.254.254.4)
+# Import: /import file-name=mikrotik-dns-force.txt
+#
+# What this does:
+#   1. Redirects ALL port 53 (UDP+TCP) traffic to the sinkhole
+#   2. Blocks DNS-over-TLS (port 853) and DNS-over-QUIC (port 8853)
+#   3. Excludes the sinkhole itself so it can reach upstream (Unbound)
+#
+# Even if a device sets 8.8.8.8 or 1.1.1.1 as DNS, packets are
+# silently redirected to the sinkhole. No way to bypass.
+
+# ── NAT redirect: all DNS → sinkhole ────────────────────────────────
+/ip firewall nat
+add chain=dstnat protocol=udp dst-port=53 src-address=!10.254.254.4 \
+    action=dst-nat to-addresses=10.254.254.4 to-ports=53 \
+    comment="Force DNS to sinkhole (UDP)"
+add chain=dstnat protocol=tcp dst-port=53 src-address=!10.254.254.4 \
+    action=dst-nat to-addresses=10.254.254.4 to-ports=53 \
+    comment="Force DNS to sinkhole (TCP)"
+
+# ── Block DNS bypass protocols ──────────────────────────────────────
+/ip firewall filter
+add chain=forward protocol=tcp dst-port=853 src-address=!10.254.254.4 \
+    action=drop comment="Block DNS-over-TLS bypass"
+add chain=forward protocol=udp dst-port=8853 src-address=!10.254.254.4 \
+    action=drop comment="Block DNS-over-QUIC bypass"

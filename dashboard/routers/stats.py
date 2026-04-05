@@ -9,7 +9,7 @@ import aiosqlite
 from fastapi import APIRouter
 
 SINKHOLE_DB = "/data/sinkhole.db"
-BLOCKLIST_DB = "/data/blocklist.db"
+BLOCKLIST_DB = "/local/blocklist.db"
 
 router = APIRouter()
 

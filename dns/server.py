@@ -28,6 +28,7 @@ from dnslib import RR, QTYPE, A
 from dnslib.server import DNSServer, BaseResolver, DNSLogger as DnsLibLogger
 
 import blocker
+import device_probe
 
 # Well-known captive portal detection domains for iOS, Android, Windows, macOS, Linux
 CAPTIVE_PORTAL_DOMAINS = {
@@ -46,7 +47,7 @@ _captive_lock = threading.Lock()
 CONFIG_PATH = "/config/config.yml"
 CONFIG_DEFAULT = "/dns/config.yml"
 SINKHOLE_DB = "/data/sinkhole.db"
-BLOCKLIST_DB = "/data/blocklist.db"
+BLOCKLIST_DB = "/local/blocklist.db"
 DEFAULT_BLOCKLIST = "/dns/blocklists/default.txt"
 
 
@@ -589,7 +590,7 @@ def _is_private_ip(ip_str: str) -> bool:
 # ---------------------------------------------------------------------------
 # GeoIP country lookup (lightweight — uses ip2country TSV database)
 # ---------------------------------------------------------------------------
-_GEOIP_DB_PATH = "/data/geoip-country.csv"
+_GEOIP_DB_PATH = "/local/geoip-country.csv"
 _GEOIP_URL = "https://raw.githubusercontent.com/sapics/ip-location-db/main/geo-whois-asn-country/geo-whois-asn-country-ipv4.csv"
 _geoip_ranges: list[tuple[int, int, str]] = []  # (start_int, end_int, country_code)
 _geoip_loaded = False
@@ -781,6 +782,45 @@ _DEVICE_SIGNATURES: list[tuple[str, str, int]] = [
     ("dahuasecurity.com",                       "Dahua Camera",     10),
     ("tuya.com",                                "Tuya IoT",         10),
     ("tuyaeu.com",                              "Tuya IoT",         10),
+    ("tuyaus.com",                              "Tuya IoT",         10),
+    ("tuyacn.com",                              "Tuya IoT",         10),
+    ("iotbing.com",                             "Tuya IoT",         12),
+    ("smartlife.com",                           "Tuya IoT",         10),
+    ("smart-life.com",                          "Tuya IoT",         10),
+    # Xiaomi IoT ecosystem
+    ("io.mi.com",                               "Xiaomi Device",    12),
+    ("ot.io.mi.com",                            "Xiaomi Device",    12),
+    ("mi-home.mi.com",                          "Xiaomi Device",    12),
+    ("mi-wifi.com",                             "Xiaomi Device",    10),
+    # Smart home IoT
+    ("shelly.cloud",                            "Shelly IoT",       15),
+    ("shelly-api.com",                          "Shelly IoT",       15),
+    ("sonoff.cc",                               "Sonoff IoT",       15),
+    ("ewelink.cc",                              "Sonoff IoT",       15),
+    ("coolkit.cc",                              "Sonoff IoT",       15),
+    ("meethue.com",                             "Philips Hue",      15),
+    ("tplinkra.com",                            "TP-Link Kasa",     12),
+    ("kasa.tplinkcloud.com",                    "TP-Link Kasa",     15),
+    # Streaming devices
+    ("roku.com",                                "Roku",             12),
+    ("sr.roku.com",                             "Roku",             15),
+    ("logs.roku.com",                           "Roku",             15),
+    # Smart TVs
+    ("lgtvsdp.com",                             "LG TV",            15),
+    ("lgappstv.com",                            "LG TV",            15),
+    ("samsungcloudsolution.com",                "Samsung TV",       15),
+    ("samsungotn.net",                          "Samsung TV",       15),
+    ("samsungacr.com",                          "Samsung TV",       12),
+    ("sonyentertainmentnetwork.com",            "Sony TV",          12),
+    # Game consoles
+    ("playstation.net",                         "PlayStation",      12),
+    ("xboxlive.com",                            "Xbox",             12),
+    ("nintendo.net",                            "Nintendo",         12),
+    # Cameras / security
+    ("ring.com",                                "Ring Camera",      12),
+    ("wyzecam.com",                             "Wyze Camera",      15),
+    ("nest.com",                                "Nest Device",      12),
+    ("ecobee.com",                              "Ecobee",           15),
     # ── Windows-exclusive ────────────────────────────────────────────────
     ("msftconnecttest.com",                     "Windows",          15),
     ("dns.msftncsi.com",                        "Windows",          15),
@@ -805,7 +845,7 @@ _DEVICE_SIGNATURES: list[tuple[str, str, int]] = [
     ("android.clients.google.com",              "Android",          2),
     ("mtalk.google.com",                        "Android",          2),
     ("play.google.com",                         "Android",          1),
-    # ── Linux desktop-exclusive ──────────────────────────────────────────
+    # ── Linux desktop/server (broad distro coverage) ─────────────────────
     ("connectivity-check.ubuntu.com",           "Linux",            12),
     ("nmcheck.gnome.org",                       "Linux",            12),
     ("nmcheck.fedoraproject.org",               "Linux",            12),
@@ -817,6 +857,27 @@ _DEVICE_SIGNATURES: list[tuple[str, str, int]] = [
     ("livepatch.canonical.com",                 "Linux",            12),
     ("packages.linuxmint.com",                  "Linux",            10),
     ("dl.fedoraproject.org",                    "Linux",            10),
+    # Debian
+    ("deb.debian.org",                          "Linux",            12),
+    ("security.debian.org",                     "Linux",            12),
+    ("packages.debian.org",                     "Linux",            12),
+    ("debian.map.fastlydns.net",                "Linux",            10),
+    # Arch / Manjaro
+    ("mirror.archlinux.org",                    "Linux",            12),
+    ("archlinux.org",                           "Linux",            10),
+    ("mirrors.manjaro.org",                     "Linux",            12),
+    # Alpine
+    ("alpinelinux.org",                         "Linux",            12),
+    # Raspberry Pi — higher weight, dedicated type
+    ("archive.raspberrypi.org",                 "Raspberry Pi",     15),
+    ("archive.raspbian.org",                    "Raspberry Pi",     15),
+    ("downloads.raspberrypi.org",               "Raspberry Pi",     15),
+    ("raspbian.raspberrypi.org",                "Raspberry Pi",     15),
+    ("raspberrypi.org",                         "Raspberry Pi",     12),
+    ("raspberrypi.com",                         "Raspberry Pi",     12),
+    # Server/dev tooling (Linux-heavy, weaker signal — lower weight)
+    ("deb.nodesource.com",                      "Linux",            8),
+    ("packagecloud.io",                         "Linux",            6),
     # ── Apple-exclusive ──────────────────────────────────────────────────
     ("captive.apple.com",                       "Apple Device",     15),
     ("albert.apple.com",                        "Apple Device",     15),
@@ -837,11 +898,38 @@ _fp_dirty:   set[str]                   = set()
 _fp_lock     = threading.Lock()
 
 
+# Network infrastructure types — once matched, classification is locked.
+# Routers/APs/NAS devices often forward DNS for clients behind them, so their
+# query patterns would otherwise be dominated by client-OS signals (Android, Apple).
+_INFRASTRUCTURE_TYPES = frozenset({
+    "MikroTik", "TP-Link", "Ubiquiti", "D-Link",
+    "Synology NAS", "Hikvision Camera", "Dahua Camera",
+})
+
+_fp_locked: dict[str, str] = {}  # ip → locked device_type (infrastructure only)
+
+
+def _load_infrastructure_locks() -> None:
+    """Load existing infrastructure classifications from DB so they're not overridden."""
+    try:
+        with sqlite3.connect(SINKHOLE_DB, timeout=10) as conn:
+            rows = conn.execute(
+                "SELECT ip, device_type FROM device_fingerprints WHERE device_type IN (%s)"
+                % ",".join(["?"] * len(_INFRASTRUCTURE_TYPES)),
+                tuple(_INFRASTRUCTURE_TYPES),
+            ).fetchall()
+        for ip, dtype in rows:
+            _fp_locked[ip] = dtype
+    except Exception:
+        pass
+
+
 def _check_fingerprint(client_ip: str, domain: str) -> None:
     """Match domain against device signatures; update in-memory scores.
 
     Each signature suffix is counted at most once per device (per process lifetime)
     to prevent chatty connectivity-check queries from drowning out genuine signals.
+    Network infrastructure matches lock the device type permanently.
     """
     best_type, best_weight, best_suffix = None, 0, None
     for suffix, dtype, weight in _DEVICE_SIGNATURES:
@@ -851,12 +939,21 @@ def _check_fingerprint(client_ip: str, domain: str) -> None:
         return
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with _fp_lock:
+        # If device is locked to an infrastructure type, ignore consumer-OS signals
+        if client_ip in _fp_locked and best_type not in _INFRASTRUCTURE_TYPES:
+            return
         matched = _fp_matched.setdefault(client_ip, set())
         if best_suffix in matched:
             return  # already counted this signal for this device
         matched.add(best_suffix)
         scores = _fp_scores.setdefault(client_ip, {})
         scores[best_type] = scores.get(best_type, 0) + best_weight
+        # Lock infrastructure classifications so they can't be overridden
+        if best_type in _INFRASTRUCTURE_TYPES:
+            _fp_locked[client_ip] = best_type
+            # Clear competing consumer-OS scores so the label reflects reality
+            scores.clear()
+            scores[best_type] = max(best_weight, 20)
         first, _ = _fp_seen.get(client_ip, (now, now))
         _fp_seen[client_ip] = (first, now)
         _fp_dirty.add(client_ip)
@@ -869,8 +966,103 @@ _hostname_lock = threading.Lock()
 # Bare hostnames / .local to ignore (common noise, not device names)
 _HOSTNAME_IGNORE = frozenset({
     "wpad", "localhost", "lan", "gateway", "_gateway", "config",
-    "https", "http", "hthttp", "facebook", "url_to_image",
+    "https", "http", "hthttp", "facebook", "url_to_image", "local",
 })
+
+# RFC 1123 hostname: letters, digits, hyphens. Must not start/end with hyphen.
+# Min 3 chars, max 63. Rejects all-numeric (likely IDs/hashes).
+_HOSTNAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")
+
+
+def _is_valid_hostname(name: str) -> bool:
+    if not name or len(name) < 3 or len(name) > 63:
+        return False
+    if name in _HOSTNAME_IGNORE:
+        return False
+    if not _HOSTNAME_RE.match(name):
+        return False
+    # Reject all-numeric and all-hex (likely UUIDs/hashes/tokens)
+    if name.replace("-", "").isdigit():
+        return False
+    if len(name) >= 16 and all(c in "0123456789abcdef-" for c in name):
+        return False
+    return True
+
+
+# Hostname pattern → device type inference (applied when bare hostname is seen)
+_HOSTNAME_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # Network gear
+    (re.compile(r"^eap\d+"),              "TP-Link"),
+    (re.compile(r"^eap225"),              "TP-Link"),
+    (re.compile(r"^omada"),               "TP-Link"),
+    (re.compile(r"^mikrotik|^routerboard|^hap-|^hex-"), "MikroTik"),
+    (re.compile(r"^ubnt|^unifi"),         "Ubiquiti"),
+    # Mobile & Apple
+    (re.compile(r"^iphone|^ipad|^imac|^macbook|^airport|^appletv|^homepod"), "Apple Device"),
+    (re.compile(r"^android-|^pixel-|^samsung-|^galaxy-"), "Android"),
+    (re.compile(r"^mi-|^xiaomi|^redmi|^poco"),  "Xiaomi Device"),
+    # Raspberry Pi hostname patterns
+    (re.compile(r"^raspberrypi$"),               "Raspberry Pi"),
+    (re.compile(r"^rpi-|^rpi\d|^pi-hole|^pihole|^octopi|^retropie|^homeassistant"), "Raspberry Pi"),
+    (re.compile(r"^raspi-|^raspberry-"),         "Raspberry Pi"),
+    # Windows default hostnames (DESKTOP-XXXXXXX is the Windows auto-generated format)
+    (re.compile(r"^desktop-[a-z0-9]{7}$"),       "Windows"),
+    (re.compile(r"^laptop-[a-z0-9]{7}$"),        "Windows"),
+    (re.compile(r"^surface-"),                   "Windows"),
+    # NOTE: hardware brand hostnames (elitedesk, thinkpad, xps, etc.) are NOT
+    # classified by brand — they could run Linux, Windows, or BSD. Device type
+    # is determined from DNS query patterns instead.
+    # Smart home & IoT
+    (re.compile(r"^echo-|^alexa-"),       "Amazon Echo"),
+    (re.compile(r"^googlehome|^nest-|^chromecast"), "Google Home"),
+    (re.compile(r"^roku-"),               "Roku"),
+    (re.compile(r"^shelly"),              "Shelly IoT"),
+    (re.compile(r"^sonoff|^ewelink"),     "Sonoff IoT"),
+    (re.compile(r"^philips-hue|^hue-"),   "Philips Hue"),
+    (re.compile(r"^ring-"),               "Ring Camera"),
+    (re.compile(r"^wyze"),                "Wyze Camera"),
+    (re.compile(r"^ps[45]-|^playstation"), "PlayStation"),
+    (re.compile(r"^xbox"),                "Xbox"),
+    # Servers / NAS
+    (re.compile(r"^synology|^diskstation|^ds\d+"), "Synology NAS"),
+    (re.compile(r"^qnap|^ts\d+"),         "QNAP NAS"),
+    (re.compile(r"^truenas|^freenas"),    "TrueNAS"),
+    # Media servers
+    (re.compile(r"^plex|^jellyfin|^emby|^kodi|^openmediavault|^nextcloud"), "Media Server"),
+    (re.compile(r"^icecast|^shoutcast|^liquidsoap|^azuracast|^libretime"), "Streaming Server"),
+]
+
+
+def _infer_type_from_hostname(hostname: str) -> str | None:
+    """Infer device type from bare hostname pattern (e.g. eap225-* → TP-Link)."""
+    for pattern, dtype in _HOSTNAME_PATTERNS:
+        if pattern.search(hostname):
+            return dtype
+    return None
+
+
+def _capture_hostname(client_ip: str, name: str) -> None:
+    """Store hostname and mark device dirty so it gets persisted to DB."""
+    with _hostname_lock:
+        _hostname_candidates[client_ip] = name
+    # Infer device type from hostname pattern and mark dirty
+    inferred = _infer_type_from_hostname(name)
+    with _fp_lock:
+        _fp_seen.setdefault(client_ip, (
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ))
+        if inferred:
+            # Don't override locked infrastructure classifications
+            if client_ip not in _fp_locked or inferred in _INFRASTRUCTURE_TYPES:
+                scores = _fp_scores.setdefault(client_ip, {})
+                scores[inferred] = max(scores.get(inferred, 0), 10)
+                if inferred in _INFRASTRUCTURE_TYPES:
+                    _fp_locked[client_ip] = inferred
+        else:
+            # Ensure an entry exists so the hostname gets written
+            _fp_scores.setdefault(client_ip, {}).setdefault("Unknown", 1)
+        _fp_dirty.add(client_ip)
 
 
 def _check_hostname(client_ip: str, domain: str) -> None:
@@ -878,16 +1070,14 @@ def _check_hostname(client_ip: str, domain: str) -> None:
     # Bare hostname (no dots) — e.g. "chadpc", "rpihole"
     if "." not in domain:
         name = domain.lower().strip()
-        if name and name not in _HOSTNAME_IGNORE and len(name) >= 3 and name.isascii():
-            with _hostname_lock:
-                _hostname_candidates[client_ip] = name
+        if _is_valid_hostname(name):
+            _capture_hostname(client_ip, name)
             return
     # mDNS .local — e.g. "richards-iphone.local"
     if domain.endswith(".local") and domain.count(".") == 1:
         name = domain[:-6].lower().strip()
-        if name and len(name) >= 3:
-            with _hostname_lock:
-                _hostname_candidates[client_ip] = name
+        if _is_valid_hostname(name):
+            _capture_hostname(client_ip, name)
 
 
 def _get_hostname(ip: str) -> str:
@@ -2076,20 +2266,14 @@ class SinkholeResolver(BaseResolver):
             _check_fingerprint(client_ip, domain)
             _check_hostname(client_ip, domain)
             _check_darkweb(client_ip, domain)
+            # Probe device for hostname via mDNS/NetBIOS (throttled, once per 24h)
+            device_probe.enqueue_probe(client_ip)
 
-            # Redirect chain detection (affiliate hijacking)
-            if not passthrough and cfg.get("redirect_chain_detection", True):
-                chain_hit, chain_trigger = _check_redirect_chain(client_ip, domain)
-                if chain_hit and chain_trigger:
-                    _enqueue_auto_block(chain_trigger)
-                    _log_security_event(
-                        client_ip, chain_trigger, "affiliate_chain",
-                        f"redirect chain: {chain_trigger} -> {domain}",
-                    )
-                    self.logger.warning(
-                        "CHAIN    %s  trigger=%s  (client=%s)",
-                        domain, chain_trigger, client_ip,
-                    )
+            # Redirect chain detection disabled — DNS cannot reliably distinguish
+            # user browsing behavior from malicious HTTP redirects. Previous logic
+            # flagged any legitimate site visited right before a deeplink domain
+            # (e.g. Spotify → clicking a TikTok link → Spotify auto-blocked).
+            # Affiliate hijacking must be detected at the HTTP layer, not DNS.
 
             self.logger.info("FORWARDED %s  (client=%s upstream=%s %dms)", domain, client_ip, upstream, elapsed_ms)
             log_query(client_ip, domain, qtype_str, "forwarded", upstream=upstream, response_ms=elapsed_ms)
@@ -2242,6 +2426,21 @@ def start_dns():
     pruner = threading.Thread(target=_prune_stale_dicts, daemon=True, name="dict-pruner")
     pruner.start()
     log.info("Dict pruner started (cleanup every 60s)")
+
+    # Restore infrastructure device type locks from DB (prevents routers
+    # from being re-classified as Android/Apple due to DNS forwarding)
+    _load_infrastructure_locks()
+    log.info("Loaded %d infrastructure locks from DB", len(_fp_locked))
+
+    # Start device probe worker — discovers hostnames via mDNS/NetBIOS
+    def _probe_callback(ip: str, hostname: str) -> None:
+        _capture_hostname(ip, hostname)
+    probe_thread = threading.Thread(
+        target=device_probe.probe_worker, args=(_probe_callback,),
+        daemon=True, name="device-probe",
+    )
+    probe_thread.start()
+    log.info("Device probe worker started (mDNS + NetBIOS)")
 
     # Start client block writer + restore previous session blocks
     bw = threading.Thread(target=_block_writer_task, daemon=True, name="block-writer")

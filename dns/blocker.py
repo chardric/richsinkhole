@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-DB_PATH = "/data/blocklist.db"
+DB_PATH = "/local/blocklist.db"
 
 logger = logging.getLogger(__name__)
 

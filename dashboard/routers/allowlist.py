@@ -8,7 +8,7 @@ import aiosqlite
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-BLOCKLIST_DB = "/data/blocklist.db"
+BLOCKLIST_DB = "/local/blocklist.db"
 DOMAIN_RE = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$")
 
 router = APIRouter()

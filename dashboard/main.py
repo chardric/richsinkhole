@@ -25,7 +25,7 @@ from routers import allowlist, app_usage, backup, blocked_services, blocklist, c
 import auth
 
 SINKHOLE_DB = "/data/sinkhole.db"
-BLOCKLIST_DB = "/data/blocklist.db"
+BLOCKLIST_DB = "/local/blocklist.db"
 CERT_PATH = "/certs/ca.crt"
 
 HOST_IP = os.getenv("HOST_IP", "")
