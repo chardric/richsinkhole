@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<!--
+  Audit Logs — Activity, Error, and Email log viewer for RichSinkhole admin.
+
+  Developed by:
+  Richard R. Ayuyang, PhD [https://chadlinuxtech.net]
+  Professor II, CSU
+
+  Copyright (c) 2026 DownStreamTech [https://downstreamtech.net]. All rights reserved.
+-->
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audit Logs — RichSinkhole</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='10' fill='none' stroke='%23da3633' stroke-width='1.6'/%3E%3Ccircle cx='11' cy='11' r='6' fill='none' stroke='%23da3633' stroke-width='1.2' opacity='.65'/%3E%3Ccircle cx='11' cy='11' r='2.5' fill='%23da3633'/%3E%3C/svg%3E">
+  <base href="{{ root_path }}/">
+  <link href="static/bootstrap.min.css" rel="stylesheet">
+  <meta name="theme-color" content="#0d1117">
+  <style nonce="{{ csp_nonce }}">
+    body { background-color: #0d1117; }
+    .navbar-brand { letter-spacing: 0.04em; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #58a6ff44; }
+
+    .log-table-wrap { max-height: calc(100vh - 320px); overflow-y: auto; }
+    .badge-error   { background-color: #da3633; }
+    .badge-warning { background-color: #9e6a03; }
+    .badge-info    { background-color: #1f6feb; }
+    .badge-debug   { background-color: #6e7681; }
+    .badge-fatal   { background-color: #8b0000; }
+    .badge-success { background-color: #238636; }
+    .badge-failed  { background-color: #da3633; }
+    .badge-pending { background-color: #9e6a03; }
+    .badge-queued  { background-color: #6e7681; }
+
+    .expand-btn { cursor: pointer; color: #58a6ff; font-size: .8rem; }
+    .expand-btn:hover { text-decoration: underline; }
+    .detail-row { display: none; }
+    .detail-row.show { display: table-row; }
+    .detail-cell { background: #161b22; white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: .8rem; color: #8b949e; }
+
+    .page-btn { min-width: 36px; }
+    .page-info { font-variant-numeric: tabular-nums; }
+
+    .search-wrap { max-width: 320px; }
+
+    .footer-bar {
+      background: #0d1117; border-top: 1px solid #21262d;
+      padding: 12px 0; text-align: center; font-size: .75rem; color: #484f58;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar bg-dark border-bottom border-secondary px-3 d-flex justify-content-between">
+  <span class="navbar-brand fw-bold text-danger fs-5" style="letter-spacing:.03em">
+    <svg width="22" height="22" viewBox="0 0 22 22" class="me-1" style="vertical-align:-4px" aria-hidden="true">
+      <circle cx="11" cy="11" r="10" fill="none" stroke="#da3633" stroke-width="1.6"/>
+      <circle cx="11" cy="11" r="6"  fill="none" stroke="#da3633" stroke-width="1.2" opacity=".65"/>
+      <circle cx="11" cy="11" r="2.5" fill="#da3633"/>
+    </svg>
+    Audit Logs
+  </span>
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ root_path }}/" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem">&larr; Dashboard</a>
+  </div>
+</nav>
+
+<div class="container-fluid px-3 mt-3">
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs border-secondary" id="auditTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" id="tab-activity-btn" data-bs-toggle="tab" data-bs-target="#tab-activity" role="tab">Activity Logs</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-errors-btn" data-bs-toggle="tab" data-bs-target="#tab-errors" role="tab">Error Logs</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-emails-btn" data-bs-toggle="tab" data-bs-target="#tab-emails" role="tab">Email Logs</button>
+    </li>
+  </ul>
+
+  <div class="tab-content mt-3">
+
+    <!-- ================================================================ -->
+    <!-- ACTIVITY LOGS TAB                                                -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade show active" id="tab-activity" role="tabpanel">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="search-wrap">
+          <input type="text" id="activity-search" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Search activity logs...">
+        </div>
+        <a id="activity-csv-btn" href="#" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+      </div>
+      <div class="log-table-wrap">
+        <table class="table table-sm table-dark table-hover mb-0">
+          <thead class="sticky-top" style="background:#161b22">
+            <tr>
+              <th style="width:160px">Time</th>
+              <th style="width:100px">User</th>
+              <th style="width:120px">Action</th>
+              <th>Resource</th>
+              <th style="width:130px">IP</th>
+              <th style="width:80px">Details</th>
+            </tr>
+          </thead>
+          <tbody id="activity-tbody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <span class="text-muted small page-info" id="activity-page-info"></span>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary page-btn" id="activity-prev" disabled>&laquo; Prev</button>
+          <button class="btn btn-outline-secondary page-btn" id="activity-next" disabled>Next &raquo;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- ERROR LOGS TAB                                                   -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-errors" role="tabpanel">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="search-wrap">
+          <input type="text" id="error-search" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Search error logs...">
+        </div>
+        <a id="error-csv-btn" href="#" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+      </div>
+      <div class="log-table-wrap">
+        <table class="table table-sm table-dark table-hover mb-0">
+          <thead class="sticky-top" style="background:#161b22">
+            <tr>
+              <th style="width:160px">Time</th>
+              <th style="width:80px">Level</th>
+              <th>Message</th>
+              <th style="width:180px">URL</th>
+              <th style="width:130px">IP</th>
+              <th style="width:80px">Stack</th>
+            </tr>
+          </thead>
+          <tbody id="error-tbody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <span class="text-muted small page-info" id="error-page-info"></span>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary page-btn" id="error-prev" disabled>&laquo; Prev</button>
+          <button class="btn btn-outline-secondary page-btn" id="error-next" disabled>Next &raquo;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- EMAIL LOGS TAB                                                   -->
+    <!-- ================================================================ -->
+    <div class="tab-pane fade" id="tab-emails" role="tabpanel">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="search-wrap">
+          <input type="text" id="email-search" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Search email logs...">
+        </div>
+        <a id="email-csv-btn" href="#" class="btn btn-sm btn-outline-secondary">Export CSV</a>
+      </div>
+      <div class="log-table-wrap">
+        <table class="table table-sm table-dark table-hover mb-0">
+          <thead class="sticky-top" style="background:#161b22">
+            <tr>
+              <th style="width:160px">Time</th>
+              <th style="width:180px">Recipient</th>
+              <th>Subject</th>
+              <th style="width:120px">Template</th>
+              <th style="width:90px">Status</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="email-tbody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <span class="text-muted small page-info" id="email-page-info"></span>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary page-btn" id="email-prev" disabled>&laquo; Prev</button>
+          <button class="btn btn-outline-secondary page-btn" id="email-next" disabled>Next &raquo;</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
+</div><!-- /container -->
+
+<!-- Footer -->
+<div class="footer-bar mt-4">
+  Copyright &copy; 2026 <a href="https://downstreamtech.net" target="_blank" rel="noopener" class="text-decoration-none" style="color:#58a6ff">DownStreamTech</a>. All rights reserved.
+</div>
+
+<script src="static/bootstrap.bundle.min.js" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">window.BASE_PATH = "{{ root_path }}";</script>
+<script nonce="{{ csp_nonce }}">
+(function () {
+  "use strict";
+
+  var B = window.BASE_PATH || "";
+  var PER_PAGE = 50;
+
+  /* ── Helpers ──────────────────────────────────────────── */
+
+  function esc(s) {
+    if (s == null) return "";
+    var d = document.createElement("div");
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return "-";
+    try {
+      var d = new Date(iso);
+      return d.toLocaleString("en-PH", { hour12: false, timeZone: "Asia/Manila" });
+    } catch (_) { return esc(iso); }
+  }
+
+  function levelBadge(level) {
+    var lc = (level || "").toLowerCase();
+    var cls = "badge-debug";
+    if (lc === "error") cls = "badge-error";
+    else if (lc === "warning" || lc === "warn") cls = "badge-warning";
+    else if (lc === "info") cls = "badge-info";
+    else if (lc === "fatal" || lc === "critical") cls = "badge-fatal";
+    return '<span class="badge ' + cls + '">' + esc(level) + "</span>";
+  }
+
+  function statusBadge(status) {
+    var lc = (status || "").toLowerCase();
+    var cls = "badge-queued";
+    if (lc === "sent" || lc === "delivered" || lc === "success") cls = "badge-success";
+    else if (lc === "failed" || lc === "error") cls = "badge-failed";
+    else if (lc === "pending" || lc === "queued") cls = "badge-pending";
+    return '<span class="badge ' + cls + '">' + esc(status) + "</span>";
+  }
+
+  function truncate(s, max) {
+    if (!s) return "-";
+    s = String(s);
+    return s.length > max ? s.substring(0, max) + "..." : s;
+  }
+
+  var expandCounter = 0;
+
+  /* ── Generic log loader ──────────────────────────────── */
+
+  function createLogManager(cfg) {
+    var state = { page: 1, search: "", total: 0, loading: false };
+
+    function updateCSV() {
+      var url = B + cfg.csvEndpoint + "?limit=10000";
+      if (state.search) url += "&search=" + encodeURIComponent(state.search);
+      cfg.csvBtn.href = url;
+    }
+
+    function load() {
+      if (state.loading) return;
+      state.loading = true;
+      var offset = (state.page - 1) * PER_PAGE;
+      var url = B + cfg.endpoint + "?limit=" + PER_PAGE + "&offset=" + offset;
+      if (state.search) url += "&search=" + encodeURIComponent(state.search);
+
+      fetch(url, { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (json) {
+          var data = json.data || json;
+          var items = Array.isArray(data) ? data : (data.items || data.rows || []);
+          state.total = data.total != null ? data.total : (json.total != null ? json.total : items.length);
+          cfg.tbody.innerHTML = cfg.renderRows(items);
+          var totalPages = Math.max(1, Math.ceil(state.total / PER_PAGE));
+          cfg.pageInfo.textContent = "Page " + state.page + " of " + totalPages + " (" + state.total + " records)";
+          cfg.prevBtn.disabled = state.page <= 1;
+          cfg.nextBtn.disabled = state.page >= totalPages;
+        })
+        .catch(function (err) {
+          cfg.tbody.innerHTML = '<tr><td colspan="' + cfg.cols + '" class="text-center text-danger">Failed to load: ' + esc(err.message) + "</td></tr>";
+        })
+        .finally(function () { state.loading = false; });
+    }
+
+    cfg.prevBtn.addEventListener("click", function () { if (state.page > 1) { state.page--; load(); } });
+    cfg.nextBtn.addEventListener("click", function () { state.page++; load(); });
+
+    var searchTimer = null;
+    cfg.searchInput.addEventListener("input", function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        state.search = cfg.searchInput.value.trim();
+        state.page = 1;
+        updateCSV();
+        load();
+      }, 350);
+    });
+
+    updateCSV();
+    return { load: load };
+  }
+
+  /* ── Activity Logs ───────────────────────────────────── */
+
+  var activityMgr = createLogManager({
+    endpoint: "/api/activity-logs",
+    csvEndpoint: "/api/activity-logs.csv",
+    tbody: document.getElementById("activity-tbody"),
+    searchInput: document.getElementById("activity-search"),
+    csvBtn: document.getElementById("activity-csv-btn"),
+    prevBtn: document.getElementById("activity-prev"),
+    nextBtn: document.getElementById("activity-next"),
+    pageInfo: document.getElementById("activity-page-info"),
+    cols: 6,
+    renderRows: function (items) {
+      if (!items.length) return '<tr><td colspan="6" class="text-center text-muted">No activity logs found.</td></tr>';
+      var html = "";
+      items.forEach(function (r) {
+        var id = "ad" + (++expandCounter);
+        var hasDetails = r.details && (typeof r.details === "object" ? Object.keys(r.details).length > 0 : String(r.details).length > 0);
+        var resource = r.resource_type ? (esc(r.resource_type) + (r.resource_id ? " #" + esc(r.resource_id) : "")) : "-";
+        html += "<tr>";
+        html += "<td>" + fmtTime(r.timestamp || r.created_at) + "</td>";
+        html += "<td>" + esc(r.user_id || r.user || "-") + "</td>";
+        html += "<td>" + esc(r.action || "-") + "</td>";
+        html += "<td>" + resource + "</td>";
+        html += "<td>" + esc(r.ip_address || r.ip || "-") + "</td>";
+        html += "<td>";
+        if (hasDetails) {
+          html += '<span class="expand-btn" data-target="' + id + '">Show</span>';
+        } else {
+          html += "-";
+        }
+        html += "</td></tr>";
+        if (hasDetails) {
+          var detail = typeof r.details === "object" ? JSON.stringify(r.details, null, 2) : String(r.details);
+          html += '<tr class="detail-row" id="' + id + '"><td colspan="6" class="detail-cell p-2">' + esc(detail) + "</td></tr>";
+        }
+      });
+      return html;
+    }
+  });
+
+  /* ── Error Logs ──────────────────────────────────────── */
+
+  var errorMgr = createLogManager({
+    endpoint: "/api/error-logs",
+    csvEndpoint: "/api/error-logs.csv",
+    tbody: document.getElementById("error-tbody"),
+    searchInput: document.getElementById("error-search"),
+    csvBtn: document.getElementById("error-csv-btn"),
+    prevBtn: document.getElementById("error-prev"),
+    nextBtn: document.getElementById("error-next"),
+    pageInfo: document.getElementById("error-page-info"),
+    cols: 6,
+    renderRows: function (items) {
+      if (!items.length) return '<tr><td colspan="6" class="text-center text-muted">No error logs found.</td></tr>';
+      var html = "";
+      items.forEach(function (r) {
+        var id = "ed" + (++expandCounter);
+        var hasStack = r.stack_trace && String(r.stack_trace).length > 0;
+        html += "<tr>";
+        html += "<td>" + fmtTime(r.timestamp || r.created_at) + "</td>";
+        html += "<td>" + levelBadge(r.level) + "</td>";
+        html += "<td>" + esc(truncate(r.message, 120)) + "</td>";
+        html += "<td>" + esc(truncate(r.request_url || r.url || "-", 40)) + "</td>";
+        html += "<td>" + esc(r.ip_address || r.ip || "-") + "</td>";
+        html += "<td>";
+        if (hasStack) {
+          html += '<span class="expand-btn" data-target="' + id + '">Show</span>';
+        } else {
+          html += "-";
+        }
+        html += "</td></tr>";
+        if (hasStack) {
+          html += '<tr class="detail-row" id="' + id + '"><td colspan="6" class="detail-cell p-2">' + esc(r.stack_trace) + "</td></tr>";
+        }
+      });
+      return html;
+    }
+  });
+
+  /* ── Email Logs ──────────────────────────────────────── */
+
+  var emailMgr = createLogManager({
+    endpoint: "/api/email-logs",
+    csvEndpoint: "/api/email-logs.csv",
+    tbody: document.getElementById("email-tbody"),
+    searchInput: document.getElementById("email-search"),
+    csvBtn: document.getElementById("email-csv-btn"),
+    prevBtn: document.getElementById("email-prev"),
+    nextBtn: document.getElementById("email-next"),
+    pageInfo: document.getElementById("email-page-info"),
+    cols: 6,
+    renderRows: function (items) {
+      if (!items.length) return '<tr><td colspan="6" class="text-center text-muted">No email logs found.</td></tr>';
+      var html = "";
+      items.forEach(function (r) {
+        html += "<tr>";
+        html += "<td>" + fmtTime(r.timestamp || r.created_at || r.sent_at) + "</td>";
+        html += "<td>" + esc(r.recipient || r.to || "-") + "</td>";
+        html += "<td>" + esc(truncate(r.subject, 60)) + "</td>";
+        html += "<td>" + esc(r.template || "-") + "</td>";
+        html += "<td>" + statusBadge(r.status) + "</td>";
+        html += "<td>" + esc(r.error || "-") + "</td>";
+        html += "</tr>";
+      });
+      return html;
+    }
+  });
+
+  /* ── Expand/collapse detail rows (event delegation) ── */
+
+  document.addEventListener("click", function (e) {
+    if (!e.target.classList.contains("expand-btn")) return;
+    var targetId = e.target.getAttribute("data-target");
+    if (!targetId) return;
+    var row = document.getElementById(targetId);
+    if (!row) return;
+    var showing = row.classList.toggle("show");
+    e.target.textContent = showing ? "Hide" : "Show";
+  });
+
+  /* ── Load visible tab on switch ──────────────────────── */
+
+  var tabEl = document.getElementById("auditTabs");
+  tabEl.addEventListener("shown.bs.tab", function (e) {
+    var target = e.target.getAttribute("data-bs-target");
+    if (target === "#tab-activity") activityMgr.load();
+    else if (target === "#tab-errors") errorMgr.load();
+    else if (target === "#tab-emails") emailMgr.load();
+  });
+
+  /* ── Initial load ────────────────────────────────────── */
+  activityMgr.load();
+
+})();
+</script>
+</body>
+</html>

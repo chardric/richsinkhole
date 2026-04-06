@@ -380,9 +380,13 @@ def _test_html() -> str:
 
 # ── SMTP send ─────────────────────────────────────────────────────────────────
 
-def _send(subject: str, plain: str, html: str | None = None, *, force: bool = False) -> None:
+def _send(subject: str, plain: str, html: str | None = None, *, force: bool = False,
+          template: str = "") -> None:
     """Send an email (plain text + optional HTML). Raises on any error.
-    Pass force=True to bypass the enabled check (e.g. test button)."""
+    Pass force=True to bypass the enabled check (e.g. test button).
+    Every attempt (success or failure) is logged to the email_logs table."""
+    import audit
+
     ec = _cfg()
     if not force and not ec.get("enabled"):
         return
@@ -395,7 +399,10 @@ def _send(subject: str, plain: str, html: str | None = None, *, force: bool = Fa
     to_addr   = ec.get("to_addr", "").strip()
 
     if not all([host, user, password, to_addr]):
-        raise ValueError("Email config is incomplete — check SMTP settings.")
+        err_msg = "Email config is incomplete — check SMTP settings."
+        audit.log_email(to_addr or "(none)", subject, template=template,
+                        status="failed", error=err_msg)
+        raise ValueError(err_msg)
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[RichSinkhole] {subject}"
@@ -405,24 +412,31 @@ def _send(subject: str, plain: str, html: str | None = None, *, force: bool = Fa
     if html:
         msg.attach(MIMEText(html, "html", "utf-8"))
 
-    if port == 465:
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=15) as s:
-            s.login(user, password)
-            s.sendmail(from_addr, [to_addr], msg.as_string())
-    else:
-        with smtplib.SMTP(host, port, timeout=15) as s:
-            s.ehlo()
-            if ec.get("tls", True):
-                s.starttls(context=ssl.create_default_context())
+    try:
+        if port == 465:
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL(host, port, context=ctx, timeout=15) as s:
+                s.login(user, password)
+                s.sendmail(from_addr, [to_addr], msg.as_string())
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as s:
                 s.ehlo()
-            s.login(user, password)
-            s.sendmail(from_addr, [to_addr], msg.as_string())
+                if ec.get("tls", True):
+                    s.starttls(context=ssl.create_default_context())
+                    s.ehlo()
+                s.login(user, password)
+                s.sendmail(from_addr, [to_addr], msg.as_string())
+        audit.log_email(to_addr, subject, template=template, status="sent")
+    except Exception as exc:
+        audit.log_email(to_addr, subject, template=template,
+                        status="failed", error=str(exc))
+        raise
 
 
-async def send_async(subject: str, plain: str, html: str | None = None, *, force: bool = False) -> None:
+async def send_async(subject: str, plain: str, html: str | None = None, *, force: bool = False,
+                     template: str = "") -> None:
     """Async wrapper — runs _send() in a thread so it doesn't block the event loop."""
-    await asyncio.to_thread(lambda: _send(subject, plain, html, force=force))
+    await asyncio.to_thread(lambda: _send(subject, plain, html, force=force, template=template))
 
 
 # ── DB queries ────────────────────────────────────────────────────────────────

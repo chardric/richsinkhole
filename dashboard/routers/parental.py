@@ -200,15 +200,19 @@ async def parental_block_page(request: Request):
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         warning_category, snoozed = await _get_warning_info(client_ip, blocked_host, db)
 
+    nonce = getattr(request.state, "csp_nonce", "")
+
     if warning_category and not snoozed:
         return templates.TemplateResponse(request, "screen_time_warning.html", context={
             "blocked_host": blocked_host,
             "category":     warning_category,
             "client_ip":    client_ip,
+            "csp_nonce":    nonce,
         })
 
     return templates.TemplateResponse(request, "parental_block.html", context={
         "blocked_host": blocked_host,
+        "csp_nonce":    nonce,
     })
 
 

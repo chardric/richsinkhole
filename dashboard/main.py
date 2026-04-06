@@ -21,8 +21,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import notifier
-from routers import allowlist, app_usage, backup, blocked_services, blocklist, canary, device_stats, devices, dns_records, doh, health, heatmap, logs, metrics, network_score, ntp, parental, privacy_report, proxy_rules, qr, schedules, security, services, settings, speedtest, stats, unbound_settings, updater
+from routers import allowlist, app_usage, audit_logs, backup, blocked_services, blocklist, canary, device_stats, devices, dns_records, doh, health, heatmap, logs, metrics, network_score, ntp, parental, privacy_report, proxy_rules, qr, schedules, security, services, sessions as sessions_router, settings, speedtest, stats, unbound_settings, updater
+import audit
 import auth
+import jsonlog
+from security_headers import SecurityHeadersMiddleware
+
+jsonlog.configure()
+_log = jsonlog.get_logger("dashboard")
 
 SINKHOLE_DB = "/data/sinkhole.db"
 BLOCKLIST_DB = "/local/blocklist.db"
@@ -98,6 +104,9 @@ async def lifespan(app: FastAPI):
     # Parental control tables + column migrations
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await parental.ensure_tables(db)
+    # Audit tables: activity_logs, error_logs, email_logs, sessions
+    async with aiosqlite.connect(SINKHOLE_DB) as db:
+        await audit.ensure_tables(db)
     # Auto-enable tracking/redirect blocking services on first run
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await db.execute("""CREATE TABLE IF NOT EXISTS blocked_services (
@@ -124,7 +133,20 @@ app.add_middleware(
 )
 
 from starlette.middleware.base import BaseHTTPMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BaseHTTPMiddleware, dispatch=auth.auth_middleware)
+
+
+# ── Global exception → error_logs ─────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def _exception_to_audit(request: Request, exc: Exception):
+    audit.log_error(
+        f"Unhandled {type(exc).__name__}: {exc}",
+        exc=exc,
+        request=request,
+    )
+    _log.exception("unhandled_exception", extra={"path": request.url.path})
+    return JSONResponse({"error": "internal_server_error"}, status_code=500)
 
 app.mount("/static", StaticFiles(directory="/dashboard/static"), name="static")
 templates = Jinja2Templates(directory="/dashboard/templates")
@@ -153,6 +175,8 @@ app.include_router(blocked_services.router, prefix="/api")
 app.include_router(speedtest.router, prefix="/api")
 app.include_router(backup.router, prefix="/api")
 app.include_router(app_usage.router, prefix="/api")
+app.include_router(audit_logs.router, prefix="/api")
+app.include_router(sessions_router.router, prefix="/api")
 app.include_router(parental.router)
 app.include_router(metrics.router)
 app.include_router(health.router)
@@ -212,6 +236,7 @@ async def captive_portal(request: Request):
     return templates.TemplateResponse(request, "captive.html", context={
         "host_ip": host_ip,
         "cert_confirmed": cert_confirmed,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
     })
 
 
@@ -356,71 +381,122 @@ async def api_login(request: Request, payload: dict = Body(...)):
     """JSON login endpoint for native mobile/desktop apps. Returns a Bearer token."""
     client_ip = request.headers.get("x-real-ip", request.headers.get("x-forwarded-for", request.client.host or "")).split(",")[0].strip()
     password = str(payload.get("password", ""))
+    totp_code = str(payload.get("totp", "") or payload.get("code", ""))
     if not auth.is_password_set():
         # First-run: set password via app
         if len(password) < 8:
             raise HTTPException(400, "Password must be at least 8 characters")
         auth.set_password(password)
+        audit.log_activity("auth.password_initial_set", request=request)
     else:
         if not auth.check_login_rate(client_ip):
-            raise HTTPException(429, "Too many login attempts. Try again in 5 minutes.")
+            audit.log_activity("auth.rate_limited", request=request, details={"ip": client_ip})
+            raise HTTPException(429, "Too many login attempts. Try again in 15 minutes.")
         if not auth.check_password(password):
             auth.record_login_attempt(client_ip)
+            audit.log_activity("auth.login_failed", request=request, details={"ip": client_ip})
             raise HTTPException(401, "Invalid credentials")
-    return {"token": auth.make_session_token()}
+        if auth.is_totp_enabled():
+            if not totp_code or not auth.verify_totp_code(totp_code):
+                auth.record_login_attempt(client_ip)
+                audit.log_activity("auth.totp_failed", request=request)
+                raise HTTPException(401, "Invalid 2FA code")
+    auth.clear_login_attempts(client_ip)
+    token = auth.make_session_token()
+    auth.persist_session(token, request)
+    audit.log_activity("auth.login", request=request)
+    return {"token": token}
+
+
+@app.post("/api/auth/refresh")
+async def api_refresh(request: Request):
+    """Rotate the current session token (refresh-token rotation).
+    Returns a new token; the old one is invalidated. Replay of the old token
+    burns the entire family and forces re-auth (compromise detection)."""
+    header = request.headers.get("Authorization", "")
+    old = header[7:] if header.startswith("Bearer ") else request.cookies.get("rs_session", "")
+    if not old or not auth.verify_session_token(old, touch=False):
+        raise HTTPException(401, "Invalid session")
+    new_token = auth.rotate_session_token(old, request)
+    if not new_token:
+        audit.log_activity("auth.refresh_replay_detected", request=request)
+        raise HTTPException(401, "Session replay detected — re-authenticate")
+    audit.log_activity("auth.refresh", request=request)
+    return {"token": new_token}
 
 
 @app.post("/api/auth/change-password")
-async def api_change_password(payload: dict = Body(...)):
-    """Change admin password. Requires current password for verification."""
+async def api_change_password(request: Request, payload: dict = Body(...)):
+    """Change admin password. Requires current password for verification.
+    All existing sessions are revoked (global rule)."""
     current = str(payload.get("current_password", ""))
     new_pw  = str(payload.get("new_password", ""))
     if not auth.check_password(current):
+        audit.log_activity("auth.password_change_failed", request=request)
         raise HTTPException(401, "Current password is incorrect")
     if len(new_pw) < 8:
         raise HTTPException(400, "New password must be at least 8 characters")
-    auth.set_password(new_pw)
+    auth.set_password(new_pw)     # also revokes all sessions
+    audit.log_activity("auth.password_changed", request=request)
     return {"status": "ok"}
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = ""):
-    return templates.TemplateResponse(request, "login.html", context={"error": error, "root_path": ROOT_PATH})
+    return templates.TemplateResponse(request, "login.html", context={
+        "error": error,
+        "root_path": ROOT_PATH,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
+        "totp_required": auth.is_totp_enabled(),
+    })
 
 
 @app.post("/login")
 async def login_submit(request: Request):
+    nonce = getattr(request.state, "csp_nonce", "")
+    def _login_err(msg, **extra):
+        return templates.TemplateResponse(request, "login.html", context={
+            "error": msg, "root_path": ROOT_PATH, "csp_nonce": nonce, **extra,
+        })
     client_ip = request.headers.get("x-real-ip", request.headers.get("x-forwarded-for", request.client.host or "")).split(",")[0].strip()
     form = await request.form()
     password = form.get("password", "")
+    totp_code = str(form.get("totp", ""))
     if not auth.is_password_set():
-        # First-run: set password
         if len(str(password)) < 8:
-            return templates.TemplateResponse(request, "login.html", context={
-                "error": "Password must be at least 8 characters.", "setup": True, "root_path": ROOT_PATH,
-            })
+            return _login_err("Password must be at least 8 characters.", setup=True)
         auth.set_password(str(password))
+        audit.log_activity("auth.password_initial_set", request=request)
     else:
-        # Rate limit check
         if not auth.check_login_rate(client_ip):
-            return templates.TemplateResponse(request, "login.html", context={
-                "error": "Too many login attempts. Try again in 5 minutes.", "root_path": ROOT_PATH,
-            })
+            audit.log_activity("auth.rate_limited", request=request, details={"ip": client_ip})
+            return _login_err("Too many login attempts. Try again in 15 minutes.")
         if not auth.check_password(str(password)):
             auth.record_login_attempt(client_ip)
-            return templates.TemplateResponse(request, "login.html", context={
-                "error": "Incorrect password.", "root_path": ROOT_PATH,
-            })
+            audit.log_activity("auth.login_failed", request=request, details={"ip": client_ip})
+            return _login_err("Incorrect password.", totp_required=auth.is_totp_enabled())
+        if auth.is_totp_enabled():
+            if not totp_code or not auth.verify_totp_code(totp_code):
+                auth.record_login_attempt(client_ip)
+                audit.log_activity("auth.totp_failed", request=request)
+                return _login_err("Invalid 2FA code.", totp_required=True)
+    auth.clear_login_attempts(client_ip)
     token = auth.make_session_token()
+    auth.persist_session(token, request)
+    audit.log_activity("auth.login", request=request)
     resp = RedirectResponse(url=f"{ROOT_PATH}/", status_code=302)
-    resp.set_cookie("rs_session", token, httponly=True, samesite="lax", max_age=86400 * 7)
+    auth.set_session_cookie(resp, token, request)
     return resp
 
 
 @app.post("/logout")
-async def logout():
+async def logout(request: Request):
+    token = request.cookies.get("rs_session", "")
+    if token:
+        audit.revoke_by_token(token)
+    audit.log_activity("auth.logout", request=request)
     resp = RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
-    resp.delete_cookie("rs_session")
+    resp.delete_cookie("rs_session", path="/")
     return resp
 
 
@@ -434,7 +510,68 @@ async def index(request: Request):
     return templates.TemplateResponse(request, "index.html", context={
         "root_path": ROOT_PATH,
         "cache_bust": _BOOT_TS,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
     })
+
+
+@app.get("/admin/audit", response_class=HTMLResponse)
+async def audit_page(request: Request):
+    return templates.TemplateResponse(request, "audit.html", context={
+        "root_path": ROOT_PATH,
+        "cache_bust": _BOOT_TS,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
+    })
+
+
+@app.get("/admin/sessions", response_class=HTMLResponse)
+async def sessions_page(request: Request):
+    return templates.TemplateResponse(request, "sessions.html", context={
+        "root_path": ROOT_PATH,
+        "cache_bust": _BOOT_TS,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
+    })
+
+
+# ─── PWA ─────────────────────────────────────────────────────────────────────
+
+@app.get("/manifest.webmanifest")
+async def pwa_manifest():
+    start = f"{ROOT_PATH}/" if ROOT_PATH else "/"
+    return JSONResponse({
+        "name": "RichSinkhole",
+        "short_name": "Sinkhole",
+        "description": "Self-hosted DNS sinkhole, ad blocker, and family network guardian",
+        "start_url": start,
+        "scope": start,
+        "display": "standalone",
+        "background_color": "#0d1117",
+        "theme_color": "#0d1117",
+        "orientation": "any",
+        "icons": [
+            {"src": "static/icon-192.png", "sizes": "192x192", "type": "image/png",
+             "purpose": "any maskable"},
+            {"src": "static/icon-512.png", "sizes": "512x512", "type": "image/png",
+             "purpose": "any maskable"},
+        ],
+    }, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/sw.js")
+async def pwa_service_worker():
+    sw_path = Path("/dashboard/static/sw.js")
+    try:
+        body = sw_path.read_bytes()
+    except FileNotFoundError:
+        body = b"// service worker missing"
+    return Response(
+        content=body,
+        media_type="application/javascript",
+        headers={
+            # Must be re-fetched on every navigation so updates roll out
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Service-Worker-Allowed": f"{ROOT_PATH}/" if ROOT_PATH else "/",
+        },
+    )
 
 
 @app.get("/setup", response_class=HTMLResponse)
@@ -454,4 +591,5 @@ async def setup(request: Request):
         "root_path": ROOT_PATH,
         "host_ip": host_ip,
         "http_port": http_port,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
     })

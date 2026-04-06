@@ -8,6 +8,12 @@ services:
     build: ./ntp
     ports:
       - "0.0.0.0:123:123/udp"
+    read_only: true
+    tmpfs:
+      - /var/run/chrony:size=1m
+      - /var/lib/chrony:size=4m
+      - /var/log/chrony:size=2m
+      - /tmp:size=1m
     cap_drop:
       - ALL
     cap_add:
@@ -33,6 +39,9 @@ services:
 
   unbound:
     build: ./unbound
+    read_only: true
+    tmpfs:
+      - /tmp:size=2m
     cap_drop:
       - ALL
     cap_add:
@@ -110,6 +119,11 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=1m
+      - /tmp:size=2m
     cap_drop:
       - ALL
     cap_add:
@@ -132,6 +146,11 @@ services:
     depends_on:
       - sinkhole
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:

@@ -39,6 +39,28 @@ def _ntp_ok(host: str = "ntp", port: int = 123) -> bool:
         return False
 
 
+@router.get("/health/live")
+async def health_live():
+    """Liveness — process is up. Kubernetes-style: fast, no dependencies."""
+    return JSONResponse({"status": "ok"}, status_code=200)
+
+
+@router.get("/health/ready")
+async def health_ready():
+    """Readiness — critical deps (DNS + SQLite) are reachable. 503 if not."""
+    ok = True
+    try:
+        async with aiosqlite.connect(SINKHOLE_DB) as db:
+            await db.execute("SELECT 1")
+        async with aiosqlite.connect(BLOCKLIST_DB) as db:
+            await db.execute("SELECT 1")
+    except Exception:
+        ok = False
+    if not _tcp_ok("localhost", 53):
+        ok = False
+    return JSONResponse({"status": "ok" if ok else "degraded"}, status_code=200 if ok else 503)
+
+
 @router.get("/health")
 async def health_check(request: Request):
     """Public endpoint returns only overall status. Authenticated requests get full details."""

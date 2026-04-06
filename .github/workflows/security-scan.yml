@@ -1,0 +1,64 @@
+# Copyright (c) 2026 DownStreamTech (https://downstreamtech.net)
+# Developed by: Richard R. Ayuyang, PhD, Professor II, CSU
+# All rights reserved.
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir \
+            dnslib pyyaml \
+            "fastapi>=0.115,<1.0" "uvicorn[standard]>=0.30,<1.0" aiosqlite httpx \
+            jinja2 python-multipart "qrcode[pil]" \
+            schedule
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit --strict --desc on
+
+  trivy-image:
+    name: Trivy container image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sinkhole image
+        run: docker build -f sinkhole/Dockerfile -t richsinkhole-scan:latest .
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: richsinkhole-scan:latest
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+  lint:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile-check all Python files
+        run: |
+          find . -name '*.py' -not -path './.git/*' -print0 \
+            | xargs -0 -n1 python3 -m py_compile

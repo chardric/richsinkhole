@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<!--
+  Sessions & 2FA management page for RichSinkhole admin.
+
+  Developed by:
+  Richard R. Ayuyang, PhD [https://chadlinuxtech.net]
+  Professor II, CSU
+
+  Copyright (c) 2026 DownStreamTech [https://downstreamtech.net]. All rights reserved.
+-->
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sessions &amp; 2FA — RichSinkhole</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='10' fill='none' stroke='%23da3633' stroke-width='1.6'/%3E%3Ccircle cx='11' cy='11' r='6' fill='none' stroke='%23da3633' stroke-width='1.2' opacity='.65'/%3E%3Ccircle cx='11' cy='11' r='2.5' fill='%23da3633'/%3E%3C/svg%3E">
+  <base href="{{ root_path }}/">
+  <link href="static/bootstrap.min.css" rel="stylesheet">
+  <meta name="theme-color" content="#0d1117">
+  <style nonce="{{ csp_nonce }}">
+    body { background-color: #0d1117; }
+    .navbar-brand { letter-spacing: 0.04em; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #58a6ff44; }
+
+    .session-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+      padding: 16px; transition: border-color 0.2s;
+    }
+    .session-card:hover { border-color: #30363d; }
+    .session-card.current { border-left: 3px solid #3fb950; }
+
+    .badge-current { background-color: #238636; }
+    .badge-2fa-on  { background-color: #238636; }
+    .badge-2fa-off { background-color: #6e7681; }
+
+    .meta-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: #484f58; }
+    .meta-value { font-size: .85rem; color: #c9d1d9; }
+
+    .section-title {
+      font-size: 1rem; font-weight: 600; color: #c9d1d9;
+      border-bottom: 1px solid #21262d; padding-bottom: 8px; margin-bottom: 16px;
+    }
+
+    .totp-secret {
+      font-family: monospace; font-size: .9rem; letter-spacing: .1em;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+      padding: 10px 14px; color: #58a6ff; word-break: break-all; user-select: all;
+    }
+
+    .totp-uri {
+      font-family: monospace; font-size: .7rem; color: #8b949e;
+      word-break: break-all; background: #0d1117; border: 1px solid #21262d;
+      border-radius: 4px; padding: 8px; margin-top: 8px;
+    }
+
+    .footer-bar {
+      background: #0d1117; border-top: 1px solid #21262d;
+      padding: 12px 0; text-align: center; font-size: .75rem; color: #484f58;
+    }
+
+    #toast-container {
+      position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 280px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar bg-dark border-bottom border-secondary px-3 d-flex justify-content-between">
+  <span class="navbar-brand fw-bold text-danger fs-5" style="letter-spacing:.03em">
+    <svg width="22" height="22" viewBox="0 0 22 22" class="me-1" style="vertical-align:-4px" aria-hidden="true">
+      <circle cx="11" cy="11" r="10" fill="none" stroke="#da3633" stroke-width="1.6"/>
+      <circle cx="11" cy="11" r="6"  fill="none" stroke="#da3633" stroke-width="1.2" opacity=".65"/>
+      <circle cx="11" cy="11" r="2.5" fill="#da3633"/>
+    </svg>
+    Sessions &amp; Security
+  </span>
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ root_path }}/" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem">&larr; Dashboard</a>
+  </div>
+</nav>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<div class="container-fluid px-3 mt-3" style="max-width:900px">
+
+  <!-- ================================================================ -->
+  <!-- ACTIVE SESSIONS                                                  -->
+  <!-- ================================================================ -->
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="section-title mb-0 border-0 pb-0">Active Sessions</h2>
+    <button class="btn btn-sm btn-outline-danger" id="revoke-all-btn">Revoke All Others</button>
+  </div>
+  <p class="text-muted small mb-3">Manage devices that are currently signed in to your account.</p>
+
+  <div id="sessions-list" class="d-flex flex-column gap-2 mb-4">
+    <div class="text-muted text-center py-4">Loading sessions...</div>
+  </div>
+
+  <hr class="border-secondary my-4">
+
+  <!-- ================================================================ -->
+  <!-- TWO-FACTOR AUTHENTICATION                                        -->
+  <!-- ================================================================ -->
+  <h2 class="section-title">Two-Factor Authentication</h2>
+
+  <div id="tfa-section">
+    <div class="text-muted text-center py-4">Checking 2FA status...</div>
+  </div>
+
+  <!-- 2FA: disabled state -->
+  <div id="tfa-disabled" class="d-none">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <span class="badge badge-2fa-off">2FA Disabled</span>
+      <span class="text-muted small">Add an extra layer of security to your account.</span>
+    </div>
+    <button class="btn btn-sm btn-primary" id="tfa-enable-btn">Enable 2FA</button>
+  </div>
+
+  <!-- 2FA: setup flow -->
+  <div id="tfa-setup" class="d-none">
+    <div class="rounded p-3 mb-3" style="background:#161b22;border:1px solid #21262d">
+      <p class="small text-muted mb-2">Scan this with your authenticator app, or copy the secret key below:</p>
+      <div class="totp-secret mb-2" id="tfa-secret"></div>
+      <div class="totp-uri" id="tfa-uri"></div>
+    </div>
+    <div class="d-flex align-items-end gap-2 flex-wrap">
+      <div>
+        <label for="tfa-code-input" class="form-label small text-muted mb-1">Enter the 6-digit code from your app</label>
+        <input type="text" id="tfa-code-input" class="form-control form-control-sm bg-dark text-light border-secondary" maxlength="6" pattern="[0-9]{6}" placeholder="000000" style="width:140px;letter-spacing:.15em;font-family:monospace" autocomplete="one-time-code">
+      </div>
+      <button class="btn btn-sm btn-success" id="tfa-verify-btn">Verify &amp; Enable</button>
+      <button class="btn btn-sm btn-outline-secondary" id="tfa-cancel-btn">Cancel</button>
+    </div>
+    <div id="tfa-verify-error" class="text-danger small mt-2 d-none"></div>
+  </div>
+
+  <!-- 2FA: enabled state -->
+  <div id="tfa-enabled" class="d-none">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <span class="badge badge-2fa-on">2FA Active</span>
+      <span class="text-muted small">Your account is protected with two-factor authentication.</span>
+    </div>
+    <div class="d-flex align-items-end gap-2 flex-wrap">
+      <div>
+        <label for="tfa-disable-pw" class="form-label small text-muted mb-1">Enter your password to disable 2FA</label>
+        <input type="password" id="tfa-disable-pw" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Password" style="width:220px" autocomplete="current-password">
+      </div>
+      <button class="btn btn-sm btn-outline-danger" id="tfa-disable-btn">Disable 2FA</button>
+    </div>
+    <div id="tfa-disable-error" class="text-danger small mt-2 d-none"></div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- Footer -->
+<div class="footer-bar mt-4">
+  Copyright &copy; 2026 <a href="https://downstreamtech.net" target="_blank" rel="noopener" class="text-decoration-none" style="color:#58a6ff">DownStreamTech</a>. All rights reserved.
+</div>
+
+<script src="static/bootstrap.bundle.min.js" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">window.BASE_PATH = "{{ root_path }}";</script>
+<script nonce="{{ csp_nonce }}">
+(function () {
+  "use strict";
+
+  var B = window.BASE_PATH || "";
+
+  /* ── Helpers ──────────────────────────────────────────── */
+
+  function esc(s) {
+    if (s == null) return "";
+    var d = document.createElement("div");
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return "-";
+    try {
+      var d = new Date(iso);
+      return d.toLocaleString("en-PH", { hour12: false, timeZone: "Asia/Manila" });
+    } catch (_) { return esc(iso); }
+  }
+
+  function fmtRelative(iso) {
+    if (!iso) return "";
+    try {
+      var ms = Date.now() - new Date(iso).getTime();
+      if (ms < 60000) return "just now";
+      if (ms < 3600000) return Math.floor(ms / 60000) + "m ago";
+      if (ms < 86400000) return Math.floor(ms / 3600000) + "h ago";
+      return Math.floor(ms / 86400000) + "d ago";
+    } catch (_) { return ""; }
+  }
+
+  function parseUA(ua) {
+    if (!ua) return "Unknown device";
+    var s = ua;
+    /* Try to extract a friendly name */
+    var browser = "";
+    if (/Edg\//.test(s)) browser = "Edge";
+    else if (/OPR\/|Opera/.test(s)) browser = "Opera";
+    else if (/Chrome\//.test(s)) browser = "Chrome";
+    else if (/Safari\//.test(s) && !/Chrome/.test(s)) browser = "Safari";
+    else if (/Firefox\//.test(s)) browser = "Firefox";
+    else browser = "Browser";
+
+    var os = "Unknown OS";
+    if (/Windows NT 10/.test(s)) os = "Windows";
+    else if (/Windows/.test(s)) os = "Windows";
+    else if (/Macintosh|Mac OS X/.test(s)) os = "macOS";
+    else if (/Android/.test(s)) os = "Android";
+    else if (/iPhone|iPad/.test(s)) os = "iOS";
+    else if (/Linux/.test(s)) os = "Linux";
+    else if (/CrOS/.test(s)) os = "ChromeOS";
+
+    return browser + " on " + os;
+  }
+
+  function toast(msg, type) {
+    var c = document.getElementById("toast-container");
+    var cls = type === "error" ? "bg-danger" : type === "warning" ? "bg-warning text-dark" : "bg-success";
+    var el = document.createElement("div");
+    el.className = "toast align-items-center border-0 text-white " + cls;
+    el.setAttribute("role", "alert");
+    el.innerHTML = '<div class="d-flex"><div class="toast-body">' + esc(msg) + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+    c.appendChild(el);
+    var t = new bootstrap.Toast(el, { delay: 4000 });
+    t.show();
+    el.addEventListener("hidden.bs.toast", function () { el.remove(); });
+  }
+
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.credentials = "same-origin";
+    opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    return fetch(B + url, opts).then(function (r) {
+      if (!r.ok) return r.json().then(function (j) { throw new Error(j.message || j.detail || r.statusText); });
+      if (r.status === 204) return null;
+      return r.json();
+    });
+  }
+
+  /* ── Sessions ─────────────────────────────────────────── */
+
+  var sessionsList = document.getElementById("sessions-list");
+  var revokeAllBtn = document.getElementById("revoke-all-btn");
+
+  function loadSessions() {
+    sessionsList.innerHTML = '<div class="text-muted text-center py-4">Loading sessions...</div>';
+    apiFetch("/api/sessions")
+      .then(function (json) {
+        var items = json.data || json.sessions || json;
+        if (!Array.isArray(items)) items = [];
+        if (items.length === 0) {
+          sessionsList.innerHTML = '<div class="text-muted text-center py-4">No active sessions.</div>';
+          return;
+        }
+        var html = "";
+        items.forEach(function (s) {
+          var isCurrent = s.is_current || s.current || false;
+          html += '<div class="session-card' + (isCurrent ? " current" : "") + '">';
+          html += '<div class="d-flex justify-content-between align-items-start">';
+          html += '<div>';
+          html += '<div class="fw-semibold" style="color:#c9d1d9">' + esc(parseUA(s.user_agent)) + "</div>";
+          if (isCurrent) html += ' <span class="badge badge-current ms-1" style="font-size:.65rem">This device</span>';
+          html += '<div class="d-flex gap-4 mt-2 flex-wrap">';
+          html += '<div><span class="meta-label">IP Address</span><div class="meta-value">' + esc(s.ip_address || s.ip || "-") + "</div></div>";
+          html += '<div><span class="meta-label">Created</span><div class="meta-value">' + fmtTime(s.created_at || s.created) + "</div></div>";
+          html += '<div><span class="meta-label">Last Seen</span><div class="meta-value">' + fmtTime(s.last_seen || s.last_active || s.updated_at) + " <span class='text-muted small'>(" + fmtRelative(s.last_seen || s.last_active || s.updated_at) + ")</span></div></div>";
+          html += "</div></div>";
+          if (!isCurrent) {
+            html += '<button class="btn btn-sm btn-outline-danger revoke-btn" data-id="' + esc(s.id) + '">Revoke</button>';
+          }
+          html += "</div></div>";
+        });
+        sessionsList.innerHTML = html;
+      })
+      .catch(function (err) {
+        sessionsList.innerHTML = '<div class="text-danger text-center py-4">Failed to load sessions: ' + esc(err.message) + "</div>";
+      });
+  }
+
+  /* Revoke single session (event delegation) */
+  sessionsList.addEventListener("click", function (e) {
+    var btn = e.target.closest(".revoke-btn");
+    if (!btn) return;
+    var sid = btn.getAttribute("data-id");
+    if (!sid) return;
+    btn.disabled = true;
+    btn.textContent = "Revoking...";
+    apiFetch("/api/sessions/" + encodeURIComponent(sid), { method: "DELETE" })
+      .then(function () { toast("Session revoked.", "success"); loadSessions(); })
+      .catch(function (err) { toast("Failed: " + err.message, "error"); btn.disabled = false; btn.textContent = "Revoke"; });
+  });
+
+  /* Revoke all others */
+  revokeAllBtn.addEventListener("click", function () {
+    revokeAllBtn.disabled = true;
+    revokeAllBtn.textContent = "Revoking...";
+    apiFetch("/api/sessions/revoke-others", { method: "POST" })
+      .then(function () { toast("All other sessions revoked.", "success"); loadSessions(); })
+      .catch(function (err) { toast("Failed: " + err.message, "error"); })
+      .finally(function () { revokeAllBtn.disabled = false; revokeAllBtn.textContent = "Revoke All Others"; });
+  });
+
+  /* ── 2FA ──────────────────────────────────────────────── */
+
+  var tfaSection   = document.getElementById("tfa-section");
+  var tfaDisabled  = document.getElementById("tfa-disabled");
+  var tfaSetup     = document.getElementById("tfa-setup");
+  var tfaEnabled   = document.getElementById("tfa-enabled");
+  var tfaSecret    = document.getElementById("tfa-secret");
+  var tfaUri       = document.getElementById("tfa-uri");
+  var tfaCodeInput = document.getElementById("tfa-code-input");
+  var tfaVerifyBtn = document.getElementById("tfa-verify-btn");
+  var tfaCancelBtn = document.getElementById("tfa-cancel-btn");
+  var tfaEnableBtn = document.getElementById("tfa-enable-btn");
+  var tfaDisableBtn = document.getElementById("tfa-disable-btn");
+  var tfaDisablePw  = document.getElementById("tfa-disable-pw");
+  var tfaVerifyErr  = document.getElementById("tfa-verify-error");
+  var tfaDisableErr = document.getElementById("tfa-disable-error");
+
+  function showTfaState(state) {
+    tfaSection.classList.add("d-none");
+    tfaDisabled.classList.add("d-none");
+    tfaSetup.classList.add("d-none");
+    tfaEnabled.classList.add("d-none");
+    if (state === "disabled") tfaDisabled.classList.remove("d-none");
+    else if (state === "setup") tfaSetup.classList.remove("d-none");
+    else if (state === "enabled") tfaEnabled.classList.remove("d-none");
+  }
+
+  function loadTfaStatus() {
+    apiFetch("/api/2fa/status")
+      .then(function (json) {
+        var d = json.data || json;
+        var enabled = d.enabled || d.is_enabled || d.totp_enabled || false;
+        showTfaState(enabled ? "enabled" : "disabled");
+      })
+      .catch(function (err) {
+        tfaSection.innerHTML = '<div class="text-danger">Failed to load 2FA status: ' + esc(err.message) + "</div>";
+      });
+  }
+
+  /* Enable: request setup */
+  tfaEnableBtn.addEventListener("click", function () {
+    tfaEnableBtn.disabled = true;
+    tfaEnableBtn.textContent = "Setting up...";
+    apiFetch("/api/2fa/setup", { method: "POST" })
+      .then(function (json) {
+        var d = json.data || json;
+        tfaSecret.textContent = d.secret || d.totp_secret || "-";
+        tfaUri.textContent = d.uri || d.totp_uri || d.provisioning_uri || "";
+        tfaCodeInput.value = "";
+        tfaVerifyErr.classList.add("d-none");
+        showTfaState("setup");
+      })
+      .catch(function (err) { toast("2FA setup failed: " + err.message, "error"); })
+      .finally(function () { tfaEnableBtn.disabled = false; tfaEnableBtn.textContent = "Enable 2FA"; });
+  });
+
+  /* Cancel setup */
+  tfaCancelBtn.addEventListener("click", function () {
+    showTfaState("disabled");
+  });
+
+  /* Verify code */
+  tfaVerifyBtn.addEventListener("click", function () {
+    var code = tfaCodeInput.value.trim();
+    if (!/^[0-9]{6}$/.test(code)) {
+      tfaVerifyErr.textContent = "Enter a 6-digit numeric code.";
+      tfaVerifyErr.classList.remove("d-none");
+      return;
+    }
+    tfaVerifyBtn.disabled = true;
+    tfaVerifyBtn.textContent = "Verifying...";
+    tfaVerifyErr.classList.add("d-none");
+    apiFetch("/api/2fa/enable", { method: "POST", body: JSON.stringify({ code: code }) })
+      .then(function () {
+        toast("2FA enabled successfully.", "success");
+        showTfaState("enabled");
+      })
+      .catch(function (err) {
+        tfaVerifyErr.textContent = err.message || "Invalid code. Try again.";
+        tfaVerifyErr.classList.remove("d-none");
+      })
+      .finally(function () { tfaVerifyBtn.disabled = false; tfaVerifyBtn.textContent = "Verify & Enable"; });
+  });
+
+  /* Allow Enter key to submit code */
+  tfaCodeInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); tfaVerifyBtn.click(); }
+  });
+
+  /* Disable 2FA */
+  tfaDisableBtn.addEventListener("click", function () {
+    var pw = tfaDisablePw.value;
+    if (!pw) {
+      tfaDisableErr.textContent = "Password is required.";
+      tfaDisableErr.classList.remove("d-none");
+      return;
+    }
+    tfaDisableBtn.disabled = true;
+    tfaDisableBtn.textContent = "Disabling...";
+    tfaDisableErr.classList.add("d-none");
+    apiFetch("/api/2fa/disable", { method: "POST", body: JSON.stringify({ password: pw }) })
+      .then(function () {
+        toast("2FA disabled.", "success");
+        tfaDisablePw.value = "";
+        showTfaState("disabled");
+      })
+      .catch(function (err) {
+        tfaDisableErr.textContent = err.message || "Incorrect password.";
+        tfaDisableErr.classList.remove("d-none");
+      })
+      .finally(function () { tfaDisableBtn.disabled = false; tfaDisableBtn.textContent = "Disable 2FA"; });
+  });
+
+  /* Allow Enter key on password field */
+  tfaDisablePw.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); tfaDisableBtn.click(); }
+  });
+
+  /* ── Init ─────────────────────────────────────────────── */
+  loadSessions();
+  loadTfaStatus();
+
+})();
+</script>
+</body>
+</html>

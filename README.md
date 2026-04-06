@@ -5,12 +5,15 @@ A self-hosted DNS sinkhole and ad blocker for your home network. Blocks ads, tra
 ## Features
 
 - **DNS blocking** — 1M+ domains blocked from 9 curated feeds; custom blocklist, allowlist, and service toggles (Social Media, Streaming, Gaming, etc.)
-- **Security** — DNS rebinding shield, DGA detection, tunneling detection, typosquat protection, DoH bypass detection, GeoIP country blocking, spyware detection
+- **Security** — DNS rebinding shield, DGA detection, tunneling detection, typosquat protection, DoH bypass detection, GeoIP country blocking, spyware detection, CSP nonces, container hardening (read-only rootfs, non-root, cap_drop ALL)
+- **Auth** — PBKDF2 password hashing, TOTP 2FA, DB-backed sessions with rotation + revocation, 15-min lockout, Secure cookies
+- **Audit** — append-only activity logs, error logs, email logs with admin UI, structured JSON logging with request-ID correlation
 - **Parental controls** — per-device profiles (Normal, Strict, Guest, Quarantine, Passthrough); screen time budgets, bedtime schedules, app usage tracking, family activity digest emails
 - **YouTube ad blocking** — transparent HTTPS proxy strips pre/post-roll ads via SNI routing
 - **Privacy** — per-device privacy report with 130+ company mappings; GeoIP blocks Chinese telemetry from IoT devices
 - **Network** — captive portal, reverse proxy manager (`.lan` hostnames), DNS-over-HTTPS endpoint, NTP server
-- **Dashboard** — dark-themed web UI with real-time query log, stats, heatmap, network score, and device fingerprinting
+- **Dashboard** — dark-themed PWA with real-time query log, stats, heatmap, network score, and device fingerprinting
+- **CI** — GitHub Actions: pip-audit, Trivy image scan, Python lint
 - **Native apps** — Linux (AppImage/DEB), Windows (NSIS), Android (APK)
 
 ## Prerequisites

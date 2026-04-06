@@ -17,4 +17,7 @@ RUN unbound-checkconf /etc/unbound/unbound.conf
 
 EXPOSE 53/udp 53/tcp
 
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD drill @127.0.0.1 localhost >/dev/null 2>&1 || exit 1
+
 ENTRYPOINT ["/entrypoint.sh"]

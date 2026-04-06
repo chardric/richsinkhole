@@ -4,6 +4,38 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-06
+
+### Added — Security & Observability Hardening
+- **Activity logs** — append-only `activity_logs` table tracking all admin actions (login, password change, settings, session revocations) with IP, user-agent, and JSON details
+- **Error logs** — append-only `error_logs` table auto-capturing unhandled exceptions with stack traces and request context
+- **Email logs** — `email_logs` table logging every outbound SMTP attempt (success/fail) for deliverability auditing
+- **Admin audit UI** — `/admin/audit` page with 3 tabs (Activity, Errors, Email), search, pagination, CSV export
+- **Structured JSON logging** — `jsonlog.py` replaces default logging with JSON-formatted stdout (ts, level, logger, message, request_id)
+- **Request-ID correlation** — per-request UUID bound via middleware, flows through all logs and returned as `X-Request-ID` header
+- **CSP with nonces** — `Content-Security-Policy` header with per-request random nonces; `unsafe-inline` eliminated from all 7 templates
+- **Security headers middleware** — belt-and-braces X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy from app level
+- **TOTP 2FA** — stdlib-only RFC 6238 implementation (no new deps); setup → QR URI → verify → enable; login requires TOTP when active
+- **Session management** — persistent DB-backed `sessions` table with IP/UA fingerprints; `/admin/sessions` UI to list and revoke sessions
+- **Refresh token rotation** — `POST /api/auth/refresh` rotates tokens in same family; replay of old token burns entire family (compromise detection)
+- **15-minute lockout** — after 5 failed login attempts (was 5-min), rate limit + hard lockout
+- **Secure cookie flag** — `rs_session` cookie gets `Secure` when `X-Forwarded-Proto: https` detected
+- **PWA** — `manifest.webmanifest`, service worker (`sw.js`) with cache-first static / network-first API strategies, 192+512 icons, install support
+- **Health endpoints** — `GET /health/live` (fast liveness), `GET /health/ready` (DNS + SQLite readiness, 503 on failure)
+- **HEALTHCHECK** added to ntp (chronyc), unbound (drill), nginx (wget) in Dockerfiles/compose
+- **Non-root USER** in sinkhole Dockerfile (UID 1000 `app` user)
+- **Read-only rootfs** on all 4 containers (ntp, unbound, sinkhole, nginx) with tmpfs for writable dirs
+- **GitHub Actions CI** — `security-scan.yml` with pip-audit (Python CVEs), Trivy image scan (CRITICAL/HIGH), py_compile lint
+
+### Changed
+- CDN dependency removed from `screen_time_warning.html` — Bootstrap now self-hosted
+- Password change now revokes all active sessions
+- Logout now revokes the session in DB (not just deletes cookie)
+- Login error responses include `csp_nonce` for CSP compliance
+- All `<script>` and `<style>` tags across all templates now carry `nonce` attributes
+
+---
+
 ## 2026-04-05
 
 ### Added

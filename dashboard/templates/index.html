@@ -13,7 +13,10 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='10' fill='none' stroke='%23da3633' stroke-width='1.6'/%3E%3Ccircle cx='11' cy='11' r='6' fill='none' stroke='%23da3633' stroke-width='1.2' opacity='.65'/%3E%3Ccircle cx='11' cy='11' r='2.5' fill='%23da3633'/%3E%3C/svg%3E">
   <base href="{{ root_path }}/">
   <link href="static/bootstrap.min.css" rel="stylesheet">
-  <style>
+  <link rel="manifest" href="{{ root_path }}/manifest.webmanifest">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="apple-touch-icon" href="{{ root_path }}/static/icon-192.png">
+  <style nonce="{{ csp_nonce }}">
     /* ── Base ─────────────────────────────────────────── */
     body { background-color: #0d1117; }
     .navbar-brand { letter-spacing: 0.04em; }
@@ -1544,8 +1547,16 @@
   </div>
 </div>
 
-<script src="static/bootstrap.bundle.min.js"></script>
-<script>window.BASE_PATH = "{{ root_path }}";</script>
-<script src="static/app.js?v={{ cache_bust }}"></script>
+<script src="static/bootstrap.bundle.min.js" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">window.BASE_PATH = "{{ root_path }}";</script>
+<script src="static/app.js?v={{ cache_bust }}" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('{{ root_path }}/sw.js', { scope: '{{ root_path }}/' })
+        .catch(err => console.warn('SW registration failed', err));
+    });
+  }
+</script>
 </body>
 </html>
