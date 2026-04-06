@@ -37,11 +37,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # for images (dashboard uses an inline SVG favicon).
         csp = (
             "default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}'; "
-            f"style-src 'self' 'nonce-{nonce}' 'unsafe-inline'; "
+            f"script-src 'self' 'nonce-{nonce}' 'unsafe-hashes' 'sha256-jHF5hTIlMDyGZRAsNK0HO/WFYrwPvI2I1q0o1xKKB6I='; "
+            "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
             "font-src 'self' data:; "
-            "connect-src 'self'; "
+            "connect-src 'self' https://open.er-api.com; "
             "frame-ancestors 'none'; "
             "form-action 'self'; "
             "base-uri 'self'; "
