@@ -38,7 +38,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         csp = (
             "default-src 'self'; "
             f"script-src 'self' 'nonce-{nonce}'; "
-            f"style-src 'self' 'nonce-{nonce}' 'unsafe-hashes'; "
+            f"style-src 'self' 'nonce-{nonce}' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
             "font-src 'self' data:; "
             "connect-src 'self'; "

@@ -100,7 +100,7 @@ async def ntp_clients():
         # Enrich with device labels from sinkhole DB
         try:
             import aiosqlite
-            async with aiosqlite.connect("/data/sinkhole.db") as db:
+            async with aiosqlite.connect("/local/sinkhole.db") as db:
                 for c in clients:
                     row = await db.execute_fetchall(
                         "SELECT label, device_type FROM device_fingerprints WHERE ip=?", (c["ip"],)

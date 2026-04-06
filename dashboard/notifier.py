@@ -24,7 +24,7 @@ from email.mime.text import MIMEText
 import yaml
 
 CONFIG_PATH = "/config/config.yml"
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 STATUS_PATH = "/data/updater_status.json"
 
 log = logging.getLogger("notifier")

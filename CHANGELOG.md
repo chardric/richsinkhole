@@ -33,6 +33,9 @@ All notable changes to RichSinkhole are documented here.
 - Logout now revokes the session in DB (not just deletes cookie)
 - Login error responses include `csp_nonce` for CSP compliance
 - All `<script>` and `<style>` tags across all templates now carry `nonce` attributes
+- **`sinkhole.db` moved from NAS to local SD card** — all critical databases now on local storage; DNS and dashboard survive NAS outages. NAS used only for updater status files and backups.
+- **DGA detection upgraded** — composite scoring (entropy + consonant streaks + vowel-consonant transitions) replaces simple entropy-only check; log-only mode (too many CDN false positives for active blocking)
+- **CSP `style-src`** — added `unsafe-inline` for dynamically generated inline styles (heatmap grid)
 
 ---
 
@@ -45,8 +48,8 @@ All notable changes to RichSinkhole are documented here.
 - **Infrastructure device-type lock** — once a device matches network gear signatures (MikroTik, TP-Link, Ubiquiti), consumer-OS signals are ignored. Prevents routers from being mis-classified as Android/Apple due to DNS forwarding.
 
 ### Changed — NAS Resilience (Hybrid Storage)
-- **`blocklist.db` + `geoip-country.csv` + `config/` moved to local SD** — critical files now survive NAS outages. If the NAS goes down, DNS resolution continues working; only query logging is affected.
-- **`sinkhole.db` (query log) stays on NAS** — heavy writes still go to RAID-backed storage to protect the SD card from wear.
+- **`blocklist.db` + `geoip-country.csv` + `config/` moved to local SD** — critical files now survive NAS outages. If the NAS goes down, DNS resolution continues working.
+- **`sinkhole.db` moved to local SD (2026-04-06)** — all databases now on local storage for full NAS independence.
 - New `LOCAL_DATA` env var and `/local` volume mount in docker-compose.
 - Updated 12 source files to read blocklist/geoip from `/local/` instead of `/data/`.
 - Updated `backup.sh` and restore logic to handle split data directories.

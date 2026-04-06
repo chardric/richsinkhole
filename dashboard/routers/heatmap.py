@@ -12,7 +12,7 @@ from datetime import datetime as _dt
 import aiosqlite
 from fastapi import APIRouter
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 router = APIRouter()
 

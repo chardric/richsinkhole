@@ -10,7 +10,7 @@ import aiosqlite
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 router = APIRouter()
 

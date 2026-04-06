@@ -11,7 +11,7 @@ import time
 import aiosqlite
 from fastapi import APIRouter, Query
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 router = APIRouter()
 

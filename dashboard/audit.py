@@ -31,7 +31,7 @@ from typing import Any, Optional
 import aiosqlite
 from fastapi import Request
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 
 # ─── Schema ──────────────────────────────────────────────────────────────────

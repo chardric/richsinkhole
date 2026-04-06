@@ -15,7 +15,7 @@ import time
 import aiosqlite
 from fastapi import APIRouter
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 STATUS_PATH = "/data/updater_status.json"
 
 router = APIRouter()

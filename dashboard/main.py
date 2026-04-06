@@ -30,7 +30,7 @@ from security_headers import SecurityHeadersMiddleware
 jsonlog.configure()
 _log = jsonlog.get_logger("dashboard")
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 BLOCKLIST_DB = "/local/blocklist.db"
 CERT_PATH = "/certs/ca.crt"
 

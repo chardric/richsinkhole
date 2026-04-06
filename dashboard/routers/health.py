@@ -10,7 +10,7 @@ import aiosqlite
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 BLOCKLIST_DB = "/local/blocklist.db"
 STATUS_PATH = "/data/updater_status.json"
 

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from services_data import GROUPS, SERVICES, SERVICES_BY_ID
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 router = APIRouter()
 

@@ -21,7 +21,7 @@ from fastapi.responses import Response
 
 DNS_HOST = "dns"
 DNS_PORT = 53
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 router = APIRouter()
 

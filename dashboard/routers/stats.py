@@ -8,7 +8,7 @@ import time
 import aiosqlite
 from fastapi import APIRouter
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 BLOCKLIST_DB = "/local/blocklist.db"
 
 router = APIRouter()

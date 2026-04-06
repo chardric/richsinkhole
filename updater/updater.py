@@ -24,7 +24,7 @@ import yaml
 
 SOURCES_PATH           = "/updater/sources.yml"
 BLOCKLIST_DB           = "/local/blocklist.db"
-SINKHOLE_DB            = "/data/sinkhole.db"
+SINKHOLE_DB            = "/local/sinkhole.db"
 STATUS_PATH            = "/data/updater_status.json"
 THREAT_INTEL_STATUS    = "/data/threat_intel_status.json"
 FORCE_UPDATE_PATH      = "/data/force_update"

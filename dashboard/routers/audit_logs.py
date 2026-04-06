@@ -19,7 +19,7 @@ import aiosqlite
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 
 router = APIRouter()
 

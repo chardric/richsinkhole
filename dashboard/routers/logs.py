@@ -11,7 +11,7 @@ import yaml
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
-SINKHOLE_DB = "/data/sinkhole.db"
+SINKHOLE_DB = "/local/sinkhole.db"
 CONFIG_PATH = "/config/config.yml"
 
 router = APIRouter()
