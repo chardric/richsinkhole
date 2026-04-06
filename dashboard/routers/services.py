@@ -18,6 +18,7 @@ _CONTAINERS = {
     "sinkhole": "richsinkhole-sinkhole-1",
     "unbound":  "richsinkhole-unbound-1",
     "nginx":    "richsinkhole-nginx-1",
+    "ntp":      "richsinkhole-ntp-1",
 }
 
 router = APIRouter()

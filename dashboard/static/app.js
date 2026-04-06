@@ -698,13 +698,17 @@ async function restartService(service, btn) {
     msg.textContent = `${service} restarted`;
     msg.className = "text-success small fw-normal";
     showToast(`${service} restarted successfully`, "success");
-    // If nginx was restarted, wait for reconnect then refresh status
-    if (service === "nginx") {
-      setTimeout(() => loadServiceStatus(), 4000);
-    } else {
-      setTimeout(() => loadServiceStatus(), 2000);
-    }
+    setTimeout(() => loadServiceStatus(), service === "nginx" ? 4000 : 2000);
   } catch (e) {
+    // Sinkhole self-restart kills the API mid-request — connection drops but
+    // the restart actually succeeds. Treat as success and wait for reconnect.
+    if (service === "sinkhole") {
+      msg.textContent = "Sinkhole restarting…";
+      msg.className = "text-warning small fw-normal";
+      showToast("Sinkhole restarting — page will reconnect shortly", "info");
+      setTimeout(() => { location.reload(); }, 8000);
+      return;
+    }
     msg.textContent = `Failed to restart ${service}`;
     msg.className = "text-danger small fw-normal";
     showToast(`Restart failed: ${e.message}`, "danger");

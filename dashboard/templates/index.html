@@ -1273,6 +1273,23 @@
                   </div>
                 </div>
 
+                <!-- NTP -->
+                <div class="col-12 col-md-4">
+                  <div class="p-3 rounded d-flex flex-column gap-2" style="background:#161b22;border:1px solid #30363d">
+                    <div class="d-flex align-items-center justify-content-between">
+                      <div>
+                        <span class="fw-semibold">NTP</span>
+                        <span class="info-i" title="Chrony NTP server providing time synchronization for all network devices. Port 123/UDP.">i</span>
+                      </div>
+                      <span class="badge rounded-pill" id="svc-ntp-badge" style="font-size:.65rem">--</span>
+                    </div>
+                    <div class="text-muted small">Port 123/UDP &middot; Time sync</div>
+                    <button class="btn btn-outline-warning btn-sm mt-1 svc-restart-btn" data-service="ntp">
+                      <span class="spinner-border spinner-border-sm d-none me-1"></span>Restart
+                    </button>
+                  </div>
+                </div>
+
               </div>
               <div class="text-muted small mt-3">Restarting a service takes ~2-5 seconds. The page may briefly disconnect if nginx is restarted.</div>
             </div>

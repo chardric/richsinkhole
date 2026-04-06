@@ -34,7 +34,9 @@ COPY sinkhole/main.py /app/sinkhole_main.py
 EXPOSE 53/udp 53/tcp 8080 8000
 
 # Non-root user — UID 1000 matches data volume ownership
-RUN groupadd -r app && useradd -r -g app -u 1000 app && \
+# GID 985 matches the host's docker group so the app can control sibling containers
+RUN groupadd -r -g 985 docker && \
+    groupadd -r app && useradd -r -g app -G docker -u 1000 app && \
     mkdir -p /data /local /config && chown -R app:app /app /data /local /config
 USER app
 
