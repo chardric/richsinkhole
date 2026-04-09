@@ -1,4 +1,5 @@
 data/
+local-data/
 backups/
 nginx/certs/*.key
 nginx/certs/*.crt

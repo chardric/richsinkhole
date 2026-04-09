@@ -295,7 +295,7 @@ def main():
     # Phase 2: NetBIOS fallback for active IPs without a mDNS response
     active_rows = conn.execute(
         "SELECT DISTINCT client_ip FROM query_log "
-        "WHERE ts >= datetime('now', ?) ORDER BY client_ip",
+        "WHERE ts >= datetime('now', 'localtime', ?) ORDER BY client_ip",
         (f"-{ACTIVE_WINDOW_HOURS} hours",),
     ).fetchall()
     active_ips = [r[0] for r in active_rows if r[0] and not r[0].startswith("127.")]
@@ -320,7 +320,7 @@ def main():
         conn.execute(
             """INSERT OR IGNORE INTO device_fingerprints
                  (ip, device_type, confidence, first_seen, last_seen, label)
-               VALUES (?, ?, ?, datetime('now'), datetime('now'), ?)""",
+               VALUES (?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), ?)""",
             (ip, dtype or "Unknown", 10, name),
         )
         # Update label only if empty (preserve manual labels)
@@ -330,14 +330,14 @@ def main():
                    SET label = ?,
                        device_type = CASE WHEN device_type IN ('Unknown','') OR device_type IS NULL
                                           THEN ? ELSE device_type END,
-                       last_seen = datetime('now')
+                       last_seen = datetime('now', 'localtime')
                    WHERE ip = ? AND (label IS NULL OR label = '')""",
                 (name, dtype, ip),
             )
         else:
             cur = conn.execute(
                 """UPDATE device_fingerprints
-                   SET label = ?, last_seen = datetime('now')
+                   SET label = ?, last_seen = datetime('now', 'localtime')
                    WHERE ip = ? AND (label IS NULL OR label = '')""",
                 (name, ip),
             )

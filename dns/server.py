@@ -299,7 +299,7 @@ def init_query_db():
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 token          TEXT    NOT NULL UNIQUE,
                 label          TEXT    NOT NULL DEFAULT '',
-                created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                created_at     TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
                 last_triggered TEXT    DEFAULT NULL,
                 trigger_count  INTEGER NOT NULL DEFAULT 0
             )
@@ -911,6 +911,7 @@ _DEVICE_SIGNATURES: list[tuple[str, str, int]] = [
     ("ubnt.com",                                "Ubiquiti",         10),
     ("ui.com",                                  "Ubiquiti",         8),
     ("tplinkcloud.com",                         "TP-Link",          10),
+    ("tp-link.com",                             "TP-Link",          8),
     ("dlink.com",                               "D-Link",           10),
     ("hikvision.com",                           "Hikvision Camera", 10),
     ("dahuasecurity.com",                       "Dahua Camera",     10),
@@ -1065,13 +1066,23 @@ def _check_fingerprint(client_ip: str, domain: str) -> None:
     to prevent chatty connectivity-check queries from drowning out genuine signals.
     Network infrastructure matches lock the device type permanently.
     """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Ensure every querying IP gets a device entry (even without signature match)
+    with _fp_lock:
+        if client_ip not in _fp_seen:
+            _fp_seen[client_ip] = (now, now)
+            _fp_scores.setdefault(client_ip, {}).setdefault("Unknown", 1)
+            _fp_dirty.add(client_ip)
+        else:
+            first, _ = _fp_seen[client_ip]
+            _fp_seen[client_ip] = (first, now)
+
     best_type, best_weight, best_suffix = None, 0, None
     for suffix, dtype, weight in _DEVICE_SIGNATURES:
         if (domain == suffix or domain.endswith("." + suffix)) and weight > best_weight:
             best_type, best_weight, best_suffix = dtype, weight, suffix
     if not best_type:
         return
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with _fp_lock:
         # If device is locked to an infrastructure type, ignore consumer-OS signals
         if client_ip in _fp_locked and best_type not in _INFRASTRUCTURE_TYPES:
@@ -1175,12 +1186,19 @@ def _infer_type_from_hostname(hostname: str) -> str | None:
     return None
 
 
-def _capture_hostname(client_ip: str, name: str) -> None:
-    """Store hostname and mark device dirty so it gets persisted to DB."""
+def _capture_hostname(client_ip: str, name: str, is_self: bool = False) -> None:
+    """Store hostname and mark device dirty so it gets persisted to DB.
+
+    is_self: True when the hostname identifies the querying device itself
+    (e.g. mDNS .local announcement).  Only self-hostnames are used for
+    device-type inference; bare hostname lookups (e.g. querying "icecast")
+    are NOT the device's own identity.
+    """
     with _hostname_lock:
-        _hostname_candidates[client_ip] = name
-    # Infer device type from hostname pattern and mark dirty
-    inferred = _infer_type_from_hostname(name)
+        if is_self:
+            _hostname_candidates[client_ip] = name
+    # Only infer device type from self-identification hostnames
+    inferred = _infer_type_from_hostname(name) if is_self else None
     with _fp_lock:
         _fp_seen.setdefault(client_ip, (
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1202,16 +1220,18 @@ def _capture_hostname(client_ip: str, name: str) -> None:
 def _check_hostname(client_ip: str, domain: str) -> None:
     """Extract device hostname from bare hostname or .local queries."""
     # Bare hostname (no dots) — e.g. "chadpc", "rpihole"
+    # NOT a self-identification: the device is looking up another host
     if "." not in domain:
         name = domain.lower().strip()
         if _is_valid_hostname(name):
-            _capture_hostname(client_ip, name)
+            _capture_hostname(client_ip, name, is_self=False)
             return
     # mDNS .local — e.g. "richards-iphone.local"
+    # This IS self-identification (device announcing its own name)
     if domain.endswith(".local") and domain.count(".") == 1:
         name = domain[:-6].lower().strip()
         if _is_valid_hostname(name):
-            _capture_hostname(client_ip, name)
+            _capture_hostname(client_ip, name, is_self=True)
 
 
 def _get_hostname(ip: str) -> str:
@@ -1648,7 +1668,8 @@ def _canary_writer() -> None:
 # ---------------------------------------------------------------------------
 # normal     → default behaviour (blocklist enforced)
 # strict     → normal + extra keyword-based blocking for tracking/analytics
-# passthrough → no blocking at all (trusted servers / admin devices)
+# passthrough → skip rate-limiting / burst / schedule / parental only
+#               (blocklist and security checks still enforced)
 
 _device_profiles: dict[str, str] = {}   # ip → 'normal'|'strict'|'passthrough'
 _profiles_lock   = threading.Lock()
@@ -2090,7 +2111,7 @@ def _block_writer_task() -> None:
                 for ip, info in batch.items():
                     conn.execute(
                         """INSERT INTO client_blocks (ip, blocked_at, expires_at, reason, query_count)
-                           VALUES (?, datetime('now'), datetime('now', ?), ?, ?)
+                           VALUES (?, datetime('now', 'localtime'), datetime('now', 'localtime', ?), ?, ?)
                            ON CONFLICT(ip) DO UPDATE SET
                              blocked_at  = excluded.blocked_at,
                              expires_at  = excluded.expires_at,
@@ -2112,7 +2133,7 @@ def _load_existing_blocks() -> None:
         with sqlite3.connect(SINKHOLE_DB, timeout=10) as conn:
             rows = conn.execute(
                 "SELECT ip, (julianday(expires_at) - julianday('now')) * 86400 "
-                "FROM client_blocks WHERE expires_at > datetime('now')"
+                "FROM client_blocks WHERE expires_at > datetime('now', 'localtime')"
             ).fetchall()
         now = time.monotonic()
         with _rl_lock:
@@ -2251,8 +2272,8 @@ class SinkholeResolver(BaseResolver):
                     log_query(client_ip, domain, qtype_str, action_str)
                     return self._redirect_response(request, host_ip)
 
-        # 3. Blocked services check (skipped for passthrough)
-        if not passthrough and _is_service_blocked(domain):
+        # 3. Blocked services check
+        if _is_service_blocked(domain):
             self.logger.info("SERVICE  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
             _rate_uncount(client_ip)
@@ -2268,8 +2289,8 @@ class SinkholeResolver(BaseResolver):
                 log_query(client_ip, domain, qtype_str, "blocked")
                 return self._redirect_response(request, "0.0.0.0")
 
-        # 4. Blocklist check (allowlist takes precedence inside is_blocked; skipped for passthrough)
-        if not passthrough and blocker.is_blocked(domain):
+        # 4. Blocklist check (allowlist takes precedence inside is_blocked)
+        if blocker.is_blocked(domain):
             self.logger.info("BLOCKED  %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
             _rate_uncount(client_ip)
@@ -2277,15 +2298,15 @@ class SinkholeResolver(BaseResolver):
             return self._redirect_response(request, "0.0.0.0")
 
         # 3a. Strict profile: extra keyword-based blocking for tracking/analytics domains
-        if not passthrough and profile in ("strict", "guest") and _is_strict_blocked(domain):
+        if profile in ("strict", "guest") and _is_strict_blocked(domain):
             self.logger.info("STRICT   %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
             _rate_uncount(client_ip)
             _burst_uncount(client_ip)
             return self._redirect_response(request, "0.0.0.0")
 
-        # 3c. DNS-over-HTTPS / DNS-over-TLS bypass detection (skipped for passthrough)
-        if not passthrough and _check_doh_bypass(client_ip, domain, cfg):
+        # 3c. DNS-over-HTTPS / DNS-over-TLS bypass detection
+        if _check_doh_bypass(client_ip, domain, cfg):
             self.logger.warning("DOH-BYPASS %s -> 0.0.0.0  (client=%s)", domain, client_ip)
             log_query(client_ip, domain, qtype_str, "blocked")
             _rate_uncount(client_ip)
@@ -2383,7 +2404,7 @@ class SinkholeResolver(BaseResolver):
             # Log-only — blocking here caused too many false positives (GCash -> adzerk,
             # Maya -> hubspot, Teams -> trafficmanager). Legitimate apps frequently
             # CNAME to shared CDN/ad/marketing infrastructure.
-            if not passthrough and not blocker.is_allowed(domain):
+            if not blocker.is_allowed(domain):
                 for rr in reply.rr:
                     if rr.rtype == QTYPE.CNAME:
                         cname_target = str(rr.rdata).rstrip(".")
@@ -2572,7 +2593,7 @@ def start_dns():
 
     # Start device probe worker — discovers hostnames via mDNS/NetBIOS
     def _probe_callback(ip: str, hostname: str) -> None:
-        _capture_hostname(ip, hostname)
+        _capture_hostname(ip, hostname, is_self=True)
     probe_thread = threading.Thread(
         target=device_probe.probe_worker, args=(_probe_callback,),
         daemon=True, name="device-probe",

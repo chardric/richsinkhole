@@ -25,7 +25,7 @@ async def get_stats():
         return _stats_cache
 
     # 24h window — uses idx_ql_action_ts and idx_ql_ts indexes instead of full scan
-    _24H = "datetime('now', '-24 hours')"
+    _24H = "datetime('now', 'localtime', '-24 hours')"
 
     async def _query_sinkhole():
         async with aiosqlite.connect(SINKHOLE_DB) as db:

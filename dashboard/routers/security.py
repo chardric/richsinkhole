@@ -47,7 +47,7 @@ async def list_blocks():
         rows = await db.execute_fetchall(
             """SELECT ip, blocked_at, expires_at, reason, query_count
                FROM client_blocks
-               WHERE expires_at > datetime('now')
+               WHERE expires_at > datetime('now', 'localtime')
                ORDER BY blocked_at DESC"""
         )
     return [
@@ -68,7 +68,7 @@ async def unblock_client(ip: str):
     """Manually remove a client block."""
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         cur = await db.execute(
-            "DELETE FROM client_blocks WHERE ip = ? AND expires_at > datetime('now')", (ip,)
+            "DELETE FROM client_blocks WHERE ip = ? AND expires_at > datetime('now', 'localtime')", (ip,)
         )
         await db.commit()
         if cur.rowcount == 0:
@@ -96,20 +96,20 @@ async def security_stats():
                 SUM(action='ratelimited'),
                 SUM(action='nxdomain')
             FROM query_log
-            WHERE ts >= datetime('now','-24 hours')
+            WHERE ts >= datetime('now', 'localtime', '-24 hours')
         """))[0]
         (blocks_row, sec_row) = await asyncio.gather(
             db.execute_fetchall("""
                 SELECT
-                    SUM(expires_at > datetime('now')),
+                    SUM(expires_at > datetime('now', 'localtime')),
                     COUNT(*)
                 FROM client_blocks
             """),
             db.execute_fetchall("""
                 SELECT
-                    SUM(event_type='rebinding'                                AND ts >= datetime('now','-24 hours')),
-                    SUM(event_type IN ('query_burst','dga_suspect')            AND ts >= datetime('now','-24 hours')),
-                    SUM(event_type IN ('iot_flood','burst_limit')              AND ts >= datetime('now','-24 hours'))
+                    SUM(event_type='rebinding'                                AND ts >= datetime('now', 'localtime', '-24 hours')),
+                    SUM(event_type IN ('query_burst','dga_suspect')            AND ts >= datetime('now', 'localtime', '-24 hours')),
+                    SUM(event_type IN ('iot_flood','burst_limit')              AND ts >= datetime('now', 'localtime', '-24 hours'))
                 FROM security_events
             """) if has_sec else _empty_sec_row(),
         )

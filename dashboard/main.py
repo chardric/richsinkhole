@@ -79,7 +79,7 @@ def _whitelist_ip(ip: str) -> None:
         pass
     with sqlite3.connect(SINKHOLE_DB) as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO captive_whitelist (ip, ts) VALUES (?, datetime('now'))",
+            "INSERT OR IGNORE INTO captive_whitelist (ip, ts) VALUES (?, datetime('now', 'localtime'))",
             (ip,),
         )
         conn.commit()
@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         await db.execute("""CREATE TABLE IF NOT EXISTS blocked_services (
             service_id TEXT PRIMARY KEY,
-            enabled_at TEXT DEFAULT (datetime('now'))
+            enabled_at TEXT DEFAULT (datetime('now', 'localtime'))
         )""")
         for svc_id in ("affiliate_redirects", "ad_trackers", "piracy_hosts"):
             await db.execute(

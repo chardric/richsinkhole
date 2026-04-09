@@ -37,7 +37,7 @@ async def query_heatmap():
                 CAST(substr(ts, 12, 2) AS INTEGER) AS hour,
                 COUNT(*) AS cnt
             FROM query_log
-            WHERE ts >= datetime('now', '-7 days')
+            WHERE ts >= datetime('now', 'localtime', '-7 days')
             GROUP BY dt, hour
         """)
 

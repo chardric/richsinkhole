@@ -39,7 +39,7 @@ SINKHOLE_DB = "/local/sinkhole.db"
 _SCHEMA = [
     """CREATE TABLE IF NOT EXISTS activity_logs (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts            TEXT NOT NULL DEFAULT (datetime('now')),
+        ts            TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
         user_id       TEXT,
         action        TEXT NOT NULL,
         resource_type TEXT,
@@ -54,7 +54,7 @@ _SCHEMA = [
 
     """CREATE TABLE IF NOT EXISTS error_logs (
         id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts             TEXT NOT NULL DEFAULT (datetime('now')),
+        ts             TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
         level          TEXT NOT NULL,     -- ERROR | WARN | FATAL
         message        TEXT NOT NULL,
         stack_trace    TEXT,
@@ -70,7 +70,7 @@ _SCHEMA = [
 
     """CREATE TABLE IF NOT EXISTS email_logs (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts         TEXT NOT NULL DEFAULT (datetime('now')),
+        ts         TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
         recipient  TEXT NOT NULL,
         subject    TEXT NOT NULL,
         template   TEXT,              -- digest | alert | test | …
@@ -88,8 +88,8 @@ _SCHEMA = [
         user_id      TEXT NOT NULL DEFAULT 'admin',
         ip_address   TEXT,
         user_agent   TEXT,
-        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-        last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        last_seen_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
         expires_at   TEXT NOT NULL,
         revoked_at   TEXT,
         replaced_by  TEXT                      -- id of successor after rotation
@@ -279,7 +279,7 @@ def touch_session(token: str) -> bool:
                 return False
             # expires_at stored as ISO8601 in UTC
             conn.execute(
-                "UPDATE sessions SET last_seen_at=datetime('now') WHERE id=?",
+                "UPDATE sessions SET last_seen_at=datetime('now', 'localtime') WHERE id=?",
                 (sid,),
             )
             conn.commit()
@@ -292,7 +292,7 @@ def revoke_session(session_id: str) -> None:
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
             conn.execute(
-                "UPDATE sessions SET revoked_at=datetime('now') WHERE id=? AND revoked_at IS NULL",
+                "UPDATE sessions SET revoked_at=datetime('now', 'localtime') WHERE id=? AND revoked_at IS NULL",
                 (session_id,),
             )
             conn.commit()
@@ -304,7 +304,7 @@ def revoke_by_token(token: str) -> None:
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
             conn.execute(
-                "UPDATE sessions SET revoked_at=datetime('now') WHERE token_hash=? AND revoked_at IS NULL",
+                "UPDATE sessions SET revoked_at=datetime('now', 'localtime') WHERE token_hash=? AND revoked_at IS NULL",
                 (_hash_token(token),),
             )
             conn.commit()
@@ -318,7 +318,7 @@ def revoke_family(family_id: str) -> None:
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
             conn.execute(
-                "UPDATE sessions SET revoked_at=datetime('now') WHERE family_id=? AND revoked_at IS NULL",
+                "UPDATE sessions SET revoked_at=datetime('now', 'localtime') WHERE family_id=? AND revoked_at IS NULL",
                 (family_id,),
             )
             conn.commit()
@@ -330,7 +330,7 @@ def revoke_all(user_id: str = "admin") -> int:
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
             cur = conn.execute(
-                "UPDATE sessions SET revoked_at=datetime('now') WHERE user_id=? AND revoked_at IS NULL",
+                "UPDATE sessions SET revoked_at=datetime('now', 'localtime') WHERE user_id=? AND revoked_at IS NULL",
                 (user_id,),
             )
             conn.commit()
@@ -345,7 +345,7 @@ def list_sessions(user_id: str = "admin") -> list[dict]:
             rows = conn.execute(
                 """SELECT id, ip_address, user_agent, created_at, last_seen_at, expires_at, revoked_at
                    FROM sessions
-                   WHERE user_id=? AND revoked_at IS NULL AND expires_at > datetime('now')
+                   WHERE user_id=? AND revoked_at IS NULL AND expires_at > datetime('now', 'localtime')
                    ORDER BY last_seen_at DESC""",
                 (user_id,),
             ).fetchall()
@@ -386,7 +386,7 @@ def rotate_session(
             if revoked_at is not None or replaced_by is not None:
                 # Replay detected — burn the family
                 conn.execute(
-                    "UPDATE sessions SET revoked_at=datetime('now') WHERE family_id=? AND revoked_at IS NULL",
+                    "UPDATE sessions SET revoked_at=datetime('now', 'localtime') WHERE family_id=? AND revoked_at IS NULL",
                     (family_id,),
                 )
                 conn.commit()
@@ -400,7 +400,7 @@ def rotate_session(
         )
         with sqlite3.connect(SINKHOLE_DB, timeout=5) as conn:
             conn.execute(
-                "UPDATE sessions SET revoked_at=datetime('now'), replaced_by=? WHERE id=?",
+                "UPDATE sessions SET revoked_at=datetime('now', 'localtime'), replaced_by=? WHERE id=?",
                 (new_sid, old_id),
             )
             conn.commit()

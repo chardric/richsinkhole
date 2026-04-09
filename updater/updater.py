@@ -315,7 +315,7 @@ def run_update() -> None:
                     last_synced  TEXT,
                     enabled      INTEGER DEFAULT 1,
                     is_builtin   INTEGER DEFAULT 0,
-                    created_at   TEXT    DEFAULT (datetime('now'))
+                    created_at   TEXT    DEFAULT (datetime('now', 'localtime'))
                 )
             """)
 
@@ -338,7 +338,7 @@ def run_update() -> None:
                     id       INTEGER PRIMARY KEY AUTOINCREMENT,
                     domain   TEXT NOT NULL,
                     source   TEXT,
-                    added_at TEXT DEFAULT (datetime('now'))
+                    added_at TEXT DEFAULT (datetime('now', 'localtime'))
                 )
             """)
 
@@ -417,7 +417,7 @@ def run_update() -> None:
             stale = conn.execute("""
                 SELECT url FROM blocklist_feeds
                 WHERE last_changed IS NOT NULL
-                  AND last_changed < datetime('now', ? || ' days')
+                  AND last_changed < datetime('now', 'localtime', ? || ' days')
                   AND enabled = 1
             """, (f"-{stale_days}",)).fetchall()
             for (stale_url,) in stale:
@@ -589,7 +589,7 @@ def prune_query_log(retain_days: int = 30) -> None:
     try:
         with sqlite3.connect(SINKHOLE_DB, timeout=10) as conn:
             result = conn.execute(
-                "DELETE FROM query_log WHERE ts < datetime('now', ?)",
+                "DELETE FROM query_log WHERE ts < datetime('now', 'localtime', ?)",
                 (f"-{retain_days} days",),
             )
             deleted = result.rowcount

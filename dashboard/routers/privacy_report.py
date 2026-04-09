@@ -385,7 +385,7 @@ async def privacy_report(range: str = Query("24h", pattern="^(24h|7d)$")):
         rows = await db.execute_fetchall(
             f"""SELECT client_ip, domain, COUNT(*) AS cnt
                FROM query_log
-               WHERE ts >= datetime('now', '{sql_range}')
+               WHERE ts >= datetime('now', 'localtime', '{sql_range}')
                  AND action NOT IN ('blocked', 'ratelimited', 'scheduled')
                GROUP BY client_ip, domain"""
         )

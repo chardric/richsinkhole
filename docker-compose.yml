@@ -42,6 +42,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=2m
+      - /var/lib/unbound:size=4m,uid=100,gid=101
     cap_drop:
       - ALL
     cap_add:

@@ -62,7 +62,7 @@ async def dns_speedtest():
                 MIN(CASE WHEN response_ms > 0 THEN response_ms END) AS min_ms,
                 MAX(CASE WHEN response_ms > 0 THEN response_ms END) AS max_ms
             FROM query_log
-            WHERE ts >= datetime('now', '-24 hours')
+            WHERE ts >= datetime('now', 'localtime', '-24 hours')
               AND response_ms IS NOT NULL AND response_ms > 0
         """)
         row = rows[0] if rows else (0, None, None, None)
@@ -74,7 +74,7 @@ async def dns_speedtest():
         # p50 / p95 via sorted sample
         percentile_rows = await db.execute_fetchall("""
             SELECT response_ms FROM query_log
-            WHERE ts >= datetime('now', '-24 hours')
+            WHERE ts >= datetime('now', 'localtime', '-24 hours')
               AND response_ms IS NOT NULL AND response_ms > 0
             ORDER BY response_ms
         """)

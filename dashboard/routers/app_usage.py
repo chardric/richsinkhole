@@ -70,7 +70,7 @@ async def device_app_usage(ip: str, range: str = Query("24h", pattern="^(24h|7d)
     async with aiosqlite.connect(SINKHOLE_DB) as db:
         rows = await db.execute_fetchall(f"""
             SELECT domain, ts FROM query_log
-            WHERE client_ip=? AND ts >= datetime('now', '{sql_range}')
+            WHERE client_ip=? AND ts >= datetime('now', 'localtime', '{sql_range}')
               AND action IN ('forwarded', 'allowed', 'cached')
             ORDER BY ts
         """, (ip,))

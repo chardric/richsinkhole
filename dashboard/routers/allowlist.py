@@ -17,7 +17,7 @@ _ENSURE_TABLE = """
     CREATE TABLE IF NOT EXISTS allowed_domains (
         domain   TEXT PRIMARY KEY,
         note     TEXT DEFAULT '',
-        added_at TEXT DEFAULT (datetime('now'))
+        added_at TEXT DEFAULT (datetime('now', 'localtime'))
     )
 """
 

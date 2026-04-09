@@ -83,7 +83,7 @@ async def _ensure_feeds_table(db: aiosqlite.Connection) -> None:
             last_synced  TEXT,
             enabled      INTEGER DEFAULT 1,
             is_builtin   INTEGER DEFAULT 0,
-            created_at   TEXT    DEFAULT (datetime('now'))
+            created_at   TEXT    DEFAULT (datetime('now', 'localtime'))
         )
     """)
     try:

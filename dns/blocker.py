@@ -36,7 +36,7 @@ def init_blocklist_db():
             CREATE TABLE IF NOT EXISTS blocked_domains (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 domain TEXT NOT NULL UNIQUE,
-                added_at TEXT DEFAULT (datetime('now'))
+                added_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
         conn.execute("""
@@ -45,14 +45,14 @@ def init_blocklist_db():
                 pattern TEXT NOT NULL UNIQUE,
                 description TEXT DEFAULT '',
                 enabled INTEGER NOT NULL DEFAULT 1,
-                added_at TEXT DEFAULT (datetime('now'))
+                added_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS allowed_domains (
                 domain   TEXT PRIMARY KEY,
                 note     TEXT DEFAULT '',
-                added_at TEXT DEFAULT (datetime('now'))
+                added_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
         # Migration: add enabled column if upgrading from older schema

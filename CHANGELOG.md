@@ -4,6 +4,25 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-09
+
+### Fixed — Passthrough bypass, timezone, fingerprinting
+- **Passthrough no longer bypasses ad blocking** — `passthrough` profile previously skipped all blocking checks (blocklist, service blocks, DoH bypass detection). Now it only exempts devices from rate limiting, burst detection, schedule/bedtime, captive portal, YouTube redirect, and parental controls. Ad blocking and security checks remain enforced for all profiles.
+- **SQLite timezone mismatch** — timestamps were stored in local time (Asia/Manila) but all `datetime('now')` comparisons used UTC, causing every time-filtered query (stats, session expiry, rate-limit expiry, data retention) to be off by 8 hours. Fixed 18 files to use `datetime('now', 'localtime')`.
+- **Device fingerprint misclassification** — bare hostname DNS lookups (e.g. querying `icecast`) were wrongly treated as device self-identification, causing the querying device to be classified as the target service type. Now only `.local` mDNS and device probe results are used for type inference.
+- **Missing devices in device list** — servers with static IPs that only query infrastructure domains never appeared in the Devices list. Now every IP that makes a DNS query gets a device entry automatically.
+- **Unbound crash on restart** — `read_only: true` container with no tmpfs for `/var/lib/unbound` caused DNSSEC trust anchor writes to fail. Added tmpfs mount with correct ownership (uid=100/gid=101).
+- **Unbound entrypoint** — re-creates DNSSEC root trust anchor on startup since tmpfs wipes `/var/lib/unbound` on each restart.
+
+### Added
+- `tp-link.com` device signature for TP-Link/Omada router fingerprinting
+- `local-data/` added to `.gitignore` to prevent accidental database wipes during sync
+
+### Removed
+- `mikrotik-dns-force.txt`, `mikrotik-security-patch.rsc` — one-time MikroTik scripts no longer needed
+
+---
+
 ## 2026-04-06
 
 ### Added — Security & Observability Hardening

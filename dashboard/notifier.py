@@ -476,7 +476,7 @@ def _digest_stats(days: int = 7) -> dict:
             def q(sql, *p):
                 return conn.execute(sql, p).fetchone()
 
-            window     = f"datetime('now', '-{days} days')"
+            window     = f"datetime('now', 'localtime', '-{days} days')"
             total      = q(f"SELECT COUNT(*) FROM query_log WHERE ts >= {window}")[0]
             blocked    = q(f"SELECT COUNT(*) FROM query_log WHERE action='blocked' AND ts >= {window}")[0]
             forwarded  = q(f"SELECT COUNT(*) FROM query_log WHERE action='forwarded' AND ts >= {window}")[0]

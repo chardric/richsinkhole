@@ -60,7 +60,7 @@ async def revoke_others(request: Request):
     try:
         with sqlite3.connect(audit.SINKHOLE_DB, timeout=5) as conn:
             cur = conn.execute(
-                """UPDATE sessions SET revoked_at=datetime('now')
+                """UPDATE sessions SET revoked_at=datetime('now', 'localtime')
                    WHERE user_id='admin' AND revoked_at IS NULL AND token_hash != ?""",
                 (current_hash,),
             )

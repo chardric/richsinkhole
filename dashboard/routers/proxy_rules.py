@@ -31,7 +31,7 @@ _ENSURE_TABLE = """
         hostname   TEXT NOT NULL UNIQUE,
         target     TEXT NOT NULL,
         enabled    INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
     )
 """
 

@@ -37,17 +37,17 @@ async def prometheus_metrics():
         (scheduled,)= (await db.execute_fetchall("SELECT COUNT(*) FROM query_log WHERE action='scheduled'"))[0]
         (clients,)  = (await db.execute_fetchall("SELECT COUNT(DISTINCT client_ip) FROM query_log"))[0]
         (rl_24h,)   = (await db.execute_fetchall(
-            "SELECT COUNT(*) FROM query_log WHERE action='ratelimited' AND ts >= datetime('now','-1 day')"
+            "SELECT COUNT(*) FROM query_log WHERE action='ratelimited' AND ts >= datetime('now', 'localtime', '-1 day')"
         ))[0]
 
         # Security events (24h)
         sec_rows = await db.execute_fetchall(
-            "SELECT event_type, COUNT(*) FROM security_events WHERE ts >= datetime('now','-1 day') GROUP BY event_type"
+            "SELECT event_type, COUNT(*) FROM security_events WHERE ts >= datetime('now', 'localtime', '-1 day') GROUP BY event_type"
         )
 
         # Active client blocks
         (active_blocks,) = (await db.execute_fetchall(
-            "SELECT COUNT(*) FROM client_blocks WHERE expires_at > datetime('now')"
+            "SELECT COUNT(*) FROM client_blocks WHERE expires_at > datetime('now', 'localtime')"
         ))[0]
 
         # Device count

@@ -18,7 +18,7 @@ router = APIRouter()
 _ENSURE_TABLE = """
     CREATE TABLE IF NOT EXISTS blocked_services (
         service_id TEXT PRIMARY KEY,
-        enabled_at TEXT DEFAULT (datetime('now'))
+        enabled_at TEXT DEFAULT (datetime('now', 'localtime'))
     )
 """
 

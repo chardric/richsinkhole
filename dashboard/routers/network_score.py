@@ -40,7 +40,7 @@ async def network_score():
                 AVG(CASE WHEN response_ms IS NOT NULL AND response_ms > 0
                     THEN response_ms END) AS avg_ms
             FROM query_log
-            WHERE ts >= datetime('now', '-24 hours')
+            WHERE ts >= datetime('now', 'localtime', '-24 hours')
         """))[0]
         total_24h = int(row[0] or 0)
         blocked_24h = int(row[1] or 0)
@@ -49,16 +49,16 @@ async def network_score():
         # 2. Security events (last 24h)
         sec_count = (await db.execute_fetchall("""
             SELECT COUNT(*) FROM security_events
-            WHERE ts >= datetime('now', '-24 hours')
+            WHERE ts >= datetime('now', 'localtime', '-24 hours')
         """))[0][0] or 0
 
         # 3. Active client blocks (only non-expired)
         active_blocks = (await db.execute_fetchall(
-            "SELECT COUNT(*) FROM client_blocks WHERE expires_at > datetime('now')"
+            "SELECT COUNT(*) FROM client_blocks WHERE expires_at > datetime('now', 'localtime')"
         ))[0][0] or 0
 
         # Housekeeping: purge expired blocks
-        await db.execute("DELETE FROM client_blocks WHERE expires_at <= datetime('now')")
+        await db.execute("DELETE FROM client_blocks WHERE expires_at <= datetime('now', 'localtime')")
         await db.commit()
 
     # 4. Updater status

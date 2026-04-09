@@ -19,7 +19,7 @@ _ENSURE_TABLE = """
         id             INTEGER PRIMARY KEY AUTOINCREMENT,
         token          TEXT    NOT NULL UNIQUE,
         label          TEXT    NOT NULL DEFAULT '',
-        created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+        created_at     TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
         last_triggered TEXT    DEFAULT NULL,
         trigger_count  INTEGER NOT NULL DEFAULT 0
     )
