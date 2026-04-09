@@ -12,6 +12,8 @@ __pycache__/
 *.pyc
 *.pyo
 setup.sh
+mikrotik-*.rsc
+mikrotik-*.txt
 installer/linux/
 installer/windows/
 installer/mobile/
