@@ -4,6 +4,22 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-13
+
+### Fixed — Dashboard memory leaks (RSS growth on long-running instances)
+- **`app_usage` cache unbounded** — `_usage_cache` keyed by `{ip}:{range}` grew forever as new devices queried the endpoint. Added hard cap of 500 entries with LRU eviction and opportunistic expiry sweep (`dashboard/routers/app_usage.py`).
+- **Login rate-limit dicts unbounded** — `_login_attempts` and `_lockouts` in `dashboard/auth.py` only pruned the current IP on check; IPs from scanners, brute-force attempts, and DHCP churn stayed in memory forever. Added hourly sweep that drops IPs with no fresh attempts and expired lockouts.
+- **SSE log stream — no lifetime or concurrency cap** — `/api/logs/stream` ran `while True`, holding an aiosqlite connection until the client disconnected. A stale browser tab kept the task alive indefinitely. Capped at 10 concurrent streams (503 beyond that) and 1-hour max per stream; `EventSource` auto-reconnects on close.
+
+### Added — Host tuning in installer
+- `install.sh` now runs a `tune_host` step that writes `/etc/sysctl.d/99-sinkhole.conf` (swappiness, UDP/socket buffers, netdev backlog) and, on Raspberry Pi hosts, appends `cgroup_enable=memory cgroup_memory=1` to `cmdline.txt` so `docker-compose` `mem_limit` is actually enforced. Both steps are idempotent and back up any file they touch; the Pi cgroup change requires a reboot to activate.
+
+### Ops
+- Applied sysctl tuning on prod (`/etc/sysctl.d/99-sinkhole.conf`): `vm.swappiness=10`, `net.core.rmem_max=4MB`, `net.core.netdev_max_backlog=5000`, `net.ipv4.udp_rmem_min=16KB`.
+- Enabled memory cgroup controller on prod (added `cgroup_enable=memory cgroup_memory=1` to `/boot/firmware/cmdline.txt`) so `mem_limit` in `docker-compose.yml` is actually enforced. Verified live after reboot.
+
+---
+
 ## 2026-04-09
 
 ### Fixed — Passthrough bypass, timezone, fingerprinting

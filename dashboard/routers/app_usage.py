@@ -18,6 +18,7 @@ router = APIRouter()
 
 _usage_cache: dict[str, tuple[float, dict]] = {}
 _USAGE_TTL = 120.0  # cache for 2 minutes
+_USAGE_CACHE_MAX = 500  # hard cap: ~250 devices × 2 ranges; LRU-evicted
 
 # App definitions: service name -> domain suffixes
 # Uses a curated subset of services_data.py for time-trackable apps
@@ -137,5 +138,16 @@ async def device_app_usage(ip: str, range: str = Query("24h", pattern="^(24h|7d)
     result.sort(key=lambda x: -x["estimated_minutes"])
 
     response = {"ip": ip, "range": range, "apps": result}
-    _usage_cache[cache_key] = (time.monotonic(), response)
+    now = time.monotonic()
+    # Drop expired entries opportunistically, then enforce hard cap by evicting
+    # the oldest entry. Keeps the cache bounded on networks with many devices
+    # (previously grew unbounded — every unique {ip,range} key lived forever).
+    if len(_usage_cache) >= _USAGE_CACHE_MAX:
+        expired = [k for k, (ts, _) in _usage_cache.items() if now - ts >= _USAGE_TTL]
+        for k in expired:
+            _usage_cache.pop(k, None)
+        if len(_usage_cache) >= _USAGE_CACHE_MAX:
+            oldest = min(_usage_cache, key=lambda k: _usage_cache[k][0])
+            _usage_cache.pop(oldest, None)
+    _usage_cache[cache_key] = (now, response)
     return response

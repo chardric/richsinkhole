@@ -81,6 +81,106 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Host tuning — sysctls for DNS workload + memory cgroup on Raspberry Pi
+# ---------------------------------------------------------------------------
+
+tune_sysctls() {
+    local conf="/etc/sysctl.d/99-sinkhole.conf"
+
+    if [ "$EUID" -ne 0 ]; then
+        warn "Skipping sysctl tuning — not running as root. Re-run with sudo to apply."
+        return 0
+    fi
+
+    local desired
+    desired=$(cat <<'EOF'
+# Written by RichSinkhole installer — DNS workload tuning.
+# Safe defaults for a dedicated sinkhole host; tune further if needed.
+vm.swappiness = 10
+net.core.rmem_max = 4194304
+net.core.rmem_default = 1048576
+net.core.wmem_max = 1048576
+net.core.netdev_max_backlog = 5000
+net.ipv4.udp_rmem_min = 16384
+EOF
+)
+
+    if [ -f "$conf" ] && [ "$(cat "$conf")" = "$desired" ]; then
+        info "Sysctl tuning already in place at $conf."
+        return 0
+    fi
+
+    # Backup any pre-existing file before overwriting
+    [ -f "$conf" ] && cp -a "$conf" "${conf}.bak"
+
+    printf '%s\n' "$desired" > "$conf"
+    chmod 644 "$conf"
+
+    if sysctl --system >/dev/null 2>&1; then
+        info "Installed sysctl tuning at $conf and applied."
+    else
+        warn "Wrote $conf but 'sysctl --system' reported errors. Review with: sysctl --system"
+    fi
+}
+
+enable_pi_cgroup_memory() {
+    local model_file="/proc/device-tree/model"
+    local cmdline="/boot/firmware/cmdline.txt"
+
+    # Pi-only: bail silently on non-Pi hosts.
+    [ -r "$model_file" ] || return 0
+    grep -qi "Raspberry Pi" "$model_file" || return 0
+
+    # Fall back to legacy path on older Raspbian where /boot/firmware/ doesn't exist.
+    [ -f "$cmdline" ] || cmdline="/boot/cmdline.txt"
+    [ -f "$cmdline" ] || { warn "Raspberry Pi detected but no cmdline.txt found — skipping cgroup fix."; return 0; }
+
+    if [ "$EUID" -ne 0 ]; then
+        warn "Raspberry Pi detected. Memory cgroup may need enabling — re-run installer with sudo."
+        return 0
+    fi
+
+    # Already enabled at runtime (covers cgroup v1 and v2) → nothing to do.
+    # This is the authoritative check: params in /proc/cmdline can both be
+    # present (firmware injects cgroup_disable=memory, we override with enable);
+    # only the resolved controller list tells us whether it actually worked.
+    if grep -qw memory /sys/fs/cgroup/cgroup.controllers 2>/dev/null \
+       || awk '$1=="memory" && $4=="1" {f=1} END{exit !f}' /proc/cgroups 2>/dev/null; then
+        info "Memory cgroup already enabled at runtime."
+        return 0
+    fi
+
+    # Already present in cmdline.txt → waiting for reboot.
+    if grep -q "cgroup_enable=memory" "$cmdline"; then
+        warn "Memory cgroup flags already in $cmdline — reboot required to activate."
+        return 0
+    fi
+
+    # Edit cmdline.txt — appending; "last value wins" overrides firmware-injected
+    # cgroup_disable=memory on Raspberry Pi OS.
+    cp -a "$cmdline" "${cmdline}.bak"
+    local current new
+    current=$(tr -d '\n' < "$cmdline")
+    new="$current cgroup_enable=memory cgroup_memory=1"
+    printf '%s' "$new" > "$cmdline"
+
+    # Sanity check: exactly one line, non-empty
+    if [ "$(wc -l < "$cmdline")" -gt 1 ] || [ ! -s "$cmdline" ]; then
+        warn "cmdline.txt edit looked wrong — restoring backup."
+        cp -a "${cmdline}.bak" "$cmdline"
+        return 1
+    fi
+
+    warn "Enabled memory cgroup in $cmdline. A REBOOT is required for this to take effect."
+    warn "Without it, docker-compose mem_limit settings are silently ignored on Raspberry Pi OS."
+}
+
+tune_host() {
+    tune_sysctls
+    enable_pi_cgroup_memory
+}
+
+# ---------------------------------------------------------------------------
 # Build & start
 # ---------------------------------------------------------------------------
 
@@ -146,6 +246,7 @@ main() {
 
     check_prereqs
     free_port_53
+    tune_host
     start_services
     smoke_test
 

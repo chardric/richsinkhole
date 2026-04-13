@@ -45,11 +45,34 @@ _lockouts:       dict[str, float]       = {}  # ip → lockout_until (epoch)
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW       = 300   # 5 minutes rolling window
 _LOCKOUT_DURATION   = 900   # 15-minute lockout after 5 failures
+_PURGE_INTERVAL     = 3600  # sweep dormant IPs once per hour
+_last_purge_ts: float = 0.0
+
+
+def _purge_stale(now: float) -> None:
+    """Drop IPs whose attempts are all outside the window and whose lockout
+    has expired. Without this, every IP that ever hit the login endpoint
+    stays in memory forever (scanners + DHCP churn made the dicts grow
+    unbounded over days)."""
+    global _last_purge_ts
+    if now - _last_purge_ts < _PURGE_INTERVAL:
+        return
+    _last_purge_ts = now
+    for ip in list(_login_attempts):
+        fresh = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW]
+        if fresh:
+            _login_attempts[ip] = fresh
+        else:
+            _login_attempts.pop(ip, None)
+    for ip in list(_lockouts):
+        if _lockouts[ip] <= now:
+            _lockouts.pop(ip, None)
 
 
 def check_login_rate(ip: str) -> bool:
     """Return True if login is allowed, False if rate-limited or locked-out."""
     now = time.time()
+    _purge_stale(now)
     # Hard lockout check
     until = _lockouts.get(ip, 0)
     if until and now < until:

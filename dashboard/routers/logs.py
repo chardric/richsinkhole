@@ -5,14 +5,23 @@
 
 import asyncio
 import json
+import time
 
 import aiosqlite
 import yaml
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 SINKHOLE_DB = "/local/sinkhole.db"
 CONFIG_PATH = "/config/config.yml"
+
+# Cap concurrent SSE connections and per-connection lifetime. Prior code
+# ran `while True` and held an aiosqlite connection open until the client
+# disconnected — a stale browser tab kept the task (and DB handle) alive
+# indefinitely.
+_STREAM_MAX_CLIENTS = 10
+_STREAM_MAX_SECONDS = 3600  # force reconnect after 1h; EventSource auto-retries
+_active_streams = 0
 
 router = APIRouter()
 
@@ -59,13 +68,20 @@ async def get_logs(limit: int = Query(100, ge=1, le=1000)):
 
 @router.get("/logs/stream")
 async def stream_logs():
+    global _active_streams
+    if _active_streams >= _STREAM_MAX_CLIENTS:
+        raise HTTPException(status_code=503, detail="too many active log streams")
+    _active_streams += 1
+
     async def event_generator():
+        global _active_streams
         hidden = _hidden_ips()
-        async with aiosqlite.connect(SINKHOLE_DB) as db:
-            row = (await db.execute_fetchall("SELECT COALESCE(MAX(id), 0) FROM query_log"))[0]
-            last_id = row[0]
-            try:
-                while True:
+        started = time.monotonic()
+        try:
+            async with aiosqlite.connect(SINKHOLE_DB) as db:
+                row = (await db.execute_fetchall("SELECT COALESCE(MAX(id), 0) FROM query_log"))[0]
+                last_id = row[0]
+                while time.monotonic() - started < _STREAM_MAX_SECONDS:
                     rows = await db.execute_fetchall(
                         """SELECT id, ts, client_ip, domain, qtype, action,
                                   COALESCE(upstream,''), response_ms
@@ -78,8 +94,10 @@ async def stream_logs():
                             continue
                         yield f"data: {json.dumps(_row_to_dict(r))}\n\n"
                     await asyncio.sleep(0.5)
-            except (asyncio.CancelledError, GeneratorExit):
-                pass
+        except (asyncio.CancelledError, GeneratorExit):
+            pass
+        finally:
+            _active_streams = max(0, _active_streams - 1)
 
     return StreamingResponse(
         event_generator(),
