@@ -27,6 +27,10 @@ DEFAULT_SOURCES = [
     "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/fake.txt",
     # Popup / popunder ad networks (Hagezi, daily)
     "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt",
+    # Active threat intelligence: malware, stalkerware, cryptominers, scam shops,
+    # phishing (Hagezi TIF aggregates OpenPhish, PhishTank, URLhaus, DigitalSide,
+    # ThreatFox, etc.). Daily updated, low false-positive rate.
+    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/tif.txt",
 ]
 
 # Max consecutive failures before a default source is auto-disabled

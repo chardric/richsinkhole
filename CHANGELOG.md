@@ -4,6 +4,21 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-14
+
+### Added — Hagezi Threat Intelligence Feed (TIF) as a default source
+- `updater/default_sources.py` now ships with Hagezi's TIF list (`hosts/tif.txt`), aggregating active threat data from OpenPhish, PhishTank, URLhaus, DigitalSide, and ThreatFox. Adds malware C2, stalkerware, cryptominers, scam shops, phishing kits, Magecart skimmers. Daily updates, curated for low false-positive rate. Roughly 1.1M domains on top of the existing ad/porn/phishing lists.
+
+### Fixed — IG DMs/calls/refresh broken on mobile clients
+- Removed `test-gateway.instagram.com` from `blocked_domains` on prod. This is Instagram's production MQTT realtime gateway (CNAME → `dgw-ig.c10r.facebook.com`), not a test server — the `test-` prefix is legacy naming from the pre-2019 FB/IG backend split. Blocking it silently kills DMs, call signaling, typing indicators, and feed refresh on IG mobile apps.
+- Root cause: legacy `_AUTO_BLOCK_PATTERNS` heuristic auto-added any `test-*` hostname under `instagram.com`. The pattern list has since been emptied in code (`dns/server.py:366`), so new installs are unaffected, but the DB entry persisted on long-running instances.
+- Also purged 13 other stale `source='auto'` entries that were legit services (Apple universal-link, NTP pool, Shopee/Garena CDNs, etc.) — same defunct heuristic's debris.
+
+### Ops — Allowlist cleanup on prod
+- Dropped the custom allowlist from 31 entries to 0. Audited each against the active blocklist feeds: 30 were redundant (nothing in any feed had them as a parent-domain match), and the only "currently blocked" entry (`app-measurement.com`) is a Firebase tracker most apps tolerate being blocked. If a real break surfaces, we add back one targeted entry with a documented note.
+
+---
+
 ## 2026-04-13
 
 ### Fixed — Dashboard memory leaks (RSS growth on long-running instances)
