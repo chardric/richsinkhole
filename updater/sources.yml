@@ -16,3 +16,10 @@ whitelist:
   - youtu.be
   - yt.be
   - m.youtube.com
+  # Microsoft Edge service-ring endpoints required by Teams for service
+  # discovery, routing and health checks. Upstream hosts lists (StevenBlack,
+  # anudeepND) tag these as telemetry, but blocking them breaks Teams sign-in
+  # and call connectivity.
+  - a-ring.msedge.net
+  - k-ring.msedge.net
+  - fp.msedge.net

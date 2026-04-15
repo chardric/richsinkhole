@@ -4,6 +4,15 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## 2026-04-15
+
+### Fixed — Microsoft Teams sign-in / connectivity broken on client devices
+- Whitelisted three Microsoft Edge service-ring endpoints that upstream hosts lists (StevenBlack, anudeepND) tag as telemetry but Teams requires: `a-ring.msedge.net`, `k-ring.msedge.net`, `fp.msedge.net`. Teams uses them for service discovery, connection routing, and health checks; sinkholing them to 0.0.0.0 leaves the client stuck on "Loading" or "We couldn't sign you in."
+- Added the three hosts to the `whitelist:` block in `updater/sources.yml` so future syncs exclude them at fetch time, and allowlisted them on prod (`allowed_domains`) for immediate effect.
+- Scope is intentionally narrow — only the three specific subdomains, not `*.msedge.net`. Other msedge.net hosts (e.g. `dual-s-msedge.net`, `ax-msedge.net`) already resolve normally and are the actual content/routing endpoints.
+
+---
+
 ## 2026-04-14
 
 ### Added — Hagezi Threat Intelligence Feed (TIF) as a default source
