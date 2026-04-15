@@ -1263,11 +1263,38 @@
               <!-- Schedule + retention -->
               <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <label class="text-muted small flex-shrink-0" style="min-width:80px">Run daily at</label>
-                <input type="number" class="form-control form-control-sm" id="backup-hour" value="2" min="0" max="23" style="width:4.5rem;font-size:.75rem" title="Hour of day — 24-hour clock, 0-23">
-                <span class="text-muted small">hour</span>
-                <span class="text-muted small">:</span>
-                <input type="number" class="form-control form-control-sm" id="backup-minute" value="0" min="0" max="59" style="width:4.5rem;font-size:.75rem" title="Minute of hour — 0-59">
-                <span class="text-muted small">minute</span>
+                <select class="form-select form-select-sm" id="backup-hour" style="width:9rem;font-size:.75rem" title="Hour of day (local time)">
+                  <option value="0">Midnight (12 AM)</option>
+                  <option value="1">1 AM</option>
+                  <option value="2">2 AM</option>
+                  <option value="3">3 AM</option>
+                  <option value="4">4 AM</option>
+                  <option value="5">5 AM</option>
+                  <option value="6">6 AM</option>
+                  <option value="7">7 AM</option>
+                  <option value="8">8 AM</option>
+                  <option value="9">9 AM</option>
+                  <option value="10">10 AM</option>
+                  <option value="11">11 AM</option>
+                  <option value="12">Noon (12 PM)</option>
+                  <option value="13">1 PM</option>
+                  <option value="14">2 PM</option>
+                  <option value="15">3 PM</option>
+                  <option value="16">4 PM</option>
+                  <option value="17">5 PM</option>
+                  <option value="18">6 PM</option>
+                  <option value="19">7 PM</option>
+                  <option value="20">8 PM</option>
+                  <option value="21">9 PM</option>
+                  <option value="22">10 PM</option>
+                  <option value="23">11 PM</option>
+                </select>
+                <select class="form-select form-select-sm" id="backup-minute" style="width:6rem;font-size:.75rem" title="Minute past the hour">
+                  <option value="0">:00</option>
+                  <option value="15">:15</option>
+                  <option value="30">:30</option>
+                  <option value="45">:45</option>
+                </select>
                 <span class="text-muted small ms-3">Keep backups for</span>
                 <input type="number" class="form-control form-control-sm" id="backup-retention" value="30" min="1" max="365" style="width:4.5rem;font-size:.75rem" title="Older backups are deleted by the retention sweep at the end of each run">
                 <span class="text-muted small">days</span>
