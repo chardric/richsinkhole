@@ -220,6 +220,176 @@ install_backup_script() {
 }
 
 # ---------------------------------------------------------------------------
+# Backup storage wizard — interactive setup of NAS mount or rsync-ssh.
+# Skipped non-interactively (e.g. CI). Reconfigure later via dashboard or
+# by re-running install.sh.
+# ---------------------------------------------------------------------------
+
+setup_backup_storage() {
+    if [ ! -t 0 ]; then
+        info "Non-interactive run — skipping backup storage wizard."
+        return 0
+    fi
+
+    local data_dir="$(pwd)/local-data"
+    local cfg_file="${data_dir}/config/config.yml"
+    mkdir -p "${data_dir}/config"
+
+    echo
+    echo "  ──────────────────────────────────────────────────────────────"
+    echo "  BACKUP STORAGE SETUP"
+    echo "  ──────────────────────────────────────────────────────────────"
+    echo "  RichSinkhole backs up its databases nightly at 02:00."
+    echo "  Where should backups be written?"
+    echo
+    echo "    1) Local disk           (cheap, but lost if the host dies)"
+    echo "    2) NFS share            (Linux NAS — Synology/QNAP/etc.)"
+    echo "    3) SMB / CIFS share     (Windows / Samba server)"
+    echo "    4) rsync over SSH       (push to a remote Linux host)"
+    echo "    5) Skip — configure later via dashboard or re-run install.sh"
+    echo
+    local choice
+    read -rp "  Choose [1-5]: " choice
+    case "$choice" in
+        1) _setup_backup_local "$cfg_file" ;;
+        2) _setup_backup_nfs "$cfg_file" ;;
+        3) _setup_backup_smb "$cfg_file" ;;
+        4) _setup_backup_rsync "$cfg_file" ;;
+        5|"") info "Skipped backup storage setup. You can configure it later from the dashboard."; return 0 ;;
+        *)   warn "Invalid choice — skipping."; return 0 ;;
+    esac
+}
+
+# Helper: write/update a key in config.yml using python+yaml (preserves other keys).
+_cfg_set() {
+    local cfg_file="$1"; shift
+    python3 - "$cfg_file" "$@" <<'PYEOF'
+import sys, yaml
+path = sys.argv[1]
+try:
+    cfg = yaml.safe_load(open(path)) or {}
+except FileNotFoundError:
+    cfg = {}
+for kv in sys.argv[2:]:
+    k, _, v = kv.partition("=")
+    if v.isdigit():
+        cfg[k] = int(v)
+    else:
+        cfg[k] = v
+with open(path, "w") as f:
+    yaml.safe_dump(cfg, f, default_flow_style=False)
+PYEOF
+}
+
+_setup_backup_local() {
+    local cfg_file="$1"
+    local path
+    read -rp "  Local backup directory [/var/backups/richsinkhole]: " path
+    path="${path:-/var/backups/richsinkhole}"
+    mkdir -p "$path"
+    _cfg_set "$cfg_file" "backup_protocol=local" "backup_dir=$path"
+    info "Local backup configured at $path"
+}
+
+_setup_backup_nfs() {
+    local cfg_file="$1"
+    local host export mount
+    read -rp "  NFS server IP/hostname: " host
+    read -rp "  NFS export path (e.g. /mnt/external/backups): " export
+    read -rp "  Local mount point [/mnt/nas/richsinkhole-backups]: " mount
+    mount="${mount:-/mnt/nas/richsinkhole-backups}"
+    [ -z "$host" ] || [ -z "$export" ] && { warn "NFS host/export required — aborting."; return 1; }
+
+    if ! command -v mount.nfs4 &>/dev/null && ! command -v mount.nfs &>/dev/null; then
+        warn "NFS client not installed. Run: apt install -y nfs-common"
+        return 1
+    fi
+    mkdir -p "$mount"
+    local fstab_line="${host}:${export} ${mount} nfs4 rw,noatime,_netdev,hard 0 0"
+    if ! grep -qF "${host}:${export} ${mount}" /etc/fstab; then
+        echo "$fstab_line" >> /etc/fstab
+    fi
+    if mountpoint -q "$mount"; then
+        info "Already mounted — skipping mount call."
+    else
+        mount "$mount" || { warn "Mount failed — check NFS export and network."; return 1; }
+    fi
+    _cfg_set "$cfg_file" "backup_protocol=nfs" "backup_dir=$mount" "backup_nfs_host=$host" "backup_nfs_export=$export"
+    info "NFS share mounted at $mount and saved to fstab."
+}
+
+_setup_backup_smb() {
+    local cfg_file="$1"
+    local host share user pass mount
+    read -rp "  SMB server IP/hostname: " host
+    read -rp "  Share name: " share
+    read -rp "  Username: " user
+    read -rsp "  Password: " pass; echo
+    read -rp "  Local mount point [/mnt/nas/richsinkhole-backups]: " mount
+    mount="${mount:-/mnt/nas/richsinkhole-backups}"
+    [ -z "$host" ] || [ -z "$share" ] || [ -z "$user" ] && { warn "host/share/user required — aborting."; return 1; }
+
+    if ! command -v mount.cifs &>/dev/null; then
+        warn "cifs-utils not installed. Run: apt install -y cifs-utils"
+        return 1
+    fi
+    local creds=/etc/sinkhole-creds.smb
+    umask 077
+    cat > "$creds" <<EOF
+username=$user
+password=$pass
+EOF
+    chmod 600 "$creds"
+    mkdir -p "$mount"
+    local fstab_line="//${host}/${share} ${mount} cifs credentials=${creds},uid=1000,gid=1000,vers=3.0,_netdev 0 0"
+    if ! grep -qF "//${host}/${share} ${mount}" /etc/fstab; then
+        echo "$fstab_line" >> /etc/fstab
+    fi
+    if mountpoint -q "$mount"; then
+        info "Already mounted — skipping mount call."
+    else
+        mount "$mount" || { warn "Mount failed — check share name, user, and password."; return 1; }
+    fi
+    _cfg_set "$cfg_file" "backup_protocol=smb" "backup_dir=$mount" "backup_smb_host=$host" "backup_smb_share=$share" "backup_smb_user=$user"
+    info "SMB share mounted at $mount, credentials at $creds (mode 0600)."
+}
+
+_setup_backup_rsync() {
+    local cfg_file="$1"
+    local host user port path
+    read -rp "  SSH host: " host
+    read -rp "  SSH user: " user
+    read -rp "  SSH port [22]: " port; port="${port:-22}"
+    read -rp "  Remote path: " path
+    [ -z "$host" ] || [ -z "$user" ] || [ -z "$path" ] && { warn "host/user/path required — aborting."; return 1; }
+
+    local key_dir="$(pwd)/local-data/config"
+    local key="${key_dir}/backup_ssh_ed25519"
+    mkdir -p "$key_dir"
+    if [ ! -f "$key" ]; then
+        ssh-keygen -t ed25519 -f "$key" -N "" -C "richsinkhole-backup" >/dev/null
+        chmod 600 "$key"
+        info "Generated SSH key at $key"
+    fi
+    echo
+    echo "  Add this PUBLIC key to ${user}@${host}:~/.ssh/authorized_keys :"
+    echo "  ────────────────────────────────────────────────────────────"
+    cat "${key}.pub"
+    echo "  ────────────────────────────────────────────────────────────"
+    read -rp "  Press ENTER once you've added the key (or 'skip' to skip the test): " ack
+    if [ "$ack" != "skip" ]; then
+        if ssh -i "$key" -p "$port" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes \
+               "${user}@${host}" "mkdir -p '$path' && echo OK" 2>/dev/null | grep -q OK; then
+            info "SSH connection succeeded; remote path created."
+        else
+            warn "SSH test failed. You can re-run install.sh or test from the dashboard later."
+        fi
+    fi
+    _cfg_set "$cfg_file" "backup_protocol=rsync-ssh" "backup_ssh_host=$host" "backup_ssh_user=$user" "backup_ssh_port=$port" "backup_ssh_path=$path"
+    info "rsync-ssh configured. Backups will push to ${user}@${host}:${path}/"
+}
+
+# ---------------------------------------------------------------------------
 # Route reconciler — manages extra static routes from a YAML config so the
 # sinkhole can reply to clients on VLANs that aren't directly attached.
 # ---------------------------------------------------------------------------
@@ -347,6 +517,7 @@ main() {
     install_route_reconciler
     start_services
     smoke_test
+    setup_backup_storage
 
     echo ""
     info "RichSinkhole is running!"

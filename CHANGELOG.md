@@ -6,6 +6,18 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-15
 
+### Added — Multi-protocol backup storage (NFS / SMB / rsync-ssh / local)
+- Backup storage is now configurable per protocol, both at install time (interactive wizard at the end of `install.sh`) and from the dashboard (Settings → Backup & Restore card).
+- Protocols:
+  - **local** — write to a path on the host's own disk
+  - **nfs** — write to a host mount point; the wizard adds an `/etc/fstab` entry and mounts immediately
+  - **smb / cifs** — same idea, with credentials written to `/etc/sinkhole-creds.smb` (mode 0600)
+  - **rsync-ssh** — push to a remote host over SSH; key generation and the public key the user must paste into the remote `~/.ssh/authorized_keys` are surfaced in the dashboard. Key lives at `/local/config/backup_ssh_ed25519`. Known-hosts at `/local/config/backup_ssh_known_hosts` (TOFU on first connect).
+- Credentials never go in `config.yml` — SMB password lives in a 0600 file, SSH key is a regular keypair on disk.
+- Dashboard fields reveal/hide based on the protocol dropdown. A "Test Connection" button verifies reachability without trying a full backup. Saving an NFS/SMB change shows a warning that re-running `install.sh` is needed to remount (the dashboard can't remount across the container boundary).
+- Backup script (`scripts/sinkhole-backup.sh`) reads `backup_protocol` from `config.yml` and stages to `/tmp` before rsync'ing for the SSH protocol; for NFS/SMB/local it writes directly to the mount.
+- `sinkhole/Dockerfile` now includes `openssh-client` + `rsync` so the rsync-ssh path works without host involvement.
+
 ### Fixed — Scheduled backups silently producing 0-byte snapshots since 2026-04-04
 - The cron entry on the host invoked `/usr/local/bin/sinkhole-backup.sh` directly, but the script's data paths (`/data/sinkhole.db`, `/data/blocklist.db`) only resolve **inside** the sinkhole container — on the host they don't exist, so SQLite errored with "unable to open database file" and the script left an empty dated folder behind every night. Worse: even when run from inside the container (the dashboard "Backup Now" button), `/data/sinkhole.db` was the stale Mar 24 file from the old storage layout — the live DBs moved to `/local/` (per `dns/server.py:49-50`) and the script was never updated.
 - Fixes:

@@ -1197,12 +1197,72 @@
             </div>
             <div class="collapse" id="backup-collapse">
             <div class="card-body">
+              <!-- Storage protocol -->
               <div class="d-flex align-items-center gap-2 mb-2">
-                <label class="text-muted small flex-shrink-0">Path</label>
-                <input type="text" class="form-control form-control-sm font-monospace" id="backup-dir" value="/mnt/nas/richsinkhole-backups" style="font-size:.75rem">
+                <label class="text-muted small flex-shrink-0" style="min-width:80px">Storage</label>
+                <select class="form-select form-select-sm" id="backup-protocol" style="max-width:200px;font-size:.75rem">
+                  <option value="local">Local disk</option>
+                  <option value="nfs">NFS share</option>
+                  <option value="smb">SMB / CIFS share</option>
+                  <option value="rsync-ssh">rsync over SSH</option>
+                </select>
+                <span class="text-muted small" id="backup-protocol-hint" style="font-size:.7rem"></span>
               </div>
+
+              <!-- local / nfs / smb: mount path -->
+              <div class="d-flex align-items-center gap-2 mb-2 backup-fld-mount">
+                <label class="text-muted small flex-shrink-0" style="min-width:80px">Path</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-dir" placeholder="/mnt/nas/richsinkhole-backups" style="font-size:.75rem">
+              </div>
+
+              <!-- nfs only -->
+              <div class="d-flex align-items-center gap-2 mb-2 backup-fld-nfs" style="display:none">
+                <label class="text-muted small flex-shrink-0" style="min-width:80px">NFS host</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-nfs-host" placeholder="10.254.254.3" style="font-size:.75rem;max-width:200px">
+                <label class="text-muted small ms-2">Export</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-nfs-export" placeholder="/mnt/external/backups" style="font-size:.75rem">
+              </div>
+
+              <!-- smb only -->
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2 backup-fld-smb" style="display:none">
+                <label class="text-muted small flex-shrink-0" style="min-width:80px">SMB host</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-smb-host" placeholder="192.168.1.10" style="font-size:.75rem;max-width:160px">
+                <label class="text-muted small">Share</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-smb-share" placeholder="backups" style="font-size:.75rem;max-width:140px">
+                <label class="text-muted small">User</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="backup-smb-user" placeholder="backupuser" style="font-size:.75rem;max-width:140px">
+                <label class="text-muted small">Password</label>
+                <input type="password" class="form-control form-control-sm font-monospace" id="backup-smb-password" placeholder="(leave blank to keep)" style="font-size:.75rem;max-width:160px">
+              </div>
+
+              <!-- rsync-ssh only -->
+              <div class="backup-fld-ssh" style="display:none">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                  <label class="text-muted small flex-shrink-0" style="min-width:80px">SSH host</label>
+                  <input type="text" class="form-control form-control-sm font-monospace" id="backup-ssh-host" placeholder="backup.example.com" style="font-size:.75rem;max-width:200px">
+                  <label class="text-muted small">User</label>
+                  <input type="text" class="form-control form-control-sm font-monospace" id="backup-ssh-user" placeholder="backup" style="font-size:.75rem;max-width:120px">
+                  <label class="text-muted small">Port</label>
+                  <input type="number" class="form-control form-control-sm" id="backup-ssh-port" value="22" min="1" max="65535" style="font-size:.75rem;max-width:80px">
+                </div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <label class="text-muted small flex-shrink-0" style="min-width:80px">Remote path</label>
+                  <input type="text" class="form-control form-control-sm font-monospace" id="backup-ssh-path" placeholder="/srv/backups/richsinkhole" style="font-size:.75rem">
+                </div>
+                <div class="p-2 mb-2 rounded" style="background:#161b22;border:1px solid #30363d;font-size:.75rem">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="text-muted">SSH key:</span>
+                    <span id="backup-ssh-key-status" class="badge bg-secondary">checking…</span>
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" id="btn-ssh-keygen" style="font-size:.7rem">Generate Key</button>
+                  </div>
+                  <div class="text-muted">Add the public key below to <code>~/.ssh/authorized_keys</code> on the remote host:</div>
+                  <textarea readonly class="form-control form-control-sm font-monospace mt-1" id="backup-ssh-pubkey" rows="2" style="font-size:.65rem;background:#0d1117"></textarea>
+                </div>
+              </div>
+
+              <!-- Schedule + retention -->
               <div class="d-flex align-items-center gap-2 mb-2">
-                <label class="text-muted small flex-shrink-0">Schedule</label>
+                <label class="text-muted small flex-shrink-0" style="min-width:80px">Schedule</label>
                 <input type="number" class="form-control form-control-sm" id="backup-hour" value="2" min="0" max="23" style="width:4rem;font-size:.75rem" title="Hour (0-23)">
                 <span class="text-muted small">:</span>
                 <input type="number" class="form-control form-control-sm" id="backup-minute" value="0" min="0" max="59" style="width:4rem;font-size:.75rem" title="Minute (0-59)">
@@ -1210,8 +1270,11 @@
                 <input type="number" class="form-control form-control-sm" id="backup-retention" value="30" min="1" max="365" style="width:4rem;font-size:.75rem" title="Days to keep">
                 <span class="text-muted small">days</span>
               </div>
-              <div class="mb-3">
+
+              <div class="d-flex gap-2 mb-3">
                 <button class="btn btn-sm btn-outline-secondary py-0" id="btn-save-backup-config" style="font-size:.7rem">Save Settings</button>
+                <button class="btn btn-sm btn-outline-info py-0" id="btn-test-backup-storage" style="font-size:.7rem">Test Connection</button>
+                <span class="small ms-2 align-self-center" id="backup-test-result"></span>
               </div>
               <div class="d-flex gap-2 mb-3">
                 <button class="btn btn-sm btn-primary" id="btn-backup-now">Backup Now</button>

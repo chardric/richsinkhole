@@ -2438,20 +2438,111 @@ function bindEvents() {
     }
   });
 
-  // Backup config save
-  document.getElementById("btn-save-backup-config").addEventListener("click", async () => {
-    const dir = document.getElementById("backup-dir").value.trim();
-    if (!dir) return;
+  // Show/hide protocol-specific fields
+  function _backupShowFields(proto) {
+    const map = {
+      local:       [".backup-fld-mount"],
+      nfs:         [".backup-fld-mount", ".backup-fld-nfs"],
+      smb:         [".backup-fld-mount", ".backup-fld-smb"],
+      "rsync-ssh": [".backup-fld-ssh"],
+    };
+    const visible = new Set(map[proto] || []);
+    [".backup-fld-mount", ".backup-fld-nfs", ".backup-fld-smb", ".backup-fld-ssh"].forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => { el.style.display = visible.has(sel) ? "" : "none"; });
+    });
+    const hint = document.getElementById("backup-protocol-hint");
+    hint.textContent = proto === "rsync-ssh"
+      ? "— pushed over SSH; key-based auth, no host mount needed"
+      : (proto === "local" ? "— writes to the host filesystem" : "— host mount must already be set up by install.sh");
+    if (proto === "rsync-ssh") _refreshSshKeyStatus();
+  }
+
+  document.getElementById("backup-protocol")?.addEventListener("change", (ev) => _backupShowFields(ev.target.value));
+
+  async function _refreshSshKeyStatus() {
+    const badge = document.getElementById("backup-ssh-key-status");
+    const ta = document.getElementById("backup-ssh-pubkey");
+    const btn = document.getElementById("btn-ssh-keygen");
     try {
-      await api("POST", "/api/backups/config", {
-        backup_dir: dir,
-        backup_hour: parseInt(document.getElementById("backup-hour").value, 10),
-        backup_minute: parseInt(document.getElementById("backup-minute").value, 10),
-        backup_retention_days: parseInt(document.getElementById("backup-retention").value, 10),
-      });
-      showToast("Backup settings saved", "success");
+      const r = await api("GET", "/api/backups/ssh-key");
+      if (r.exists) {
+        badge.className = "badge bg-success"; badge.textContent = "present";
+        ta.value = r.public_key; btn.disabled = true; btn.title = "Key already exists; remove it on the host first to regenerate";
+      } else {
+        badge.className = "badge bg-secondary"; badge.textContent = "not generated";
+        ta.value = ""; btn.disabled = false; btn.title = "";
+      }
+    } catch (_) {
+      badge.className = "badge bg-danger"; badge.textContent = "load failed";
+    }
+  }
+
+  document.getElementById("btn-ssh-keygen")?.addEventListener("click", async () => {
+    try {
+      const r = await api("POST", "/api/backups/ssh-key/generate");
+      document.getElementById("backup-ssh-pubkey").value = r.public_key;
+      showToast("SSH key generated. Add the public key to the remote ~/.ssh/authorized_keys", "success");
+      _refreshSshKeyStatus();
+    } catch (e) {
+      showToast("Key generation failed: " + e.message, "danger");
+    }
+  });
+
+  // Backup config save (now multi-protocol)
+  document.getElementById("btn-save-backup-config").addEventListener("click", async () => {
+    const proto = document.getElementById("backup-protocol").value;
+    const payload = {
+      backup_protocol: proto,
+      backup_dir: document.getElementById("backup-dir").value.trim(),
+      backup_hour: parseInt(document.getElementById("backup-hour").value, 10),
+      backup_minute: parseInt(document.getElementById("backup-minute").value, 10),
+      backup_retention_days: parseInt(document.getElementById("backup-retention").value, 10),
+      backup_nfs_host: document.getElementById("backup-nfs-host").value.trim(),
+      backup_nfs_export: document.getElementById("backup-nfs-export").value.trim(),
+      backup_smb_host: document.getElementById("backup-smb-host").value.trim(),
+      backup_smb_share: document.getElementById("backup-smb-share").value.trim(),
+      backup_smb_user: document.getElementById("backup-smb-user").value.trim(),
+      backup_smb_password: document.getElementById("backup-smb-password").value,  // not trimmed — passwords may have leading/trailing space
+      backup_ssh_host: document.getElementById("backup-ssh-host").value.trim(),
+      backup_ssh_user: document.getElementById("backup-ssh-user").value.trim(),
+      backup_ssh_port: parseInt(document.getElementById("backup-ssh-port").value, 10),
+      backup_ssh_path: document.getElementById("backup-ssh-path").value.trim(),
+    };
+    try {
+      const r = await api("POST", "/api/backups/config", payload);
+      // Clear the password field so it isn't re-submitted on next save (server has already persisted it)
+      document.getElementById("backup-smb-password").value = "";
+      if (r.remount_required) {
+        showToast("Settings saved. Mount config changed — re-run install.sh on the host to apply the new mount.", "warning");
+      } else {
+        showToast("Backup settings saved", "success");
+      }
     } catch (e) {
       showToast("Save failed: " + e.message, "danger");
+    }
+  });
+
+  // Test connection
+  document.getElementById("btn-test-backup-storage")?.addEventListener("click", async () => {
+    const proto = document.getElementById("backup-protocol").value;
+    const result = document.getElementById("backup-test-result");
+    result.textContent = "Testing…"; result.className = "small ms-2 align-self-center text-muted";
+    const payload = { protocol: proto };
+    if (proto === "rsync-ssh") {
+      payload.host = document.getElementById("backup-ssh-host").value.trim();
+      payload.user = document.getElementById("backup-ssh-user").value.trim();
+      payload.port = parseInt(document.getElementById("backup-ssh-port").value, 10);
+      payload.path = document.getElementById("backup-ssh-path").value.trim();
+    } else {
+      payload.path = document.getElementById("backup-dir").value.trim();
+    }
+    try {
+      const r = await api("POST", "/api/backups/test", payload);
+      result.textContent = (r.ok ? "✓ " : "✗ ") + r.detail;
+      result.className = "small ms-2 align-self-center " + (r.ok ? "text-success" : "text-danger");
+    } catch (e) {
+      result.textContent = "✗ " + e.message;
+      result.className = "small ms-2 align-self-center text-danger";
     }
   });
 
@@ -2460,10 +2551,21 @@ function bindEvents() {
     // Load backup config
     try {
       const cfg = await api("GET", "/api/backups/config");
-      document.getElementById("backup-dir").value = cfg.backup_dir;
+      document.getElementById("backup-protocol").value = cfg.backup_protocol || "nfs";
+      document.getElementById("backup-dir").value = cfg.backup_dir || "";
       document.getElementById("backup-hour").value = cfg.backup_hour ?? 2;
       document.getElementById("backup-minute").value = cfg.backup_minute ?? 0;
       document.getElementById("backup-retention").value = cfg.backup_retention_days ?? 30;
+      document.getElementById("backup-nfs-host").value = cfg.backup_nfs_host || "";
+      document.getElementById("backup-nfs-export").value = cfg.backup_nfs_export || "";
+      document.getElementById("backup-smb-host").value = cfg.backup_smb_host || "";
+      document.getElementById("backup-smb-share").value = cfg.backup_smb_share || "";
+      document.getElementById("backup-smb-user").value = cfg.backup_smb_user || "";
+      document.getElementById("backup-ssh-host").value = cfg.backup_ssh_host || "";
+      document.getElementById("backup-ssh-user").value = cfg.backup_ssh_user || "";
+      document.getElementById("backup-ssh-port").value = cfg.backup_ssh_port || 22;
+      document.getElementById("backup-ssh-path").value = cfg.backup_ssh_path || "";
+      _backupShowFields(cfg.backup_protocol || "nfs");
     } catch (_) {}
     const list = document.getElementById("backup-list");
     const countEl = document.getElementById("backup-count");
@@ -2477,7 +2579,7 @@ function bindEvents() {
         return;
       }
       list.innerHTML = data.backups.map(b =>
-        '<div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary">'
+        '<div class="hover-row d-flex justify-content-between align-items-center py-1 border-bottom border-secondary">'
         + '<div><span class="fw-semibold">' + escHtml(b.date) + '</span>'
         + ' <span class="text-muted">(' + b.size_mb + ' MB, ' + b.files.length + ' files)</span></div>'
         + '<div class="d-flex gap-1">'

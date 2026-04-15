@@ -7,6 +7,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# System tools: openssh-client + rsync are needed for the rsync-ssh backup
+# protocol; ssh-keygen is used by the dashboard to generate backup keys.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssh-client rsync && \
+    rm -rf /var/lib/apt/lists/*
+
 # All deps from all 4 services (deduplicated)
 RUN pip install --no-cache-dir \
     dnslib pyyaml \
