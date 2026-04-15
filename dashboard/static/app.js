@@ -2624,20 +2624,42 @@ function bindEvents() {
 
   document.getElementById("btn-backup-now").addEventListener("click", async () => {
     const btn = document.getElementById("btn-backup-now");
-    const status = document.getElementById("backup-status");
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Backing up...';
     try {
-      const result = await api("POST", "/api/backups/run");
-      btn.innerHTML = "Backup Now";
-      showToast("Backup completed", "success");
-      // Refresh backup list if panel is open
-      const collapse = document.getElementById("backup-collapse");
-      if (collapse.classList.contains("show")) {
-        collapse.dispatchEvent(new Event("show.bs.collapse"));
+      const r = await api("POST", "/api/backups/run");
+      if (r.status === "already_running") {
+        showToast("A backup is already in progress — waiting for it to finish…", "info");
       }
+      // Poll status every 3s until the job finishes (can take ~90s on a Pi + NFS).
+      const started = Date.now();
+      const MAX_MS = 10 * 60 * 1000;  // 10-minute hard ceiling
+      const poll = async () => {
+        if (Date.now() - started > MAX_MS) {
+          btn.innerHTML = "Backup Now"; btn.disabled = false;
+          showToast("Backup polling timed out — check the log on the host", "warning");
+          return;
+        }
+        try {
+          const s = await api("GET", "/api/backups/run/status");
+          if (s.running) { setTimeout(poll, 3000); return; }
+          btn.innerHTML = "Backup Now"; btn.disabled = false;
+          if (s.ok) {
+            showToast("Backup completed", "success");
+            const collapse = document.getElementById("backup-collapse");
+            if (collapse.classList.contains("show")) {
+              collapse.dispatchEvent(new Event("show.bs.collapse"));
+            }
+          } else {
+            showToast("Backup failed: " + (s.output || "(no output)").split("\n").pop(), "danger");
+          }
+        } catch (e) {
+          setTimeout(poll, 5000);  // network blip — retry
+        }
+      };
+      setTimeout(poll, 3000);
     } catch (e) {
-      btn.innerHTML = "Backup Now";
+      btn.innerHTML = "Backup Now"; btn.disabled = false;
       showToast("Backup failed: " + e.message, "danger");
     } finally {
       btn.disabled = false;

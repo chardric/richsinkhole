@@ -1210,13 +1210,13 @@
               </div>
 
               <!-- local / nfs / smb: mount path -->
-              <div class="d-flex align-items-center gap-2 mb-2 backup-fld-mount">
+              <div class="d-flex align-items-center gap-2 mb-2 backup-fld-mount d-none">
                 <label class="text-muted small flex-shrink-0" style="min-width:80px">Path</label>
                 <input type="text" class="form-control form-control-sm font-monospace" id="backup-dir" placeholder="/mnt/nas/richsinkhole-backups" style="font-size:.75rem">
               </div>
 
               <!-- nfs only -->
-              <div class="d-flex align-items-center gap-2 mb-2 backup-fld-nfs" style="display:none">
+              <div class="d-flex align-items-center gap-2 mb-2 backup-fld-nfs d-none">
                 <label class="text-muted small flex-shrink-0" style="min-width:80px">NFS host</label>
                 <input type="text" class="form-control form-control-sm font-monospace" id="backup-nfs-host" placeholder="10.254.254.3" style="font-size:.75rem;max-width:200px">
                 <label class="text-muted small ms-2">Export</label>
@@ -1224,7 +1224,7 @@
               </div>
 
               <!-- smb only -->
-              <div class="d-flex flex-wrap align-items-center gap-2 mb-2 backup-fld-smb" style="display:none">
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2 backup-fld-smb d-none">
                 <label class="text-muted small flex-shrink-0" style="min-width:80px">SMB host</label>
                 <input type="text" class="form-control form-control-sm font-monospace" id="backup-smb-host" placeholder="192.168.1.10" style="font-size:.75rem;max-width:160px">
                 <label class="text-muted small">Share</label>
@@ -1236,7 +1236,7 @@
               </div>
 
               <!-- rsync-ssh only -->
-              <div class="backup-fld-ssh" style="display:none">
+              <div class="backup-fld-ssh d-none">
                 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                   <label class="text-muted small flex-shrink-0" style="min-width:80px">SSH host</label>
                   <input type="text" class="form-control form-control-sm font-monospace" id="backup-ssh-host" placeholder="backup.example.com" style="font-size:.75rem;max-width:200px">

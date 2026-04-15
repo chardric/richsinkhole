@@ -5,11 +5,14 @@
 
 """Backup & restore API — lists backups, triggers manual backup, restores, deletes."""
 
+import asyncio
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -20,6 +23,45 @@ BACKUP_SCRIPT = "/usr/local/bin/sinkhole-backup.sh"
 DATA_DIR = "/data"       # NAS-backed: sinkhole.db (query log)
 LOCAL_DIR = "/local"     # SD-backed: blocklist.db, geoip-country.csv
 DEFAULT_BACKUP_DIR = "/mnt/nas/richsinkhole-backups"
+DOCKER_SOCK = "/var/run/docker.sock"
+SELF_CONTAINER = "richsinkhole-sinkhole-1"
+
+
+async def _docker_exec_as_root(cmd: list[str], timeout: float = 180) -> tuple[int, str]:
+    """Run a command inside this container as root via the Docker API.
+
+    Needed for operations that must run as root (mkdir under /mnt/nas, chown,
+    etc.) because the dashboard itself runs as the unprivileged `app` user.
+    Uses the host's docker socket (bind-mounted in docker-compose.yml) the
+    same way unbound_settings._reload_unbound() does.
+    """
+    if not os.path.exists(DOCKER_SOCK):
+        raise HTTPException(status_code=503, detail="Docker socket not available")
+    transport = httpx.AsyncHTTPTransport(uds=DOCKER_SOCK)
+    async with httpx.AsyncClient(transport=transport, base_url="http://docker", timeout=timeout) as client:
+        r = await client.post(
+            f"/containers/{SELF_CONTAINER}/exec",
+            json={"Cmd": cmd, "User": "root", "AttachStdout": True, "AttachStderr": True},
+        )
+        if r.status_code != 201:
+            raise HTTPException(status_code=500, detail=f"docker exec create failed: {r.text}")
+        exec_id = r.json()["Id"]
+        r2 = await client.post(f"/exec/{exec_id}/start", json={"Detach": False},
+                               headers={"Content-Type": "application/json"})
+        raw = r2.content or b""
+        # Docker multiplexes stdout/stderr using 8-byte frame headers:
+        # [type(1), 0, 0, 0, size(4 big-endian)][payload]. Parse on raw bytes;
+        # decoding to text before framing corrupts non-UTF-8 size bytes.
+        chunks: list[bytes] = []
+        i = 0
+        while i + 8 <= len(raw):
+            size = int.from_bytes(raw[i + 4:i + 8], "big")
+            chunks.append(raw[i + 8:i + 8 + size])
+            i += 8 + size
+        text = (b"".join(chunks) if chunks else raw).decode("utf-8", errors="replace")
+        inspect = await client.get(f"/exec/{exec_id}/json")
+        exit_code = inspect.json().get("ExitCode", -1) if inspect.status_code == 200 else -1
+        return exit_code, text
 
 
 def _get_backup_root() -> str:
@@ -52,21 +94,60 @@ async def list_backups():
     return {"backups": backups, "backup_dir": _get_backup_root()}
 
 
-@router.post("/backups/run")
+# ── Async backup job state ───────────────────────────────────────────────────
+# A full backup can take 60-120s on a Pi + NFS (650 MB over ethernet), longer
+# than nginx's proxy_read_timeout. We run the script in a background task and
+# let the UI poll for completion via /api/backups/run/status.
+_backup_job_lock = asyncio.Lock()
+_backup_job_state: dict = {
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "ok": None,
+    "output": "",
+}
+
+
+async def _run_backup_background() -> None:
+    """Background task: exec the backup script as root and stash the result."""
+    global _backup_job_state
+    try:
+        exit_code, output = await _docker_exec_as_root([BACKUP_SCRIPT], timeout=600)
+        _backup_job_state["ok"] = (exit_code == 0)
+        _backup_job_state["output"] = output.strip()[:2000]
+    except Exception as exc:
+        _backup_job_state["ok"] = False
+        _backup_job_state["output"] = f"backup failed: {exc}"
+    finally:
+        _backup_job_state["finished_at"] = time.time()
+        _backup_job_state["running"] = False
+
+
+@router.post("/backups/run", status_code=202)
 async def trigger_backup():
-    """Run backup script immediately."""
+    """Kick off a backup in the background and return immediately. The UI polls
+    /api/backups/run/status to find out whether it succeeded."""
     if not os.path.isfile(BACKUP_SCRIPT):
         raise HTTPException(status_code=503, detail="Backup script not found")
-    try:
-        result = subprocess.run(
-            [BACKUP_SCRIPT],
-            capture_output=True, text=True, timeout=120,
-        )
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=result.stderr or "Backup failed")
-        return {"status": "ok", "output": result.stdout.strip()}
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Backup timed out")
+    async with _backup_job_lock:
+        if _backup_job_state["running"]:
+            return {"status": "already_running", "started_at": _backup_job_state["started_at"]}
+        _backup_job_state.update({
+            "running": True,
+            "started_at": time.time(),
+            "finished_at": None,
+            "ok": None,
+            "output": "",
+        })
+        asyncio.create_task(_run_backup_background())
+    return {"status": "started", "started_at": _backup_job_state["started_at"]}
+
+
+@router.get("/backups/run/status")
+async def backup_status():
+    """Poll the most recent backup job. The UI calls this every few seconds
+    after kicking off `/backups/run`."""
+    return dict(_backup_job_state)
 
 
 class RestoreIn(BaseModel):
