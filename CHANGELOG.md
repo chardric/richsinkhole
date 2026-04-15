@@ -6,6 +6,16 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-15
 
+### Added — Static route reconciler for VLANs not directly attached to the sinkhole
+- `scripts/route-reconciler.py` reads `/etc/sinkhole/extra_routes.yml` (real file lives at `data/config/extra_routes.yml` so it's part of the backup) and reconciles NetworkManager's `ipv4.routes` on each named device to exactly that list. Adds missing, removes stale, and applies live via `nmcli device reapply` without bouncing the connection. Idempotent — a no-op when state already matches.
+- Three systemd units glue it together: a oneshot **service** (run on demand), a **path** unit (re-runs the service on file change via inotify), and a **timer** (5-minute safety-net reconcile in case the path watcher ever misses an event after a flurry of edits). Installer wires all three at install time and substitutes the real config path into the unit templates so inotify watches the actual file, not the `/etc/sinkhole/` symlink.
+- Use case: the sinkhole had legs in only two of the six Omada VLANs (`172.16.10/24`, `172.16.30/24`), so DNS replies to clients on the other four (`172.16.20/40/50/60`) were black-holed by Linux's default-route fallback to MikroTik. Edit one YAML file to add a route via the Omada gateway on the eth2 subnet and the route appears live within seconds — same procedure for any future VLAN.
+- File format:
+  ```yaml
+  routes:
+    - { net: 172.16.20.0/24, via: 172.16.10.1, dev: eth2 }
+  ```
+
 ### Fixed — Microsoft Teams sign-in / connectivity broken on client devices
 - Whitelisted three Microsoft Edge service-ring endpoints that upstream hosts lists (StevenBlack, anudeepND) tag as telemetry but Teams requires: `a-ring.msedge.net`, `k-ring.msedge.net`, `fp.msedge.net`. Teams uses them for service discovery, connection routing, and health checks; sinkholing them to 0.0.0.0 leaves the client stuck on "Loading" or "We couldn't sign you in."
 - Added the three hosts to the `whitelist:` block in `updater/sources.yml` so future syncs exclude them at fetch time, and allowlisted them on prod (`allowed_domains`) for immediate effect.

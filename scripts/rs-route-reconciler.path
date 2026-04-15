@@ -1,0 +1,14 @@
+[Unit]
+Description=RichSinkhole — re-run route reconciler when extra_routes.yml changes
+Documentation=file:///etc/sinkhole/extra_routes.yml
+StartLimitIntervalSec=60
+StartLimitBurst=100
+
+[Path]
+# Watch the real file (not a symlink) so inotify follows actual writes.
+PathChanged=__CONFIG_PATH__
+PathExists=__CONFIG_PATH__
+Unit=rs-route-reconciler.service
+
+[Install]
+WantedBy=multi-user.target

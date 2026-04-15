@@ -181,6 +181,60 @@ tune_host() {
 }
 
 # ---------------------------------------------------------------------------
+# Route reconciler — manages extra static routes from a YAML config so the
+# sinkhole can reply to clients on VLANs that aren't directly attached.
+# ---------------------------------------------------------------------------
+
+install_route_reconciler() {
+    local script_dst="/usr/local/bin/rs-route-reconciler.py"
+    local svc_dst="/etc/systemd/system/rs-route-reconciler.service"
+    local path_dst="/etc/systemd/system/rs-route-reconciler.path"
+    local timer_dst="/etc/systemd/system/rs-route-reconciler.timer"
+    local data_cfg="$(pwd)/data/config/extra_routes.yml"
+    local example_src="$(pwd)/scripts/extra_routes.yml.example"
+    local etc_link="/etc/sinkhole/extra_routes.yml"
+
+    if [ ! -f "scripts/route-reconciler.py" ]; then
+        warn "scripts/route-reconciler.py missing — skipping route reconciler install."
+        return 0
+    fi
+
+    if ! command -v nmcli &>/dev/null; then
+        warn "nmcli not found — skipping route reconciler (only needed if you use NetworkManager + extra VLANs)."
+        return 0
+    fi
+
+    info "Installing route reconciler..."
+
+    install -m 0755 scripts/route-reconciler.py "$script_dst"
+
+    # Seed the config in data/config (so it's part of the backup) if absent.
+    mkdir -p "$(dirname "$data_cfg")"
+    if [ ! -f "$data_cfg" ] && [ -f "$example_src" ]; then
+        cp "$example_src" "$data_cfg"
+        info "Seeded $data_cfg (no extra routes by default — edit to add)."
+    fi
+
+    # Convenience symlink so the docs path /etc/sinkhole/extra_routes.yml works.
+    mkdir -p /etc/sinkhole
+    [ -f "$data_cfg" ] && ln -sfn "$data_cfg" "$etc_link"
+
+    # Substitute the real config path into the unit templates — systemd path
+    # units watch via inotify and don't follow symlinks, so they need the
+    # canonical file location, not the /etc/sinkhole/ alias.
+    sed "s|__CONFIG_PATH__|${data_cfg}|g" scripts/rs-route-reconciler.service > "$svc_dst"
+    sed "s|__CONFIG_PATH__|${data_cfg}|g" scripts/rs-route-reconciler.path    > "$path_dst"
+    install -m 0644 scripts/rs-route-reconciler.timer "$timer_dst"
+    chmod 0644 "$svc_dst" "$path_dst"
+
+    systemctl daemon-reload
+    systemctl reset-failed rs-route-reconciler.service rs-route-reconciler.path rs-route-reconciler.timer 2>/dev/null || true
+    systemctl enable --now rs-route-reconciler.path rs-route-reconciler.timer >/dev/null 2>&1 || true
+    systemctl start rs-route-reconciler.service \
+        || warn "Initial route reconciler run failed — check: journalctl -u rs-route-reconciler"
+}
+
+# ---------------------------------------------------------------------------
 # Build & start
 # ---------------------------------------------------------------------------
 
@@ -247,6 +301,7 @@ main() {
     check_prereqs
     free_port_53
     tune_host
+    install_route_reconciler
     start_services
     smoke_test
 

@@ -1,0 +1,28 @@
+[Unit]
+Description=RichSinkhole — sync extra static routes from YAML to NetworkManager
+Documentation=file:///etc/sinkhole/extra_routes.yml
+After=NetworkManager.service network-online.target
+Wants=NetworkManager.service
+ConditionPathExists=__CONFIG_PATH__
+# Generous burst — vim/nano "save" can fire several inotify events, and
+# a hand-edit can land while a previous run is still finishing.
+StartLimitIntervalSec=60
+StartLimitBurst=100
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rs-route-reconciler.py --config __CONFIG_PATH__
+StandardOutput=journal
+StandardError=journal
+# Tight sandboxing — script only needs nmcli + read access to the config.
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/etc/NetworkManager
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

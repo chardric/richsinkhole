@@ -1,0 +1,13 @@
+[Unit]
+Description=RichSinkhole — periodic safety-net reconciliation of extra static routes
+Documentation=file:///etc/sinkhole/extra_routes.yml
+
+[Timer]
+# Catches any drift if the path watcher missed an event (e.g. start-limit-hit
+# after rapid edits). Idempotent — a no-op when state matches the YAML.
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

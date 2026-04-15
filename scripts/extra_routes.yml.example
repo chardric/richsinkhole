@@ -1,0 +1,26 @@
+# RichSinkhole — extra static routes
+#
+# Lists subnets that the sinkhole should be able to reach via a router that's
+# NOT directly attached to one of the host's NICs. The reconciler service
+# (rs-route-reconciler.service) reads this file at boot AND whenever it
+# changes, then sets exactly these routes via NetworkManager.
+#
+# Each entry:
+#   net  — destination network in CIDR notation
+#   via  — gateway IP (must be reachable via `dev`)
+#   dev  — the host network interface name (eth0, eth1, eth2, ...)
+#
+# After editing this file, the reconciler runs automatically (systemd path
+# unit). To run it manually:  sudo /usr/local/bin/rs-route-reconciler.py
+#
+# Devices not mentioned here are left untouched — only routes for devices
+# that appear in this file are managed.
+
+routes: []
+
+# Example: Omada VLANs reachable via the Omada gateway on the eth2 subnet
+# routes:
+#   - { net: 172.16.20.0/24, via: 172.16.10.1, dev: eth2 }
+#   - { net: 172.16.40.0/24, via: 172.16.10.1, dev: eth2 }
+#   - { net: 172.16.50.0/24, via: 172.16.10.1, dev: eth2 }
+#   - { net: 172.16.60.0/24, via: 172.16.10.1, dev: eth2 }
