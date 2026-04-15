@@ -355,44 +355,99 @@ async def generate_ssh_key():
 
 class TestStorageIn(BaseModel):
     protocol: str
+    # Shared
+    path: str = ""           # local: directory; rsync-ssh: remote path
+    # NFS
+    nfs_host: str = ""
+    nfs_export: str = ""
+    # SMB
+    smb_host: str = ""
+    smb_share: str = ""
+    smb_user: str = ""
+    smb_password: str = ""
+    # rsync-ssh
     host: str = ""
     user: str = ""
     port: int = 22
-    path: str = ""
 
 
 @router.post("/backups/test")
 async def test_storage(body: TestStorageIn):
-    """Probe whether the configured storage is reachable + writable.
+    """Probe that the target storage is actually reachable with the details
+    the user just typed.
 
-    For local/nfs/smb: confirm the path exists and we can write a probe file.
-    For rsync-ssh: SSH in with the key and run `mkdir -p && touch` on the remote.
+    Behaviour per protocol:
+      local       — the path exists and is a directory
+      nfs         — `showmount -e nfs_host` lists nfs_export; falls back to a
+                    path check if nfs_host wasn't provided
+      smb         — `smbclient -L //smb_host` succeeds and `ls` on the share
+                    works with smb_user / smb_password (or saved creds file)
+      rsync-ssh   — SSH in with the generated key and create+delete a probe
+                    file under `path` on the remote host
     """
     if body.protocol not in _VALID_PROTOCOLS:
         raise HTTPException(status_code=400, detail=f"protocol must be one of {_VALID_PROTOCOLS}")
 
-    if body.protocol in ("local", "nfs", "smb"):
+    if body.protocol == "local":
         target = body.path.strip()
         if not target:
             raise HTTPException(status_code=400, detail="path required")
         if not os.path.isdir(target):
-            return {"ok": False, "detail": f"{target} is not a directory (mount may be missing — re-run install.sh)"}
-        # Try to write as the dashboard's user first.
-        probe = os.path.join(target, ".sinkhole-probe")
-        try:
-            with open(probe, "w") as f:
-                f.write("ok")
-            os.unlink(probe)
-            return {"ok": True, "detail": f"{target} is reachable and writable"}
-        except OSError:
-            pass
-        # Fall back: write test as root via docker exec (the actual backup also runs that way).
-        # If we can list the directory at all, the mount is up — that's the main thing.
-        try:
-            os.listdir(target)
-        except OSError as exc:
-            return {"ok": False, "detail": f"{target} unreadable: {exc}"}
-        return {"ok": True, "detail": f"{target} is reachable (writable by the nightly backup which runs as root via docker exec)"}
+            return {"ok": False, "detail": f"{target} is not a directory"}
+        return {"ok": True, "detail": f"{target} exists and is a directory"}
+
+    if body.protocol == "nfs":
+        if body.nfs_host and body.nfs_export:
+            try:
+                result = subprocess.run(
+                    ["showmount", "-e", "--no-headers", body.nfs_host],
+                    capture_output=True, text=True, timeout=15,
+                )
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "detail": f"showmount timed out — {body.nfs_host} is unreachable or not running NFS"}
+            except FileNotFoundError:
+                return {"ok": False, "detail": "showmount not installed (rebuild sinkhole image)"}
+            if result.returncode != 0:
+                return {"ok": False, "detail": (result.stderr or "showmount failed — is the NFS server reachable?").strip()[:300]}
+            exports = [line.split()[0] for line in result.stdout.splitlines() if line.strip()]
+            # An NFS client can mount a subpath of an exported directory, so the
+            # requested export is valid if it equals OR lives beneath any export.
+            requested = body.nfs_export.rstrip("/") or "/"
+            match = next((e for e in exports if requested == e.rstrip("/") or requested.startswith(e.rstrip("/") + "/")), None)
+            if not match:
+                return {"ok": False, "detail": f"server {body.nfs_host} does not export {body.nfs_export}. Available: {', '.join(exports) or '(none)'}"}
+            note = "" if match.rstrip("/") == requested else f" (via parent export {match})"
+            return {"ok": True, "detail": f"NFS server {body.nfs_host} reachable; {body.nfs_export} is exportable{note} — run install.sh to mount"}
+        return _probe_existing_path(body.path.strip() or DEFAULT_BACKUP_DIR)
+
+    if body.protocol == "smb":
+        if body.smb_host and body.smb_share:
+            # Password: use the one posted, OR fall back to the saved creds file
+            # (so "change retention only, leave password blank" still tests).
+            smb_password = body.smb_password
+            if not smb_password and os.path.isfile("/local/config/smb-creds"):
+                try:
+                    for line in open("/local/config/smb-creds"):
+                        if line.startswith("password="):
+                            smb_password = line.partition("=")[2].rstrip("\n")
+                            break
+                except OSError:
+                    pass
+            auth = f"{body.smb_user}%{smb_password}" if body.smb_user else "-N"
+            cmd = ["smbclient", f"//{body.smb_host}/{body.smb_share}",
+                   "-U" if body.smb_user else "-N",
+                   *([auth] if body.smb_user else []),
+                   "-c", "ls"]
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "detail": f"smbclient timed out — {body.smb_host} unreachable on SMB port"}
+            except FileNotFoundError:
+                return {"ok": False, "detail": "smbclient not installed (rebuild sinkhole image)"}
+            if result.returncode != 0:
+                return {"ok": False, "detail": (result.stderr or result.stdout or "smbclient failed").strip()[:300]}
+            return {"ok": True, "detail": f"SMB share //{body.smb_host}/{body.smb_share} is reachable with these credentials — run install.sh to mount"}
+        return _probe_existing_path(body.path.strip() or DEFAULT_BACKUP_DIR)
 
     if body.protocol == "rsync-ssh":
         if not os.path.isfile(_SSH_KEY_PATH):
@@ -408,12 +463,37 @@ async def test_storage(body: TestStorageIn):
             f"{body.user}@{body.host}",
             f"mkdir -p {body.path!r} && touch {body.path!r}/.sinkhole-probe && rm {body.path!r}/.sinkhole-probe && echo OK",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "detail": f"ssh timed out — {body.host}:{body.port} unreachable"}
         if result.returncode != 0:
             return {"ok": False, "detail": (result.stderr or result.stdout or "ssh failed").strip()[:300]}
-        return {"ok": True, "detail": f"connected to {body.user}@{body.host}:{body.path} and wrote probe file"}
+        return {"ok": True, "detail": f"connected to {body.user}@{body.host}:{body.path} and wrote a probe file"}
 
     return {"ok": False, "detail": "unsupported protocol"}
+
+
+def _probe_existing_path(target: str) -> dict:
+    """Fallback probe: verify the already-mounted path is reachable + writable
+    when the user didn't provide server details (e.g. save-retention-only)."""
+    if not target:
+        return {"ok": False, "detail": "no path to probe"}
+    if not os.path.isdir(target):
+        return {"ok": False, "detail": f"{target} is not a directory (mount missing — re-run install.sh)"}
+    probe = os.path.join(target, ".sinkhole-probe")
+    try:
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.unlink(probe)
+        return {"ok": True, "detail": f"existing mount at {target} is reachable and writable"}
+    except OSError:
+        pass
+    try:
+        os.listdir(target)
+    except OSError as exc:
+        return {"ok": False, "detail": f"{target} unreadable: {exc}"}
+    return {"ok": True, "detail": f"existing mount at {target} is reachable (nightly backup runs as root and can write)"}
 
 
 def _update_cron(hour: int, minute: int) -> None:

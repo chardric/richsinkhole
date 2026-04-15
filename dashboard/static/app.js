@@ -2526,19 +2526,27 @@ function bindEvents() {
     }
   });
 
-  // Test connection
+  // Test connection — sends every protocol-specific field so the backend
+  // can actually probe the server the user typed (not just the existing mount).
   document.getElementById("btn-test-backup-storage")?.addEventListener("click", async () => {
     const proto = document.getElementById("backup-protocol").value;
     const result = document.getElementById("backup-test-result");
     result.textContent = "Testing…"; result.className = "small ms-2 align-self-center text-muted";
-    const payload = { protocol: proto };
+    const payload = {
+      protocol: proto,
+      path: document.getElementById("backup-dir").value.trim(),
+      nfs_host: document.getElementById("backup-nfs-host").value.trim(),
+      nfs_export: document.getElementById("backup-nfs-export").value.trim(),
+      smb_host: document.getElementById("backup-smb-host").value.trim(),
+      smb_share: document.getElementById("backup-smb-share").value.trim(),
+      smb_user: document.getElementById("backup-smb-user").value.trim(),
+      smb_password: document.getElementById("backup-smb-password").value,
+    };
     if (proto === "rsync-ssh") {
       payload.host = document.getElementById("backup-ssh-host").value.trim();
       payload.user = document.getElementById("backup-ssh-user").value.trim();
       payload.port = parseInt(document.getElementById("backup-ssh-port").value, 10);
       payload.path = document.getElementById("backup-ssh-path").value.trim();
-    } else {
-      payload.path = document.getElementById("backup-dir").value.trim();
     }
     try {
       const r = await api("POST", "/api/backups/test", payload);

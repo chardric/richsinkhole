@@ -7,10 +7,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System tools: openssh-client + rsync are needed for the rsync-ssh backup
-# protocol; ssh-keygen is used by the dashboard to generate backup keys.
+# System tools:
+#   openssh-client + rsync — rsync-ssh backup transport + ssh-keygen for UI
+#   smbclient              — SMB backup server probe from the Test Connection UI
+#   nfs-common             — provides showmount for NFS export probe
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openssh-client rsync && \
+    apt-get install -y --no-install-recommends \
+        openssh-client rsync smbclient nfs-common && \
     rm -rf /var/lib/apt/lists/*
 
 # All deps from all 4 services (deduplicated)
