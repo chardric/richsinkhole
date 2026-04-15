@@ -1261,13 +1261,15 @@
               </div>
 
               <!-- Schedule + retention -->
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <label class="text-muted small flex-shrink-0" style="min-width:80px">Schedule</label>
-                <input type="number" class="form-control form-control-sm" id="backup-hour" value="2" min="0" max="23" style="width:4rem;font-size:.75rem" title="Hour (0-23)">
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <label class="text-muted small flex-shrink-0" style="min-width:80px">Run daily at</label>
+                <input type="number" class="form-control form-control-sm" id="backup-hour" value="2" min="0" max="23" style="width:4.5rem;font-size:.75rem" title="Hour of day — 24-hour clock, 0-23">
+                <span class="text-muted small">hour</span>
                 <span class="text-muted small">:</span>
-                <input type="number" class="form-control form-control-sm" id="backup-minute" value="0" min="0" max="59" style="width:4rem;font-size:.75rem" title="Minute (0-59)">
-                <span class="text-muted small ms-2">Retain</span>
-                <input type="number" class="form-control form-control-sm" id="backup-retention" value="30" min="1" max="365" style="width:4rem;font-size:.75rem" title="Days to keep">
+                <input type="number" class="form-control form-control-sm" id="backup-minute" value="0" min="0" max="59" style="width:4.5rem;font-size:.75rem" title="Minute of hour — 0-59">
+                <span class="text-muted small">minute</span>
+                <span class="text-muted small ms-3">Keep backups for</span>
+                <input type="number" class="form-control form-control-sm" id="backup-retention" value="30" min="1" max="365" style="width:4.5rem;font-size:.75rem" title="Older backups are deleted by the retention sweep at the end of each run">
                 <span class="text-muted small">days</span>
               </div>
 

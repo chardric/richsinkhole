@@ -262,10 +262,11 @@ async def save_backup_config(body: BackupConfigIn):
         resolved = os.path.realpath(path)
         if not any(resolved.startswith(p) for p in _SAFE_PATH_PREFIXES):
             raise HTTPException(status_code=400, detail=f"backup_dir must be under {' or '.join(_SAFE_PATH_PREFIXES)}")
-    if body.backup_protocol == "nfs" and not (body.backup_nfs_host and body.backup_nfs_export):
-        raise HTTPException(status_code=400, detail="nfs requires backup_nfs_host and backup_nfs_export")
-    if body.backup_protocol == "smb" and not (body.backup_smb_host and body.backup_smb_share):
-        raise HTTPException(status_code=400, detail="smb requires backup_smb_host and backup_smb_share")
+    # NFS/SMB host/export/share are optional — if the user set up the mount
+    # out-of-band (install.sh or manual fstab entry), they may only want to
+    # adjust schedule/retention here and not re-enter the NAS details.
+    # rsync-ssh fields ARE required because the script assembles the SSH cmd
+    # from them; there's no out-of-band setup path.
     if body.backup_protocol == "rsync-ssh":
         for fld in ("backup_ssh_host", "backup_ssh_user", "backup_ssh_path"):
             if not getattr(body, fld):
@@ -303,7 +304,12 @@ async def save_backup_config(body: BackupConfigIn):
             yaml.dump(cfg, f, default_flow_style=False)
 
         _update_cron(body.backup_hour, body.backup_minute)
-        return {"status": "saved", "remount_required": body.backup_protocol in ("nfs", "smb")}
+        # Only flag "remount needed" when the user actually changed NAS details
+        # (non-empty NFS host/export or SMB host/share). Saving just schedule
+        # or retention on an already-mounted share shouldn't scare the user.
+        nfs_changed = body.backup_protocol == "nfs" and bool(body.backup_nfs_host and body.backup_nfs_export)
+        smb_changed = body.backup_protocol == "smb" and bool(body.backup_smb_host and body.backup_smb_share)
+        return {"status": "saved", "remount_required": nfs_changed or smb_changed}
     except HTTPException:
         raise
     except Exception as exc:
