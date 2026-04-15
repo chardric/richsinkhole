@@ -6,6 +6,15 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-15
 
+### Fixed — Scheduled backups silently producing 0-byte snapshots since 2026-04-04
+- The cron entry on the host invoked `/usr/local/bin/sinkhole-backup.sh` directly, but the script's data paths (`/data/sinkhole.db`, `/data/blocklist.db`) only resolve **inside** the sinkhole container — on the host they don't exist, so SQLite errored with "unable to open database file" and the script left an empty dated folder behind every night. Worse: even when run from inside the container (the dashboard "Backup Now" button), `/data/sinkhole.db` was the stale Mar 24 file from the old storage layout — the live DBs moved to `/local/` (per `dns/server.py:49-50`) and the script was never updated.
+- Fixes:
+  - `scripts/sinkhole-backup.sh` (now version-controlled — was previously only on prod) reads from `/local/{sinkhole.db,blocklist.db,geoip-country.csv}` to match the live volume layout, also backs up `extra_routes.yml`, and refuses to leave a 0-byte folder (sanity check at the end deletes the dir and exits non-zero if the result is empty — a silent empty backup is worse than no backup at all).
+  - Cron line updated on host to `docker exec -u root richsinkhole-sinkhole-1 /usr/local/bin/sinkhole-backup.sh ...` so it runs in the right namespace with NAS-write permission.
+  - `dashboard/routers/backup.py:_update_cron()` now writes the same `docker exec` form when the user changes the schedule via the UI.
+  - `install.sh` now installs the script via in-place truncate-write (so the docker bind mount stays valid without restarting the container) and seeds the cron entry on first run.
+- Today's first good backup: 654.9 MB, 5 files (sinkhole.db 333 MB, blocklist.db 313 MB, geoip 9.6 MB, config.yml, extra_routes.yml).
+
 ### Added — Dashboard UI for static routes (Settings tab)
 - New "STATIC ROUTES" card with a form to add `net / via / dev` triples and a per-row Remove button. The `dev` field is a dropdown auto-populated from the host's NICs (read from `host_interfaces.json`, written by the reconciler each run). A "Re-scan NICs" button touches the YAML to re-trigger the reconciler when a new LAN port is plugged in, so the new interface shows up in the dropdown without waiting for the 5-min safety-net timer.
 - Backend: new `dashboard/routers/routes.py` with `GET/POST/DELETE /api/routes`, `GET /api/routes/interfaces`, `POST /api/routes/refresh`. YAML writes are atomic (tempfile + `os.replace`) so the path watcher never reads a half-written file.
@@ -99,7 +108,7 @@ All notable changes to RichSinkhole are documented here.
 - **HEALTHCHECK** added to ntp (chronyc), unbound (drill), nginx (wget) in Dockerfiles/compose
 - **Non-root USER** in sinkhole Dockerfile (UID 1000 `app` user)
 - **Read-only rootfs** on all 4 containers (ntp, unbound, sinkhole, nginx) with tmpfs for writable dirs
-- **GitHub Actions CI** — `security-scan.yml` with pip-audit (Python CVEs), Trivy image scan (CRITICAL/HIGH), py_compile lint
+- **GitHub Actions CI** — `security-scan.yml` with pip-audit (Python CVEs), py_compile lint
 
 ### Changed
 - CDN dependency removed from `screen_time_warning.html` — Bootstrap now self-hosted

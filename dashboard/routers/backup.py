@@ -160,14 +160,22 @@ async def save_backup_config(body: BackupConfigIn):
 
 
 def _update_cron(hour: int, minute: int) -> None:
-    """Update the backup cron schedule on the host."""
+    """Update the backup cron schedule on the host.
+
+    The cron entry must invoke the script INSIDE the sinkhole container
+    (`docker exec -u root ...`) because the script's paths (/local, /data,
+    /config, /mnt/nas/...) only resolve there. Running on the host directly
+    silently produces 0-byte backups every night.
+    """
     try:
-        # Read existing crontab, replace or add backup line
         result = subprocess.run(
             ["crontab", "-l"], capture_output=True, text=True, timeout=5,
         )
         lines = [l for l in result.stdout.splitlines() if "sinkhole-backup" not in l]
-        lines.append(f"{minute} {hour} * * * /usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1")
+        lines.append(
+            f"{minute} {hour} * * * docker exec -u root richsinkhole-sinkhole-1 "
+            f"/usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1"
+        )
         subprocess.run(
             ["crontab", "-"], input="\n".join(lines) + "\n",
             capture_output=True, text=True, timeout=5,

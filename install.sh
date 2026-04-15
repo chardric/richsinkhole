@@ -181,6 +181,45 @@ tune_host() {
 }
 
 # ---------------------------------------------------------------------------
+# Backup script — installed on host, mounted into container, invoked by cron
+# inside the container (so /local, /data, /config, /mnt/nas/... resolve).
+# ---------------------------------------------------------------------------
+
+install_backup_script() {
+    local src="scripts/sinkhole-backup.sh"
+    local dst="/usr/local/bin/sinkhole-backup.sh"
+
+    if [ ! -f "$src" ]; then
+        warn "$src missing — skipping backup script install."
+        return 0
+    fi
+
+    info "Installing backup script..."
+    # Truncate-write into the existing inode if present, so the docker bind
+    # mount in docker-compose.yml stays valid without restarting the container.
+    if [ -f "$dst" ]; then
+        cat "$src" > "$dst"
+    else
+        install -m 0755 "$src" "$dst"
+    fi
+    chmod 0755 "$dst"
+
+    # Ensure the cron line invokes the script INSIDE the container as root
+    # (paths like /local don't exist on the host; /mnt/nas needs root to write).
+    local cron_line="0 2 * * * docker exec -u root richsinkhole-sinkhole-1 /usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1"
+    if ! crontab -l 2>/dev/null | grep -q "sinkhole-backup.sh"; then
+        (crontab -l 2>/dev/null; echo "$cron_line") | crontab -
+        info "Added daily backup cron entry."
+    else
+        # Replace any pre-existing line that runs the script directly on the host.
+        crontab -l 2>/dev/null | grep -v "sinkhole-backup.sh" > /tmp/_rs_cron
+        echo "$cron_line" >> /tmp/_rs_cron
+        crontab /tmp/_rs_cron
+        rm /tmp/_rs_cron
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Route reconciler — manages extra static routes from a YAML config so the
 # sinkhole can reply to clients on VLANs that aren't directly attached.
 # ---------------------------------------------------------------------------
@@ -304,6 +343,7 @@ main() {
     check_prereqs
     free_port_53
     tune_host
+    install_backup_script
     install_route_reconciler
     start_services
     smoke_test
