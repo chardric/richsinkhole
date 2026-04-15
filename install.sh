@@ -222,7 +222,10 @@ install_route_reconciler() {
     # Substitute the real config path into the unit templates — systemd path
     # units watch via inotify and don't follow symlinks, so they need the
     # canonical file location, not the /etc/sinkhole/ alias.
-    sed "s|__CONFIG_PATH__|${data_cfg}|g" scripts/rs-route-reconciler.service > "$svc_dst"
+    local data_cfg_dir
+    data_cfg_dir="$(dirname "$data_cfg")"
+    sed -e "s|__CONFIG_PATH__|${data_cfg}|g" -e "s|__CONFIG_DIR__|${data_cfg_dir}|g" \
+        scripts/rs-route-reconciler.service > "$svc_dst"
     sed "s|__CONFIG_PATH__|${data_cfg}|g" scripts/rs-route-reconciler.path    > "$path_dst"
     install -m 0644 scripts/rs-route-reconciler.timer "$timer_dst"
     chmod 0644 "$svc_dst" "$path_dst"

@@ -1416,6 +1416,78 @@ async function loadHealth() {
 // ============================================================
 // Custom Allowlist
 // ============================================================
+// ============================================================
+// Static Routes (extra subnets reachable via a router NIC-side)
+// ============================================================
+let _routesIfacesCache = [];
+
+async function loadStaticRoutes() {
+  const body = document.getElementById("routes-body");
+  const meta = document.getElementById("routes-snapshot-meta");
+  try {
+    const data = await api("GET", "/api/routes");
+    const routes = data.routes || [];
+    if (!routes.length) {
+      body.innerHTML = '<div class="text-muted small text-center py-2">No extra routes configured. Plug in a new NIC or VLAN gateway? Add a route above.</div>';
+    } else {
+      body.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle">
+        <thead><tr class="text-muted" style="font-size:.7rem">
+          <th>Destination</th><th>Via</th><th>Interface</th><th class="text-end">Action</th>
+        </tr></thead>
+        <tbody>
+        ${routes.map(r => `<tr>
+          <td class="font-monospace py-1">${escHtml(r.net)}</td>
+          <td class="font-monospace text-muted py-1">${escHtml(r.via)}</td>
+          <td class="font-monospace py-1">${escHtml(r.dev)}</td>
+          <td class="text-end pe-0 py-1">
+            <button class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-route"
+                    data-net="${escHtml(r.net)}" data-dev="${escHtml(r.dev)}">Remove</button>
+          </td>
+        </tr>`).join("")}
+        </tbody></table>`;
+      body.querySelectorAll(".btn-remove-route").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const net = btn.dataset.net, dev = btn.dataset.dev;
+          if (!await confirmDialog(`Remove route to <strong>${net}</strong> via <code>${dev}</code>?<br><br>Clients on that subnet will lose connectivity to the sinkhole if no other route exists.`, { danger: true })) return;
+          try {
+            await api("DELETE", `/api/routes?net=${encodeURIComponent(net)}&dev=${encodeURIComponent(dev)}`);
+            showToast(`Removed ${net}`, "success");
+            loadStaticRoutes();
+          } catch (e) {
+            showToast("Remove failed: " + e.message, "danger");
+          }
+        });
+      });
+    }
+  } catch (e) {
+    body.innerHTML = `<div class="text-danger small text-center py-2">Could not load routes: ${escHtml(e.message)}</div>`;
+  }
+  // Refresh interface dropdown alongside the routes table
+  loadRouteInterfaces(meta);
+}
+
+async function loadRouteInterfaces(metaEl) {
+  const sel = document.getElementById("route-dev");
+  try {
+    const data = await api("GET", "/api/routes/interfaces");
+    _routesIfacesCache = data.interfaces || [];
+    const opts = _routesIfacesCache.length
+      ? _routesIfacesCache.map(i => {
+          const tag = i.ip ? `${i.name} — ${i.ip}/${i.prefix}` : `${i.name} — (no IP)`;
+          return `<option value="${escHtml(i.name)}">${escHtml(tag)}</option>`;
+        }).join("")
+      : '<option value="" disabled selected>(no interfaces detected — try Re-scan)</option>';
+    sel.innerHTML = opts;
+    if (metaEl) {
+      const ts = data.ts ? new Date(data.ts * 1000).toLocaleString() : "never";
+      metaEl.textContent = `Interface snapshot updated: ${ts}${data.note ? " — " + data.note : ""}`;
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="" disabled selected>(load failed)</option>';
+    if (metaEl) metaEl.textContent = "Interface snapshot unavailable.";
+  }
+}
+
 async function loadAllowlist() {
   const el = document.getElementById("allowlist-body");
   try {
@@ -2331,6 +2403,39 @@ function bindEvents() {
     loadServiceStatus();
     loadWhitelist();
     loadUpdateSchedule();
+    loadStaticRoutes();
+  });
+
+  // Static routes — add form
+  document.getElementById("form-add-route")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const net = document.getElementById("route-net").value.trim();
+    const via = document.getElementById("route-via").value.trim();
+    const dev = document.getElementById("route-dev").value.trim();
+    if (!net || !via || !dev) { showToast("Fill in all three fields.", "warning"); return; }
+    try {
+      await api("POST", "/api/routes", { net, via, dev });
+      document.getElementById("route-net").value = "";
+      document.getElementById("route-via").value = "";
+      showToast(`Added ${net} via ${via} on ${dev}`, "success");
+      loadStaticRoutes();
+    } catch (e) {
+      showToast("Add failed: " + e.message, "danger");
+    }
+  });
+
+  // Static routes — manual NIC re-scan (touches YAML on host so reconciler re-reads interfaces)
+  document.getElementById("btn-routes-rescan")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true; btn.textContent = "Re-scanning…";
+    try {
+      await api("POST", "/api/routes/refresh");
+      // Reconciler takes ~2s on prod hardware; give it 3s headroom before refetching.
+      setTimeout(() => { loadStaticRoutes(); btn.disabled = false; btn.textContent = "Re-scan NICs"; }, 3000);
+    } catch (e) {
+      showToast("Re-scan failed: " + e.message, "danger");
+      btn.disabled = false; btn.textContent = "Re-scan NICs";
+    }
   });
 
   // Backup config save

@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import notifier
-from routers import allowlist, app_usage, audit_logs, backup, blocked_services, blocklist, canary, device_stats, devices, dns_records, doh, health, heatmap, logs, metrics, network_score, ntp, parental, privacy_report, proxy_rules, qr, schedules, security, services, sessions as sessions_router, settings, speedtest, stats, unbound_settings, updater
+from routers import allowlist, app_usage, audit_logs, backup, blocked_services, blocklist, canary, device_stats, devices, dns_records, doh, health, heatmap, logs, metrics, network_score, ntp, parental, privacy_report, proxy_rules, qr, routes, schedules, security, services, sessions as sessions_router, settings, speedtest, stats, unbound_settings, updater
 import audit
 import auth
 import jsonlog
@@ -162,6 +162,7 @@ app.include_router(devices.router, prefix="/api")
 app.include_router(device_stats.router, prefix="/api")
 app.include_router(schedules.router, prefix="/api")
 app.include_router(allowlist.router, prefix="/api")
+app.include_router(routes.router, prefix="/api")
 app.include_router(dns_records.router, prefix="/api")
 app.include_router(canary.router, prefix="/api")
 app.include_router(privacy_report.router, prefix="/api")

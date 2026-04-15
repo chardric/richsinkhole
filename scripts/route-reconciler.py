@@ -134,6 +134,49 @@ def apply_for_device(dev: str, desired: set[tuple[str, str]]) -> bool:
     return True
 
 
+def write_interface_snapshot(snapshot_path: Path) -> None:
+    """Write a JSON snapshot of host network interfaces next to the YAML config.
+
+    The dashboard runs in a Docker container and can't see host NICs directly,
+    so the reconciler — which already runs on the host — drops a snapshot the
+    UI can read to populate the device dropdown.
+    """
+    import json
+    proc = _run(["ip", "-j", "-4", "addr", "show"], check=False)
+    if proc.returncode != 0:
+        log.warning("ip -j addr failed: %s", proc.stderr.strip())
+        return
+    try:
+        raw = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        log.warning("could not parse `ip -j addr` output: %s", exc)
+        return
+    snap: list[dict] = []
+    for iface in raw:
+        name = iface.get("ifname", "")
+        if name in ("lo",) or name.startswith(("docker", "br-", "veth")):
+            continue
+        ip4 = next(
+            (a for a in iface.get("addr_info", [])
+             if a.get("family") == "inet" and a.get("scope") == "global"),
+            None,
+        )
+        snap.append({
+            "name": name,
+            "state": iface.get("operstate", "UNKNOWN"),
+            "ip": ip4["local"] if ip4 else None,
+            "prefix": ip4["prefixlen"] if ip4 else None,
+            "mac": iface.get("address", ""),
+        })
+    snap.sort(key=lambda x: x["name"])
+    payload = {"interfaces": snap, "ts": __import__("time").time()}
+    try:
+        snapshot_path.write_text(json.dumps(payload, indent=2))
+        log.info("wrote %d interface(s) to %s", len(snap), snapshot_path)
+    except OSError as exc:
+        log.warning("could not write snapshot %s: %s", snapshot_path, exc)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
@@ -163,6 +206,10 @@ def main() -> int:
             changed += 1
 
     log.info("reconcile complete: %d device(s) changed", changed)
+
+    # Drop a snapshot of host NICs for the dashboard UI's "dev" dropdown.
+    snapshot = args.config.parent / "host_interfaces.json"
+    write_interface_snapshot(snapshot)
     return 0
 
 

@@ -6,6 +6,11 @@ All notable changes to RichSinkhole are documented here.
 
 ## 2026-04-15
 
+### Added — Dashboard UI for static routes (Settings tab)
+- New "STATIC ROUTES" card with a form to add `net / via / dev` triples and a per-row Remove button. The `dev` field is a dropdown auto-populated from the host's NICs (read from `host_interfaces.json`, written by the reconciler each run). A "Re-scan NICs" button touches the YAML to re-trigger the reconciler when a new LAN port is plugged in, so the new interface shows up in the dropdown without waiting for the 5-min safety-net timer.
+- Backend: new `dashboard/routers/routes.py` with `GET/POST/DELETE /api/routes`, `GET /api/routes/interfaces`, `POST /api/routes/refresh`. YAML writes are atomic (tempfile + `os.replace`) so the path watcher never reads a half-written file.
+- Reconciler now writes a `host_interfaces.json` snapshot next to the YAML on every run; service unit's `ReadWritePaths` was extended to include the data dir so `ProtectHome=read-only` doesn't block the snapshot write.
+
 ### Added — Static route reconciler for VLANs not directly attached to the sinkhole
 - `scripts/route-reconciler.py` reads `/etc/sinkhole/extra_routes.yml` (real file lives at `data/config/extra_routes.yml` so it's part of the backup) and reconciles NetworkManager's `ipv4.routes` on each named device to exactly that list. Adds missing, removes stale, and applies live via `nmcli device reapply` without bouncing the connection. Idempotent — a no-op when state already matches.
 - Three systemd units glue it together: a oneshot **service** (run on demand), a **path** unit (re-runs the service on file change via inotify), and a **timer** (5-minute safety-net reconcile in case the path watcher ever misses an event after a flurry of edits). Installer wires all three at install time and substitutes the real config path into the unit templates so inotify watches the actual file, not the `/etc/sinkhole/` symlink.

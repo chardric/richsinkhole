@@ -884,6 +884,39 @@
           </div>
         </div>
 
+        <!-- Row 1.5: Static Routes (extra subnets reachable via a known gateway) -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header text-muted small fw-semibold d-flex justify-content-between align-items-center">
+              <span>STATIC ROUTES <span class="text-muted fw-normal ms-2">— extra subnets reachable via a router on one of the host's NICs</span></span>
+              <button class="btn btn-sm btn-outline-secondary py-0" id="btn-routes-rescan" style="font-size:.7rem" title="Re-scan host network interfaces (run this after plugging in a new LAN port)">Re-scan NICs</button>
+            </div>
+            <div class="card-body">
+              <form id="form-add-route" class="row g-2 mb-3 align-items-end">
+                <div class="col-12 col-md-4">
+                  <label class="form-label text-muted small mb-1">Destination subnet (CIDR)</label>
+                  <input type="text" class="form-control form-control-sm font-monospace" id="route-net" placeholder="172.16.20.0/24" required>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label text-muted small mb-1">Via gateway IP</label>
+                  <input type="text" class="form-control form-control-sm font-monospace" id="route-via" placeholder="172.16.10.1" required>
+                </div>
+                <div class="col-8 col-md-3">
+                  <label class="form-label text-muted small mb-1">Out interface</label>
+                  <select class="form-select form-select-sm font-monospace" id="route-dev" required>
+                    <option value="" disabled selected>Loading...</option>
+                  </select>
+                </div>
+                <div class="col-4 col-md-1 d-grid">
+                  <button class="btn btn-sm btn-outline-success" type="submit">Add</button>
+                </div>
+              </form>
+              <div id="routes-body"><div class="text-muted small text-center py-2">Loading routes…</div></div>
+              <div class="text-muted small mt-2" id="routes-snapshot-meta"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Row 2: Unbound DNS Settings (collapsible) -->
         <div class="col-12">
           <div class="card">

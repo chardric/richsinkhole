@@ -14,10 +14,11 @@ Type=oneshot
 ExecStart=/usr/local/bin/rs-route-reconciler.py --config __CONFIG_PATH__
 StandardOutput=journal
 StandardError=journal
-# Tight sandboxing — script only needs nmcli + read access to the config.
+# Tight sandboxing — script needs nmcli, read of config, and write of the
+# host_interfaces.json snapshot next to the YAML (which lives under /home).
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/etc/NetworkManager
+ReadWritePaths=/etc/NetworkManager __CONFIG_DIR__
 NoNewPrivileges=true
 PrivateTmp=true
 RestrictSUIDSGID=true
