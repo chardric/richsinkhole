@@ -2438,7 +2438,9 @@ function bindEvents() {
     }
   });
 
-  // Show/hide protocol-specific fields
+  // Show/hide protocol-specific fields. Toggle Bootstrap's d-none class
+  // (which is display:none !important) — inline style.display can't win
+  // against d-flex !important on the same element.
   function _backupShowFields(proto) {
     const map = {
       local:       [".backup-fld-mount"],
@@ -2448,7 +2450,9 @@ function bindEvents() {
     };
     const visible = new Set(map[proto] || []);
     [".backup-fld-mount", ".backup-fld-nfs", ".backup-fld-smb", ".backup-fld-ssh"].forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => { el.style.display = visible.has(sel) ? "" : "none"; });
+      document.querySelectorAll(sel).forEach(el => {
+        el.classList.toggle("d-none", !visible.has(sel));
+      });
     });
     const hint = document.getElementById("backup-protocol-hint");
     hint.textContent = proto === "rsync-ssh"
