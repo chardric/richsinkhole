@@ -555,7 +555,7 @@ function renderSources() {
       ? `<span class="badge bg-secondary py-0 px-1 flex-shrink-0" style="font-size:.6rem" title="Built-in source">default</span>`
       : `<button class="btn btn-sm btn-outline-danger py-0 flex-shrink-0 btn-remove-source"
           data-url="${escHtml(url)}">&#x2715;</button>`;
-    return `<div class="d-flex align-items-center gap-2 mb-1">
+    return `<div class="hover-row d-flex align-items-center gap-2 mb-1">
       <span class="font-monospace small text-truncate flex-grow-1" title="${escHtml(url)}">${escHtml(url)}</span>
       ${removeBtn}
     </div>`;
@@ -1424,7 +1424,7 @@ async function loadAllowlist() {
       el.innerHTML = '<div class="text-muted small text-center py-2">No domains in the allowlist yet.</div>';
       return;
     }
-    el.innerHTML = `<table class="table table-sm table-borderless mb-0 small">
+    el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle">
       ${items.map(d => `<tr>
         <td class="font-monospace py-1">${escHtml(d.domain)}</td>
         <td class="text-muted py-1">${escHtml(d.note)}</td>

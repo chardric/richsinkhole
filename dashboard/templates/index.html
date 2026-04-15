@@ -60,6 +60,19 @@
     #log-tbody tr { animation: fadeIn 0.18s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
+    /* ── Global row hover highlight ───────────────────── */
+    /* Every table row highlights on hover so the user can see which row a far-right
+       action button (Remove/Delete) will act on. Stronger and more visible than
+       Bootstrap's default .table-hover, and applied even to tables lacking that class. */
+    .table tbody tr { transition: background-color 0.12s ease; }
+    .table tbody tr:hover > * {
+      background-color: rgba(88, 166, 255, 0.12) !important;
+      --bs-table-hover-bg: rgba(88, 166, 255, 0.12);
+    }
+    /* Non-table row layouts that include a remove/delete button (e.g. source lists). */
+    .hover-row { transition: background-color 0.12s ease; border-radius: 4px; padding: 2px 6px; margin-left: -6px; margin-right: -6px; }
+    .hover-row:hover { background-color: rgba(88, 166, 255, 0.12); }
+
     /* ── Badges ───────────────────────────────────────── */
     .badge-blocked  { background-color: #da3633; }
     .badge-forwarded{ background-color: #1f6feb; }
