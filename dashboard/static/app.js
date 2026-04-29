@@ -2782,59 +2782,6 @@ function bindEvents() {
   document.getElementById("yt-enabled").addEventListener("change", saveSettings);
   document.getElementById("cp-enabled").addEventListener("change", saveSettings);
 
-  // Tuya Pairing Mode
-  async function refreshPairingStatus() {
-    try {
-      const data = await api("GET", "/api/settings/pairing-mode");
-      const badge = document.getElementById("pairing-badge");
-      const startBtn = document.getElementById("btn-pairing-start");
-      const stopBtn = document.getElementById("btn-pairing-stop");
-      if (data.active) {
-        badge.textContent = "Active";
-        badge.className = "badge bg-warning";
-        startBtn.classList.add("d-none");
-        stopBtn.classList.remove("d-none");
-      } else {
-        badge.textContent = "Off";
-        badge.className = "badge bg-secondary";
-        startBtn.classList.remove("d-none");
-        stopBtn.classList.add("d-none");
-      }
-    } catch (_) {}
-  }
-
-  document.getElementById("btn-pairing-start").addEventListener("click", async () => {
-    const btn = document.getElementById("btn-pairing-start");
-    const mins = parseInt(document.getElementById("pairing-duration").value, 10) || 30;
-    btn.disabled = true;
-    try {
-      await api("POST", "/api/settings/pairing-mode", { enabled: true, duration_minutes: mins });
-      showToast("Tuya pairing enabled for " + mins + " minutes", "success");
-      refreshPairingStatus();
-    } catch (e) {
-      showToast("Failed: " + e.message, "danger");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  document.getElementById("btn-pairing-stop").addEventListener("click", async () => {
-    const btn = document.getElementById("btn-pairing-stop");
-    btn.disabled = true;
-    try {
-      await api("POST", "/api/settings/pairing-mode", { enabled: false });
-      showToast("Tuya pairing disabled — domains re-blocked", "success");
-      refreshPairingStatus();
-    } catch (e) {
-      showToast("Failed: " + e.message, "danger");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // Load pairing status on settings tab open
-  document.getElementById("tab-settings-btn").addEventListener("shown.bs.tab", refreshPairingStatus);
-
   // NTP enable/disable toggle
   document.getElementById("ntp-enabled").addEventListener("change", async function () {
     const enabled = this.checked;

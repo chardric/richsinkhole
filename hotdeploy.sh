@@ -14,23 +14,26 @@
 
 set -e
 
-REMOTE="richard@10.254.254.4"
+REMOTE="${RS_REMOTE:-richard@10.254.254.4}"
 
-# Map service name → (local source dir, container name, container dest dir)
-declare -A SRC=( [dashboard]="dashboard" [dns]="dns" [updater]="updater" [youtube-proxy]="youtube-proxy" )
-declare -A CTR=( [dashboard]="richsinkhole-dashboard-1" [dns]="richsinkhole-dns-1" [updater]="richsinkhole-updater-1" [youtube-proxy]="richsinkhole-youtube-proxy-1" )
-declare -A DST=( [dashboard]="/dashboard" [dns]="/dns" [updater]="/updater" [youtube-proxy]="/app" )
+# All services run inside one unified container. Each "service" is a source
+# subdir on the host; everything is copied into /app/<svc> in the container.
+UNIFIED_CTR="richsinkhole-sinkhole-1"
+
+declare -A SRC=( [dashboard]="dashboard" [dns]="dns" [updater]="updater" [sinkhole]="sinkhole" )
+declare -A DST=( [dashboard]="/app/dashboard" [dns]="/app/dns" [updater]="/app/updater" [sinkhole]="/app/sinkhole" )
 
 SERVICES=("${@}")
 if [ ${#SERVICES[@]} -eq 0 ]; then
   echo "Usage: ./hotdeploy.sh <service> [service...]"
-  echo "  services: dashboard dns updater youtube-proxy"
+  echo "  services: dashboard dns updater sinkhole"
+  echo "  override target host: RS_REMOTE=user@host ./hotdeploy.sh ..."
   exit 1
 fi
 
+restart_needed=0
 for svc in "${SERVICES[@]}"; do
   src="${SRC[$svc]}"
-  ctr="${CTR[$svc]}"
   dst="${DST[$svc]}"
 
   if [ -z "$src" ]; then
@@ -40,11 +43,20 @@ for svc in "${SERVICES[@]}"; do
 
   echo "==> Hot-deploying $svc..."
 
-  # Rsync source to RPi tmp, then docker cp into container
   rsync -az --delete --exclude='__pycache__' --exclude='*.pyc' \
     "./${src}/" "${REMOTE}:/tmp/hotdeploy_${svc}/"
 
-  ssh "$REMOTE" "docker cp /tmp/hotdeploy_${svc}/. ${ctr}:${dst}/ && docker restart ${ctr} && rm -rf /tmp/hotdeploy_${svc}"
+  ssh "$REMOTE" "docker cp /tmp/hotdeploy_${svc}/. ${UNIFIED_CTR}:${dst}/ && rm -rf /tmp/hotdeploy_${svc}"
 
-  echo "  ✓ $svc hot-deployed"
+  echo "  ✓ $svc copied"
+  restart_needed=1
 done
+
+if [ "$restart_needed" -eq 1 ]; then
+  echo "==> Restarting ${UNIFIED_CTR}..."
+  ssh "$REMOTE" "docker restart ${UNIFIED_CTR}"
+  echo "  ✓ container restarted"
+  echo
+  echo "  NOTE: hot-deploys are ephemeral. To persist across container"
+  echo "  recreations, rebuild the image: ./deploy.sh sinkhole"
+fi

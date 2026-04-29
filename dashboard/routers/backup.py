@@ -20,8 +20,8 @@ import yaml
 
 CONFIG_PATH = "/config/config.yml"
 BACKUP_SCRIPT = "/usr/local/bin/sinkhole-backup.sh"
-DATA_DIR = "/data"       # NAS-backed: sinkhole.db (query log)
-LOCAL_DIR = "/local"     # SD-backed: blocklist.db, geoip-country.csv
+DATA_DIR = "/data"       # NAS-backed: updater status files only
+LOCAL_DIR = "/local"     # SD-backed: sinkhole.db, blocklist.db, geoip-country.csv, config
 DEFAULT_BACKUP_DIR = "/mnt/nas/richsinkhole-backups"
 DOCKER_SOCK = "/var/run/docker.sock"
 SELF_CONTAINER = "richsinkhole-sinkhole-1"
@@ -164,9 +164,10 @@ async def restore_backup(body: RestoreIn):
         raise HTTPException(status_code=404, detail=f"Backup {body.date} not found")
 
     restored = []
-    # File → target dir mapping (some files live on NAS, others on local SD)
+    # File → target dir mapping. All operational state lives on local SD;
+    # NAS is only used for updater status files (not restored from backup).
     _restore_paths = {
-        "sinkhole.db":        DATA_DIR,
+        "sinkhole.db":        LOCAL_DIR,
         "blocklist.db":       LOCAL_DIR,
         "geoip-country.csv":  LOCAL_DIR,
         "config.yml":         os.path.join(LOCAL_DIR, "config"),

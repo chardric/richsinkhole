@@ -24,6 +24,7 @@ Dependencies: Python 3 stdlib only.
 
 import fcntl
 import logging
+import os
 import random
 import re
 import socket
@@ -32,7 +33,13 @@ import struct
 import sys
 import time
 
-DB_PATH = "/mnt/nas/richsinkhole-data/sinkhole.db"
+# Host-side path of the live sinkhole.db. On the container side this is
+# /local/sinkhole.db; on the host it's whatever LOCAL_DATA in the compose
+# .env points at. Override via RS_LOCAL_DATA if your install lives elsewhere.
+DB_PATH = os.environ.get(
+    "RS_LOCAL_DATA",
+    "/home/richard/richsinkhole/local-data",
+) + "/sinkhole.db"
 PROBE_TIMEOUT = 3.0
 MULTICAST_LISTEN = 3.0
 ACTIVE_WINDOW_HOURS = 24

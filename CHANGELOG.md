@@ -6,6 +6,39 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Removed — Tuya Pairing Mode
+- The Settings tab "Tuya Pairing Mode" toggle (temporarily unblock Tuya/SmartLife domains for N minutes, auto-re-block via `threading.Timer`) is gone. With the Omada firewall handling per-IP egress for the cameras + Broadlink while leaving the rest of the IoT VLAN with full internet, Tuya/SmartLife pairing now just works — no DNS-unblock dance needed.
+- Removed from `dashboard/routers/settings.py` (`/settings/pairing-mode` GET + POST, `_TUYA_DOMAINS`, `_pairing_timer`, `_pairing_active`, `_end_pairing`, `PairingModeIn`, plus three now-unused imports: `sqlite3`, `time`, `threading`), `dashboard/templates/index.html` (the pairing card), and `dashboard/static/app.js` (`refreshPairingStatus`, both button handlers, the tab-shown loader). Verified via FastAPI route map: 0 pairing endpoints registered post-rebuild.
+
+### Fixed — Static Routes panel "Could not load routes: Not Found"
+- Same regression as the previous session, reintroduced. The deployed Docker image was built before `dashboard/routers/routes.py` and the corresponding `from routers import … routes …` line in `main.py` were added. A `docker compose up -d sinkhole` triggered earlier in the session (to apply a `HOST_IP` env change) recreated the container from the existing image, silently undoing the previous session's hot-deploys.
+- Hot-deploys via `docker cp` are ephemeral — any image-based recreation reverts to whatever's baked in. Permanent fix: rebuilt the sinkhole image (`docker compose build sinkhole && up -d sinkhole`) so the current source tree is the image. Verified: 5 `/api/routes*` endpoints registered; total registered route count up to 140.
+
+### Fixed — Backup restore wrote `sinkhole.db` to the wrong path
+- `dashboard/routers/backup.py:_restore_paths` mapped `sinkhole.db → /data` (the NAS-side mount). But `sinkhole.db` lives at `/local/sinkhole.db` (per `dns/server.py:SINKHOLE_DB`) since the SD-vs-NAS storage split. A restore would have written 800+ MB of recovered data into the wrong directory, leaving the live DB untouched — i.e., silently a no-op for users.
+- Mapping fixed to `LOCAL_DIR`. Comment on `DATA_DIR` updated to reflect that NAS is now only for updater status files, not databases.
+
+### Fixed — `HOST_IP` drift causing wrong Server IP in dashboard, YouTube redirect, Captive Portal
+- `.env` had `HOST_IP=10.254.254.192` — the host's lease at first install — but the host's eth0 has been static `10.254.254.4` for weeks. Dashboard `/api/settings` was advertising the dead IP for that whole time, and the YouTube proxy / Captive Portal would have handed it out to clients if those features were active.
+- Corrected the value on prod and rebuilt with the right env. Local `setup.sh` (gitignored) on dev got a self-healing block that re-validates `HOST_IP` against `ip -4 addr show` on every run and rewrites stale values; not part of this commit since the file isn't tracked. Long-term: move the same safeguard into `install.sh` or a runtime check at dashboard boot.
+
+### Fixed — Orphan `dashboard/routers/backup.py` comment + `scripts/rs-host-probe.py` DB path
+- `backup.py:23` claimed `/data` was "NAS-backed: sinkhole.db (query log)" — leftover from before `sinkhole.db` moved to `/local`. Updated to "NAS-backed: updater status files only".
+- `scripts/rs-host-probe.py:35` had `DB_PATH = "/mnt/nas/richsinkhole-data/sinkhole.db"` — that NFS path holds a stale snapshot (sinkhole.db there is from Apr 17; live one on local-data is 884 MB and growing). Fixed to point at the host-side `local-data/sinkhole.db` (with `RS_LOCAL_DATA` env override for non-default install paths). Note: this script is installed at `/usr/local/bin/rs-host-probe` but is not currently in cron, so the broken path wasn't actively biting.
+
+### Fixed — `hotdeploy.sh` referenced four containers that don't exist
+- The script's `CTR` map listed `richsinkhole-{dashboard,dns,updater,youtube-proxy}-1` and tried to deploy to `/dashboard`, `/dns`, `/updater`, `/app` inside them. None of those containers exist — the entire Python stack runs in one unified `richsinkhole-sinkhole-1` container, with subdirs at `/app/{dashboard,dns,updater,sinkhole}`. Any invocation of `hotdeploy.sh dashboard` etc. would have errored out on the `docker cp` step.
+- Rewrote to target the unified container, with the correct destination paths. Added `RS_REMOTE` env override (replaces the previously-hardcoded `richard@10.254.254.4`) and a one-restart-per-batch optimization so multi-service deploys don't restart the container N times. Also prints a reminder that hot-deploys are ephemeral and `./deploy.sh sinkhole` is needed for permanence — the same gotcha that bit Static Routes today.
+
+### Ops — Removed orphan databases from `/data/` on prod
+- `/data/sinkhole.db` (3.5 MB, last write 2026-03-16): leftover from before `sinkhole.db` migrated to `/local/`. Source code grep returned zero references. Removed.
+- `/data/richsinkhole.db` (0 bytes, Apr 20): empty placeholder, never written to. Removed.
+- `/data/blocklist.db` (156 MB, Apr 15): same migration leftover. Removed.
+- `/mnt/nas/richsinkhole-data/` still has ~138 MB of stale snapshots from before the migration; flagged for follow-up cleanup.
+
+### Ops — Added `broadlink.com.cn` to Custom Blocklist
+- The Broadlink IR blaster on the IoT VLAN (`172.16.30.52`) was making **34,550 NXDOMAIN queries per 24h** to three retired Broadlink China endpoints (`1005v2{tcp,backup,main}.broadlink.com.cn`). Apex block silences the upstream traffic; the device's behaviour is unchanged (it was already failing). Same approach as the V380 / IoTBing blocks.
+
 ### Fixed — Custom Blocklist UX inconsistency with Custom Allowlist
 - Yesterday's Custom Blocklist card showed an `added_at` timestamp in the middle column and had no note input on the form, while the sibling Custom Allowlist card has a free-text note input and renders the note instead of a timestamp. Two cards in the same tab, two different shapes — looked unintentional.
 - Mirrored the Allowlist exactly: added `note` column to `blocked_domains` (idempotent migration in `dashboard/routers/blocklist.py:_ensure_note_column()`), `DomainIn` accepts optional note, `GET /api/blocklist/custom` returns it, the HTML form has the matching `Note (optional)` input, and the JS sends + renders it. Both cards now have identical layout and behaviour, only the Add button colour differs (red for block, green for allow).
