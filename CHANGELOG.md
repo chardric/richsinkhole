@@ -6,6 +6,11 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Fixed — Custom Blocklist UX inconsistency with Custom Allowlist
+- Yesterday's Custom Blocklist card showed an `added_at` timestamp in the middle column and had no note input on the form, while the sibling Custom Allowlist card has a free-text note input and renders the note instead of a timestamp. Two cards in the same tab, two different shapes — looked unintentional.
+- Mirrored the Allowlist exactly: added `note` column to `blocked_domains` (idempotent migration in `dashboard/routers/blocklist.py:_ensure_note_column()`), `DomainIn` accepts optional note, `GET /api/blocklist/custom` returns it, the HTML form has the matching `Note (optional)` input, and the JS sends + renders it. Both cards now have identical layout and behaviour, only the Add button colour differs (red for block, green for allow).
+- Backfilled meaningful notes on prod for the three existing custom entries so they don't render as a blank middle column on first reload.
+
 ### Added — "Custom Blocklist" card on the Blocklist tab
 - Mirror of the existing "Custom Allowlist" card. Form to add a domain (apex match catches all subdomains via `dns/blocker.py:is_blocked()`), table of existing custom-source entries with per-row Remove buttons.
 - Backend was already fully wired (`POST /api/blocklist`, `GET /api/blocklist/custom`, `DELETE /api/blocklist/{domain}` — `dashboard/routers/blocklist.py`); only the frontend was missing. Added `loadBlocklistCustom()` and the form-submit/tab-loader hooks in `dashboard/static/app.js`.

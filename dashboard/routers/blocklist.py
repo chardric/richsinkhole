@@ -96,6 +96,7 @@ async def _ensure_feeds_table(db: aiosqlite.Connection) -> None:
 
 class DomainIn(BaseModel):
     domain: str
+    note:   str = ""
 
 
 class ImportIn(BaseModel):
@@ -239,6 +240,14 @@ async def sync_feed(feed_id: int):
 
 # ── Custom (manually-added) domains ──────────────────────────────────────────
 
+async def _ensure_note_column(db: aiosqlite.Connection) -> None:
+    """Idempotent migration — older installs may not have the note column."""
+    cols = [r[1] for r in await db.execute_fetchall("PRAGMA table_info(blocked_domains)")]
+    if "note" not in cols:
+        await db.execute("ALTER TABLE blocked_domains ADD COLUMN note TEXT DEFAULT ''")
+        await db.commit()
+
+
 @router.get("/blocklist/custom")
 async def list_custom(page: int = 1, limit: int = 100, search: str = ""):
     page   = max(1, page)
@@ -247,10 +256,11 @@ async def list_custom(page: int = 1, limit: int = 100, search: str = ""):
     where  = "FROM blocked_domains WHERE source = 'custom'"
     async with aiosqlite.connect(BLOCKLIST_DB, timeout=20) as db:
         await _ensure_feeds_table(db)
+        await _ensure_note_column(db)
         if search:
             pattern = f"%{search}%"
             rows = await db.execute_fetchall(
-                f"SELECT domain, added_at {where} AND domain LIKE ? ORDER BY domain ASC LIMIT ? OFFSET ?",
+                f"SELECT domain, COALESCE(note,'') AS note, added_at {where} AND domain LIKE ? ORDER BY domain ASC LIMIT ? OFFSET ?",
                 (pattern, limit, offset),
             )
             total = (await db.execute_fetchall(
@@ -258,7 +268,7 @@ async def list_custom(page: int = 1, limit: int = 100, search: str = ""):
             ))[0][0]
         else:
             rows = await db.execute_fetchall(
-                f"SELECT domain, added_at {where} ORDER BY domain ASC LIMIT ? OFFSET ?",
+                f"SELECT domain, COALESCE(note,'') AS note, added_at {where} ORDER BY domain ASC LIMIT ? OFFSET ?",
                 (limit, offset),
             )
             total = (await db.execute_fetchall(f"SELECT COUNT(*) {where}"))[0][0]
@@ -266,7 +276,7 @@ async def list_custom(page: int = 1, limit: int = 100, search: str = ""):
         "total":   total,
         "page":    page,
         "pages":   max(1, -(-total // limit)),
-        "domains": [{"domain": r[0], "added_at": r[1]} for r in rows],
+        "domains": [{"domain": r[0], "note": r[1], "added_at": r[2]} for r in rows],
     }
 
 
@@ -274,13 +284,15 @@ async def list_custom(page: int = 1, limit: int = 100, search: str = ""):
 async def add_domain(body: DomainIn):
     domain = _validate(body.domain)
     async with aiosqlite.connect(BLOCKLIST_DB, timeout=20) as db:
+        await _ensure_note_column(db)
         existing = await db.execute_fetchall(
             "SELECT 1 FROM blocked_domains WHERE domain = ?", (domain,)
         )
         if existing:
             raise HTTPException(status_code=409, detail="Domain already blocked")
         await db.execute(
-            "INSERT INTO blocked_domains (domain, source) VALUES (?, 'custom')", (domain,)
+            "INSERT INTO blocked_domains (domain, source, note) VALUES (?, 'custom', ?)",
+            (domain, body.note.strip()[:120]),
         )
         await db.commit()
     return {"domain": domain, "status": "added"}

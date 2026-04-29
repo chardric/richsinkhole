@@ -1500,7 +1500,7 @@ async function loadBlocklistCustom() {
     el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle">
       ${items.map(d => `<tr>
         <td class="font-monospace py-1">${escHtml(d.domain)}</td>
-        <td class="text-muted small py-1">${escHtml(d.added_at || "")}</td>
+        <td class="text-muted py-1">${escHtml(d.note || "")}</td>
         <td class="text-end pe-0 py-1"><button class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-block" data-domain="${escHtml(d.domain)}">Remove</button></td>
       </tr>`).join("")}
     </table>`;
@@ -2401,10 +2401,12 @@ function bindEvents() {
   document.getElementById("form-add-block").addEventListener("submit", async (e) => {
     e.preventDefault();
     const domain = document.getElementById("input-block-domain").value.trim();
+    const note   = document.getElementById("input-block-note").value.trim();
     if (!domain) return;
     try {
-      await api("POST", "/api/blocklist", { domain });
+      await api("POST", "/api/blocklist", { domain, note });
       document.getElementById("input-block-domain").value = "";
+      document.getElementById("input-block-note").value = "";
       loadBlocklistCustom();
       showToast(`${domain} added to blocklist`, "success");
     } catch (e) { showToast(e.message, "danger"); }
