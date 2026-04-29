@@ -79,7 +79,9 @@ services:
       HTTP_PORT: ${HTTP_PORT:-80}
       TZ: ${TZ:-Asia/Manila}
       ROOT_PATH: /richsinkhole
-      NGINX_CONTAINER: richsinkhole-nginx-1
+      # Container-name prefix (Compose project name). Override in .env if you
+      # rename the project; container_names.py picks it up automatically.
+      RS_CONTAINER_PREFIX: ${COMPOSE_PROJECT_NAME:-richsinkhole}
     volumes:
       - ${DATA_DIR:-./data}:/data
       # Local SD-backed data — all critical databases and config.

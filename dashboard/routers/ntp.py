@@ -9,8 +9,9 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from container_names import NTP as NTP_CONTAINER
+
 DOCKER_SOCK    = "/var/run/docker.sock"
-NTP_CONTAINER  = "richsinkhole-ntp-1"
 
 router = APIRouter()
 

@@ -6,6 +6,15 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Changed — Container names resolved via `container_names.py` instead of hardcoded strings
+- Five routers and one shell script (`services.py`, `proxy_rules.py`, `ntp.py`, `unbound_settings.py`, `backup.py`, `install.sh`) all hardcoded `richsinkhole-X-1` in their `docker exec`/`docker restart` calls. The instant the project gets renamed, relocated, or built with `COMPOSE_PROJECT_NAME` set, every one of those silently targets a non-existent container — UI says "saved" but nothing reloads.
+- New `dashboard/container_names.py` resolves names from (1) per-service env override (`SINKHOLE_CONTAINER`, `UNBOUND_CONTAINER`, etc.), (2) `RS_CONTAINER_PREFIX` + `-<svc>-1`, (3) the `richsinkhole` default. Compose now passes `RS_CONTAINER_PREFIX=${COMPOSE_PROJECT_NAME:-richsinkhole}` so renaming the project just works. `install.sh:install_backup_script()` builds its cron line from the same vars.
+- Verified at runtime: SINKHOLE/UNBOUND/NGINX/NTP all resolve to the correct live container names; image rebuild + recreate cycle clean.
+
+### Changed — Unbound reload failures now surface their reason
+- `unbound_settings._reload_unbound()` swallowed every failure (Docker socket missing, container not running, exec rejected, `unbound-control` exit non-zero) and returned a bool. The endpoint then said "Settings saved. Restart Unbound to apply." — the user had no idea *why* the reload didn't take.
+- Reload now returns `(ok, detail)` and probes the exec result's `ExitCode` (a 200 from `/exec/<id>/start` only means Docker accepted the request, not that the command succeeded). The `/api/unbound/settings` POST response includes the detail in both `detail` and `message`. Examples that previously looked identical to the user are now distinct: "Container 'richsinkhole-unbound-1' not found — is it running?", "unbound-control exit 1: <stderr>", "Docker exec start failed (HTTP 503)".
+
 ### Removed — Tuya Pairing Mode
 - The Settings tab "Tuya Pairing Mode" toggle (temporarily unblock Tuya/SmartLife domains for N minutes, auto-re-block via `threading.Timer`) is gone. With the Omada firewall handling per-IP egress for the cameras + Broadlink while leaving the rest of the IoT VLAN with full internet, Tuya/SmartLife pairing now just works — no DNS-unblock dance needed.
 - Removed from `dashboard/routers/settings.py` (`/settings/pairing-mode` GET + POST, `_TUYA_DOMAINS`, `_pairing_timer`, `_pairing_active`, `_end_pairing`, `PairingModeIn`, plus three now-unused imports: `sqlite3`, `time`, `threading`), `dashboard/templates/index.html` (the pairing card), and `dashboard/static/app.js` (`refreshPairingStatus`, both button handlers, the tab-shown loader). Verified via FastAPI route map: 0 pairing endpoints registered post-rebuild.

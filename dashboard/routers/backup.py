@@ -18,13 +18,14 @@ from pydantic import BaseModel
 
 import yaml
 
+from container_names import SINKHOLE as SELF_CONTAINER
+
 CONFIG_PATH = "/config/config.yml"
 BACKUP_SCRIPT = "/usr/local/bin/sinkhole-backup.sh"
 DATA_DIR = "/data"       # NAS-backed: updater status files only
 LOCAL_DIR = "/local"     # SD-backed: sinkhole.db, blocklist.db, geoip-country.csv, config
 DEFAULT_BACKUP_DIR = "/mnt/nas/richsinkhole-backups"
 DOCKER_SOCK = "/var/run/docker.sock"
-SELF_CONTAINER = "richsinkhole-sinkhole-1"
 
 
 async def _docker_exec_as_root(cmd: list[str], timeout: float = 180) -> tuple[int, str]:
@@ -511,7 +512,7 @@ def _update_cron(hour: int, minute: int) -> None:
         )
         lines = [l for l in result.stdout.splitlines() if "sinkhole-backup" not in l]
         lines.append(
-            f"{minute} {hour} * * * docker exec -u root richsinkhole-sinkhole-1 "
+            f"{minute} {hour} * * * docker exec -u root {SELF_CONTAINER} "
             f"/usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1"
         )
         subprocess.run(

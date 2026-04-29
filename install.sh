@@ -206,7 +206,10 @@ install_backup_script() {
 
     # Ensure the cron line invokes the script INSIDE the container as root
     # (paths like /local don't exist on the host; /mnt/nas needs root to write).
-    local cron_line="0 2 * * * docker exec -u root richsinkhole-sinkhole-1 /usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1"
+    # Container name follows COMPOSE project naming; default = "richsinkhole".
+    local prefix="${RS_CONTAINER_PREFIX:-richsinkhole}"
+    local sinkhole_ctr="${SINKHOLE_CONTAINER:-${prefix}-sinkhole-1}"
+    local cron_line="0 2 * * * docker exec -u root ${sinkhole_ctr} /usr/local/bin/sinkhole-backup.sh >> /var/log/sinkhole-backup.log 2>&1"
     if ! crontab -l 2>/dev/null | grep -q "sinkhole-backup.sh"; then
         (crontab -l 2>/dev/null; echo "$cron_line") | crontab -
         info "Added daily backup cron entry."

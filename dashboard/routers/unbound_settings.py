@@ -14,8 +14,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import yaml
 
+from container_names import UNBOUND as UNBOUND_CONTAINER
+
 DOCKER_SOCK = "/var/run/docker.sock"
-UNBOUND_CONTAINER = "richsinkhole-unbound-1"
 UNBOUND_CONF = "/data/unbound.conf"
 SETTINGS_PATH = "/data/unbound_settings.yml"
 
@@ -155,25 +156,43 @@ async def _docker(method: str, path: str, **kwargs) -> httpx.Response:
         return await client.request(method, path, **kwargs)
 
 
-async def _reload_unbound() -> bool:
-    """Reload unbound config via Docker exec (unbound-control reload)."""
+async def _reload_unbound() -> tuple[bool, str]:
+    """Reload unbound via ``unbound-control reload``.
+
+    Returns ``(ok, detail)``. ``ok`` is True only when the exec returned
+    exit code 0; ``detail`` is a short human-readable status surfaced in
+    the API response so the user knows *why* a reload failed (container
+    down, exec rejected, command exit non-zero, etc.) instead of seeing a
+    generic "restart to apply" message.
+    """
     if not os.path.exists(DOCKER_SOCK):
-        return False
+        return False, "Docker socket not available — restart Unbound manually"
     try:
-        # Create exec instance
         r = await _docker("POST", f"/containers/{UNBOUND_CONTAINER}/exec", json={
             "Cmd": ["unbound-control", "reload"],
             "AttachStdout": True,
             "AttachStderr": True,
         })
+        if r.status_code == 404:
+            return False, f"Container '{UNBOUND_CONTAINER}' not found — is it running?"
         if r.status_code != 201:
-            return False
+            return False, f"Docker exec create failed (HTTP {r.status_code})"
         exec_id = r.json()["Id"]
-        # Start exec
         r2 = await _docker("POST", f"/exec/{exec_id}/start", json={"Detach": False})
-        return r2.status_code == 200
-    except Exception:
-        return False
+        if r2.status_code != 200:
+            return False, f"Docker exec start failed (HTTP {r2.status_code})"
+        out = (r2.content or b"").decode("utf-8", errors="replace").strip()[-300:]
+        # Probe the exit code — start returning 200 only means Docker accepted
+        # the request, not that unbound-control succeeded.
+        r3 = await _docker("GET", f"/exec/{exec_id}/json")
+        if r3.status_code == 200:
+            exit_code = r3.json().get("ExitCode")
+            if exit_code == 0:
+                return True, "Unbound reloaded"
+            return False, f"unbound-control exit {exit_code}: {out}" if out else f"unbound-control exit {exit_code}"
+        return True, "Reload submitted (exit code unverified)"
+    except Exception as exc:
+        return False, f"reload error: {exc}"
 
 
 @router.get("/unbound/settings")
@@ -251,10 +270,15 @@ async def update_unbound_settings(body: UnboundUpdate):
     with open(UNBOUND_CONF, "w") as f:
         f.write(conf)
 
-    reloaded = await _reload_unbound()
+    reloaded, detail = await _reload_unbound()
 
     return {
         "status": "saved",
         "reloaded": reloaded,
-        "message": "Settings saved" + (" and Unbound reloaded" if reloaded else ". Restart Unbound to apply."),
+        "detail": detail,
+        "message": (
+            f"Settings saved — {detail}"
+            if reloaded else
+            f"Settings saved BUT reload failed: {detail}. Restart Unbound to apply."
+        ),
     }

@@ -17,9 +17,10 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from container_names import NGINX as NGINX_CONTAINER
+
 SINKHOLE_DB    = "/local/sinkhole.db"
 NGINX_CONF_DIR = "/nginx/conf.d"
-NGINX_CONTAINER = os.getenv("NGINX_CONTAINER", "richsinkhole-nginx-1")
 DOCKER_SOCK    = "/var/run/docker.sock"
 HOST_IP        = os.getenv("HOST_IP", "")
 
