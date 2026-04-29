@@ -1,0 +1,13 @@
+[Unit]
+Description=RichSinkhole Lite — daily blocklist refresh
+Documentation=https://chadlinuxtech.net
+
+[Timer]
+# Daily 03:30 Asia/Manila. systemd accepts an explicit timezone in OnCalendar.
+OnCalendar=*-*-* 03:30:00 Asia/Manila
+RandomizedDelaySec=15m
+Persistent=true
+Unit=rs-lite-updater.service
+
+[Install]
+WantedBy=timers.target

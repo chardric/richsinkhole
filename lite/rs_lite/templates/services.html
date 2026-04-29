@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Services — RichSinkhole Lite{% endblock %}
+{% block content %}
+<h1>Service bundles</h1>
+<p class="muted">Toggle a service to add or remove its domains from the blocklist.
+Changes take effect on the next refresh.</p>
+
+{% for grp in groups %}
+<div class="card">
+  <h2>{{ grp.name }}</h2>
+  <table class="services">
+    <thead><tr><th>Service</th><th>Domains</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for s in grp.entries %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td class="muted small">
+          {% for d in s.domains[:4] %}<code>{{ d }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% if s.domains|length > 4 %} +{{ s.domains|length - 4 }} more{% endif %}
+        </td>
+        <td>
+          {% if s.blocked %}<span class="pill pill-block">Blocked</span>
+          {% else %}<span class="pill pill-allow">Allowed</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('services.toggle') }}">
+            <input type="hidden" name="service_id" value="{{ s.id }}">
+            {% if s.blocked %}
+              <input type="hidden" name="action" value="unblock">
+              <button type="submit">Unblock</button>
+            {% else %}
+              <input type="hidden" name="action" value="block">
+              <button type="submit" class="btn-danger">Block</button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

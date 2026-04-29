@@ -13,7 +13,6 @@ A self-hosted DNS sinkhole and ad blocker for your home network. Blocks ads, tra
 - **Privacy** — per-device privacy report with 130+ company mappings; GeoIP blocks Chinese telemetry from IoT devices
 - **Network** — captive portal, reverse proxy manager (`.lan` hostnames), DNS-over-HTTPS endpoint, NTP server
 - **Dashboard** — dark-themed PWA with real-time query log, stats, heatmap, network score, and device fingerprinting
-- **CI** — GitHub Actions: pip-audit, Trivy image scan, Python lint
 - **Native apps** — Linux (AppImage/DEB), Windows (NSIS), Android (APK)
 
 ## Prerequisites
@@ -47,6 +46,14 @@ Point your router's primary DNS to the `HOST_IP`. Open the dashboard at `http://
 ./backup.sh              # saves to ./backups/
 ./restore.sh ./backups/richsinkhole-2026-03-09.tar.gz
 ```
+
+## Lite variant — for ARMv6 / very-low-RAM targets
+
+A stripped-down native build (no Docker, no FastAPI, no mitmproxy, no YouTube
+proxy) lives under [`lite/`](lite/). Targets the **Raspberry Pi Zero v1.3**
+(ARMv6, 1 GHz single core, 512 MB RAM) and similar boards where the full stack
+won't fit. Uses `dnsmasq` for the data plane and a tiny Flask dashboard for
+control. See [`lite/README.md`](lite/README.md) for the quickstart.
 
 ## License
 

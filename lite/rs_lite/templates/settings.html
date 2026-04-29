@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Settings — RichSinkhole Lite{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<div class="card">
+  <h2>Change password</h2>
+  <form method="post" action="{{ url_for('settings.change_password') }}">
+    <label>Current password
+      <input type="password" name="current" autocomplete="current-password" required>
+    </label>
+    <label>New password (8+ chars)
+      <input type="password" name="new" autocomplete="new-password" minlength="8" required>
+    </label>
+    <label>Confirm new password
+      <input type="password" name="confirm" autocomplete="new-password" minlength="8" required>
+    </label>
+    <button type="submit">Change password</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Upstream resolvers</h2>
+  <p class="muted">Configured in <code>/etc/dnsmasq.d/rs-lite.conf</code>.
+  Edit that file on the Pi and run <code>sudo systemctl reload dnsmasq</code> to change.</p>
+  <ul>
+    {% for r in upstream_resolvers %}<li><code>{{ r }}</code></li>{% endfor %}
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Paths</h2>
+  <dl class="kv">
+    <dt>Sources YAML</dt><dd><code>{{ sources_yml }}</code></dd>
+    <dt>State DB</dt><dd><code>{{ state_db }}</code></dd>
+    <dt>Blocked hosts</dt><dd><code>{{ blocked_file }}</code></dd>
+    <dt>Dashboard bind</dt><dd><code>{{ dashboard_host }}:{{ dashboard_port }}</code></dd>
+  </dl>
+</div>
+{% endblock %}

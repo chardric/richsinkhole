@@ -1,0 +1,25 @@
+[Unit]
+Description=RichSinkhole Lite — blocklist refresh
+Documentation=https://chadlinuxtech.net
+After=network-online.target dnsmasq.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rs-lite
+Group=rs-lite
+WorkingDirectory=/opt/rs-lite
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/rs-lite/venv/bin/python -m rs_lite.updater
+
+# Hardening. NoNewPrivileges is intentionally off so the updater can call
+# `sudo -n systemctl reload dnsmasq`, allowed by /etc/sudoers.d/rs-lite.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/rs-lite /var/log/rs-lite
+MemoryMax=192M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

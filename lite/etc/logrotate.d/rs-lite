@@ -1,0 +1,11 @@
+/var/log/rs-lite/dnsmasq.log {
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su rs-lite rs-lite
+    create 0640 rs-lite rs-lite
+}

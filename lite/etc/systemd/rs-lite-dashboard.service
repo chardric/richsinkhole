@@ -1,0 +1,36 @@
+[Unit]
+Description=RichSinkhole Lite — admin dashboard
+Documentation=https://chadlinuxtech.net
+After=network-online.target dnsmasq.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rs-lite
+Group=rs-lite
+WorkingDirectory=/opt/rs-lite
+Environment=PYTHONUNBUFFERED=1
+Environment=RS_LITE_HOST=0.0.0.0
+Environment=RS_LITE_PORT=8080
+ExecStart=/opt/rs-lite/venv/bin/gunicorn \
+    --workers 1 \
+    --threads 2 \
+    --timeout 60 \
+    --bind ${RS_LITE_HOST}:${RS_LITE_PORT} \
+    --access-logfile - \
+    rs_lite.dashboard:app
+Restart=on-failure
+RestartSec=5
+
+# Hardening + memory cap for the Pi Zero. NoNewPrivileges is intentionally
+# off — the manual-refresh button forks a thread that calls
+# `sudo -n systemctl reload dnsmasq`, allowed by /etc/sudoers.d/rs-lite.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/rs-lite /var/log/rs-lite
+MemoryMax=128M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

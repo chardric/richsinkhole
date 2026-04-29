@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Blocklist — RichSinkhole Lite{% endblock %}
+{% block content %}
+<h1>Blocklist</h1>
+
+<div class="card">
+  <h2>Last refresh</h2>
+  <dl class="kv">
+    <dt>Time</dt><dd>{{ last_refresh }}</dd>
+    <dt>Domains</dt><dd>{{ last_count }}</dd>
+    <dt>Feeds OK</dt><dd>{{ last_feeds }}</dd>
+    <dt>Duration</dt><dd>{{ last_secs }} s</dd>
+    <dt>Output file</dt><dd><code>{{ blocked_file }}</code></dd>
+    {% if last_error %}
+      <dt>Last error</dt><dd class="state state-failed">{{ last_error }}</dd>
+    {% endif %}
+  </dl>
+
+  <form method="post" action="{{ url_for('blocklist.refresh') }}">
+    <button type="submit" {% if running %}disabled{% endif %}>
+      {% if running %}Refreshing…{% else %}Refresh now{% endif %}
+    </button>
+    {% if running %}
+      <span class="muted">A refresh is running. This page will not auto-refresh.</span>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <h2>Sources ({{ sources|length }})</h2>
+  <p class="muted">Edit <code>{{ url_for('settings.index') }}</code> details for the
+  YAML path. Defaults are used when no <code>sources.yml</code> entries are present.</p>
+  <table>
+    <thead><tr><th>#</th><th>URL</th><th>Format</th></tr></thead>
+    <tbody>
+    {% for url, fmt in sources %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><code class="break">{{ url }}</code></td>
+        <td>{{ fmt }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,4 @@
+# Allow the rs-lite system user to reload dnsmasq after the updater writes
+# blocked.hosts. No other privileges granted.
+rs-lite ALL=(root) NOPASSWD: /bin/systemctl reload dnsmasq, /bin/systemctl restart dnsmasq, /usr/bin/systemctl reload dnsmasq, /usr/bin/systemctl restart dnsmasq
+Defaults!/bin/systemctl,/usr/bin/systemctl !requiretty

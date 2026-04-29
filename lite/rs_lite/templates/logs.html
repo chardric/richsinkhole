@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Logs — RichSinkhole Lite{% endblock %}
+{% block content %}
+<h1>Recent queries</h1>
+
+<div class="card">
+  <form method="get" class="row">
+    <label>Show
+      <select name="show">
+        <option value="all"     {% if show=='all'     %}selected{% endif %}>All</option>
+        <option value="blocked" {% if show=='blocked' %}selected{% endif %}>Blocked only</option>
+        <option value="allowed" {% if show=='allowed' %}selected{% endif %}>Allowed only</option>
+      </select>
+    </label>
+    <label>Limit
+      <input type="number" name="limit" min="20" max="1000" value="{{ limit }}">
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+  <p class="muted small">Buffer: {{ '{:,}'.format(summary.total) }} entries
+   ({{ '{:,}'.format(summary.total_blocked) }} blocked) — read from a 5 MB tail of the dnsmasq log.</p>
+</div>
+
+<div class="card">
+  <h2>Entries ({{ recent|length }})</h2>
+  {% if recent %}
+    <table>
+      <thead><tr><th>Time</th><th>Client</th><th>Domain</th><th>Action</th></tr></thead>
+      <tbody>
+      {% for e in recent %}
+        <tr class="{{ 'row-block' if e.blocked else 'row-allow' }}">
+          <td class="small">{{ e.ts }}</td>
+          <td>{{ e.client_ip }}</td>
+          <td>{{ e.domain }}</td>
+          <td>
+            {% if e.blocked %}<span class="pill pill-block">blocked</span>
+            {% else %}<span class="pill pill-allow">allowed</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Nothing in the buffer yet. dnsmasq must be running with
+      <code>log-queries</code> and writing to its log file.</p>
+  {% endif %}
+</div>
+{% endblock %}

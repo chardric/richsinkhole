@@ -4,6 +4,21 @@ All notable changes to RichSinkhole are documented here.
 
 ---
 
+## Unreleased
+
+### Added — `lite/` variant for Raspberry Pi Zero v1.3 (ARMv6)
+- New top-level `lite/` directory, additive only — no changes to `dns/`, `dashboard/`, `updater/`, or the Docker stack.
+- Native (no Docker), uses `dnsmasq` as the DNS data plane and a tiny Flask + gunicorn (1 worker) dashboard for control. Memory budget target: ~210 MB used on a 512 MB Pi Zero.
+- Reuses the full project's `sources.yml` format and parsing semantics (`DOMAIN_RE`, `_ALWAYS_ALLOW_PARENTS`, `_SKIP_HOSTS`) so the two variants stay in sync conceptually. Vendors `services_data.py` for the service-bundle UI.
+- Single SQLite state DB (settings + allowlist + services_blocked) with WAL + `synchronous=NORMAL` for SD-wear. Atomic-rename writes for the generated `blocked.hosts` file.
+- Daily blocklist refresh via `systemd` timer (03:30 Asia/Manila); manual refresh from the dashboard runs in a background thread.
+- Dashboard pages: Status, Blocklist, Allowlist, Services, Logs, Settings. Single super_admin password (bcrypt, first-run setup), HttpOnly + SameSite=Strict cookies, hand-written CSS (~3 KB, no CDN).
+- Polkit rule lets the `rs-lite` system user reload `dnsmasq` without sudo. Logrotate keeps 7 days of dnsmasq query logs.
+- Installer (`lite/install-lite.sh`) is one shot: apt installs, user creation, venv build, config drop, `resolv.conf` switch, first refresh, prints dashboard URL. `uninstall-lite.sh --purge` cleans up state and user.
+- Out-of-scope and called out in `lite/README.md`: backup (recommend host-side rsync), HTTPS/reverse proxy, parental controls, schedules, canary tokens, device fingerprinting, geo-aware bypass, DoH, mitmproxy, YouTube ad proxy, PWA, i18n, advanced WCAG/Core Web Vitals.
+
+---
+
 ## 2026-04-15
 
 ### Added — Multi-protocol backup storage (NFS / SMB / rsync-ssh / local)
