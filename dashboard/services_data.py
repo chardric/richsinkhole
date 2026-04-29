@@ -435,8 +435,8 @@ SERVICES = [
         "name": "Piracy File Hosts",
         "group": "tracking",
         "domains": [
-            # Common file hosts used by piracy sites
-            "downloadwella.com",
+            # Common file hosts used by piracy sites.
+            # downloadwella.com removed on request — keep the rest blocked.
             "sabishare.com",
             "mixdrop.to", "mixdrop.co",
             "dood.to", "dood.watch", "dood.so",

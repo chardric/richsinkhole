@@ -6,6 +6,16 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Fixed — Microsoft Teams sign-in failure across multiple clients
+- Users on 14 client devices reported Teams stuck on "Loading" / sign-in failures. Audit of 27 Teams-critical Microsoft hosts against the live blocklist showed exactly one match: `nexus.officeapps.live.com` (Office config/auth nexus, required for Teams to fetch its bootstrap config).
+- Allowlisted on prod (`blocklist.db.allowed_domains`) for immediate effect — query log confirmed the next two queries forwarded successfully. Added to `updater/sources.yml` whitelist so future blocklist refreshes don't re-add it.
+- The previously-fixed Edge service-rings (`a-ring`, `k-ring`, `fp.msedge.net`) were verified healthy — recent rows show `forwarded`; older "blocked" entries in aggregates were pre-fix history.
+- Telemetry hosts (`mobile.pipe.aria.microsoft.com`, `*.fp.measure.office.com`) intentionally remain blocked — Teams tolerates that.
+
+### Fixed — `downloadwella.com` blocked despite being a legitimate file-host redirect
+- The Hagezi TIF list flags `downloadwella.com` as a "piracy file host", and `dashboard/services_data.py` had it bundled into the "Piracy File Hosts" service group. But it's also the redirect target for `thenkiri.com` downloads, which was breaking unrelated downloads on client devices.
+- Removed from the piracy bundle in `services_data.py` (kept the rest of the bundle blocked) and added `downloadwella.com` + `www.downloadwella.com` to `updater/sources.yml` whitelist so blocklist refreshes don't re-add them.
+
 ### Fixed — `icloudph.com` SERVFAIL caused by registrar-side DNSSEC misconfiguration
 - ISU Cauayan SIAS portal (`https://icloudph.com/isu-cauayan/sias/`) was returning SERVFAIL through prod's unbound, breaking access from every client on the LAN that uses RichSinkhole as resolver.
 - Root cause: the registrar publishes 11 DS records for `icloudph.com` at `.com` (9 RSASHA256 + 2 ECDSAP256SHA256), but the zone itself only serves ECDSAP256SHA256 DNSKEYs. Cloudflare/Quad9 accept (RFC 6840 — one valid chain is sufficient), but unbound's `harden-algo-downgrade: yes` correctly flags this as an algorithm-downgrade risk and rejects.

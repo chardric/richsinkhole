@@ -23,3 +23,11 @@ whitelist:
   - a-ring.msedge.net
   - k-ring.msedge.net
   - fp.msedge.net
+  # Office config/auth nexus — required for Teams sign-in. Tagged as telemetry
+  # by some lists, but blocking it leaves Teams stuck on "Loading" / sign-in
+  # failures across multiple clients.
+  - nexus.officeapps.live.com
+  # thenkiri.com download redirect target (flagged by TIF list).
+  # Only allow the file host; thenkiri itself is not blocked.
+  - downloadwella.com
+  - www.downloadwella.com
