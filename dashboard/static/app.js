@@ -1497,10 +1497,11 @@ async function loadBlocklistCustom() {
       el.innerHTML = '<div class="text-muted small text-center py-2">No manual blocks yet.</div>';
       return;
     }
-    el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle">
+    el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle" style="table-layout:fixed">
+      <colgroup><col style="width:30%"><col><col style="width:90px"></colgroup>
       ${items.map(d => `<tr>
-        <td class="font-monospace py-1">${escHtml(d.domain)}</td>
-        <td class="text-muted py-1">${escHtml(d.note || "")}</td>
+        <td class="font-monospace py-1 text-truncate">${escHtml(d.domain)}</td>
+        <td class="text-muted py-1 text-truncate">${escHtml(d.note || "")}</td>
         <td class="text-end pe-0 py-1"><button class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-block" data-domain="${escHtml(d.domain)}">Remove</button></td>
       </tr>`).join("")}
     </table>`;
@@ -1523,10 +1524,11 @@ async function loadAllowlist() {
       el.innerHTML = '<div class="text-muted small text-center py-2">No domains in the allowlist yet.</div>';
       return;
     }
-    el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle">
+    el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle" style="table-layout:fixed">
+      <colgroup><col style="width:30%"><col><col style="width:90px"></colgroup>
       ${items.map(d => `<tr>
-        <td class="font-monospace py-1">${escHtml(d.domain)}</td>
-        <td class="text-muted py-1">${escHtml(d.note)}</td>
+        <td class="font-monospace py-1 text-truncate">${escHtml(d.domain)}</td>
+        <td class="text-muted py-1 text-truncate">${escHtml(d.note)}</td>
         <td class="text-end pe-0 py-1"><button class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-allow" data-domain="${escHtml(d.domain)}">Remove</button></td>
       </tr>`).join("")}
     </table>`;
