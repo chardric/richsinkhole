@@ -6,6 +6,17 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Ops — Hard-blocked Chinese IoT camera phone-home + purged 207k stale geo_block events
+- Two cheap Chinese IP cameras (V380/IoTBing platforms) were hammering the resolver: `10.0.0.2` (the OMADA_PLDT gateway, NAT-forwarding DNS for everything behind it) made **59,963** queries to `*.av380.net` in 24h, generating **29,743** `geo_block` security events (CN IP detection firing every time). The geo_block check runs *after* unbound resolves, so each query also burned an upstream lookup.
+- Added three apex blocks to `blocked_domains` (source='custom') — apex matches catch every subdomain via the existing parent-domain match in `dns/blocker.py:is_blocked()`:
+  - `av380.net` — V380 vendor (logs, push4, regipc, p2pdispa, etc.)
+  - `w390.net` — same vendor's secondary registration domain
+  - `iotbing.com` — IoTBing P2P relay (kills remote-app viewing; LAN-direct still works)
+- Effect: queries now block at lookup phase (no upstream call, no `geo_block` event creation).
+- Purged **207,162** historical `geo_block` rows for `*.av380.net` from `security_events` so the dashboard's Recent Security Events table is no longer drowned in the same domain. Total event count dropped from ~221k to ~14k.
+- Persistence verified — `updater/updater.py:328` preserves `source != 'blocklist'` rows on every refresh, so manual entries survive blocklist syncs.
+- The actual long-term fix is at the firewall: block the IoT VLAN's WAN egress in Omada. DNS sinkhole is defense-in-depth, not the primary control for unwanted phone-home.
+
 ### Fixed — Microsoft Teams sign-in failure across multiple clients
 - Users on 14 client devices reported Teams stuck on "Loading" / sign-in failures. Audit of 27 Teams-critical Microsoft hosts against the live blocklist showed exactly one match: `nexus.officeapps.live.com` (Office config/auth nexus, required for Teams to fetch its bootstrap config).
 - Allowlisted on prod (`blocklist.db.allowed_domains`) for immediate effect — query log confirmed the next two queries forwarded successfully. Added to `updater/sources.yml` whitelist so future blocklist refreshes don't re-add it.
