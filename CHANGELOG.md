@@ -6,6 +6,12 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Fixed — `icloudph.com` SERVFAIL caused by registrar-side DNSSEC misconfiguration
+- ISU Cauayan SIAS portal (`https://icloudph.com/isu-cauayan/sias/`) was returning SERVFAIL through prod's unbound, breaking access from every client on the LAN that uses RichSinkhole as resolver.
+- Root cause: the registrar publishes 11 DS records for `icloudph.com` at `.com` (9 RSASHA256 + 2 ECDSAP256SHA256), but the zone itself only serves ECDSAP256SHA256 DNSKEYs. Cloudflare/Quad9 accept (RFC 6840 — one valid chain is sufficient), but unbound's `harden-algo-downgrade: yes` correctly flags this as an algorithm-downgrade risk and rejects.
+- Fix in `unbound/unbound.conf` (server section): added `domain-insecure: "icloudph.com"` so unbound trusts the forwarders for this one zone instead of doing a second-pass local validation. Forwarders (Cloudflare, Quad9) still validate DNSSEC themselves, so spoofing protection on the network path is unchanged. Removable later if the zone owner cleans up the stale RSA DS records.
+- Also applied live to the running prod container via `unbound-control insecure_add icloudph.com.`, then permanently baked in via `./deploy.sh unbound`.
+
 ### Added — `lite/` variant for Raspberry Pi Zero v1.3 (ARMv6)
 - New top-level `lite/` directory, additive only — no changes to `dns/`, `dashboard/`, `updater/`, or the Docker stack.
 - Native (no Docker), uses `dnsmasq` as the DNS data plane and a tiny Flask + gunicorn (1 worker) dashboard for control. Memory budget target: ~210 MB used on a 512 MB Pi Zero.
