@@ -1488,6 +1488,33 @@ async function loadRouteInterfaces(metaEl) {
   }
 }
 
+async function loadBlocklistCustom() {
+  const el = document.getElementById("blocklist-custom-body");
+  try {
+    const data  = await api("GET", "/api/blocklist/custom?limit=500");
+    const items = data.domains || [];
+    if (!items.length) {
+      el.innerHTML = '<div class="text-muted small text-center py-2">No manual blocks yet.</div>';
+      return;
+    }
+    el.innerHTML = `<table class="table table-sm table-hover table-borderless mb-0 small align-middle">
+      ${items.map(d => `<tr>
+        <td class="font-monospace py-1">${escHtml(d.domain)}</td>
+        <td class="text-muted small py-1">${escHtml(d.added_at || "")}</td>
+        <td class="text-end pe-0 py-1"><button class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-block" data-domain="${escHtml(d.domain)}">Remove</button></td>
+      </tr>`).join("")}
+    </table>`;
+    el.querySelectorAll(".btn-remove-block").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await api("DELETE", `/api/blocklist/${encodeURIComponent(btn.dataset.domain)}`);
+        loadBlocklistCustom();
+      });
+    });
+  } catch (_) {
+    el.innerHTML = '<div class="text-muted small text-center py-2">Could not load custom blocklist.</div>';
+  }
+}
+
 async function loadAllowlist() {
   const el = document.getElementById("allowlist-body");
   try {
@@ -2306,6 +2333,7 @@ function bindEvents() {
     loadUpdaterStatus();
     loadSources();
     loadBlockedServices();
+    loadBlocklistCustom();
     loadAllowlist();
   });
 
@@ -2368,6 +2396,19 @@ function bindEvents() {
   document.getElementById("tab-schedules-btn").addEventListener("shown.bs.tab", loadSchedules);
   document.getElementById("btn-refresh-schedules").addEventListener("click", loadSchedules);
   document.getElementById("btn-add-schedule").addEventListener("click", () => openScheduleModal());
+
+  // Custom blocklist (in Blocklist tab)
+  document.getElementById("form-add-block").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const domain = document.getElementById("input-block-domain").value.trim();
+    if (!domain) return;
+    try {
+      await api("POST", "/api/blocklist", { domain });
+      document.getElementById("input-block-domain").value = "";
+      loadBlocklistCustom();
+      showToast(`${domain} added to blocklist`, "success");
+    } catch (e) { showToast(e.message, "danger"); }
+  });
 
   // Allowlist (in Blocklist tab)
   document.getElementById("form-add-allow").addEventListener("submit", async (e) => {

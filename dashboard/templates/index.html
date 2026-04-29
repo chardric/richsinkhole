@@ -400,6 +400,21 @@
           <div class="text-center text-muted py-4 small">Loading services...</div>
         </div>
       </div>
+      <!-- Custom Blocklist -->
+      <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="text-muted small fw-semibold">CUSTOM BLOCKLIST</span>
+          <span class="text-muted small ms-2">— manual blocks, apex match catches all subdomains</span>
+        </div>
+        <div class="card-body">
+          <form id="form-add-block" class="d-flex gap-2 mb-3">
+            <input type="text" class="form-control form-control-sm font-monospace" id="input-block-domain" placeholder="example.com" title="Domain to block. Subdomains are also blocked (parent-domain match).">
+            <button class="btn btn-sm btn-outline-danger flex-shrink-0" type="submit">Add</button>
+          </form>
+          <div id="blocklist-custom-body"><div class="text-muted small text-center py-2">Loading…</div></div>
+        </div>
+      </div>
+
       <!-- Custom Allowlist -->
       <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">

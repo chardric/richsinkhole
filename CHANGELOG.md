@@ -6,6 +6,11 @@ All notable changes to RichSinkhole are documented here.
 
 ## Unreleased
 
+### Added — "Custom Blocklist" card on the Blocklist tab
+- Mirror of the existing "Custom Allowlist" card. Form to add a domain (apex match catches all subdomains via `dns/blocker.py:is_blocked()`), table of existing custom-source entries with per-row Remove buttons.
+- Backend was already fully wired (`POST /api/blocklist`, `GET /api/blocklist/custom`, `DELETE /api/blocklist/{domain}` — `dashboard/routers/blocklist.py`); only the frontend was missing. Added `loadBlocklistCustom()` and the form-submit/tab-loader hooks in `dashboard/static/app.js`.
+- One-line migration on prod: existing manual entries with `source='manual'` (added via SSH-to-DB earlier today) bumped to `source='custom'` so they appear in the new card alongside future additions.
+
 ### Ops — Hard-blocked Chinese IoT camera phone-home + purged 207k stale geo_block events
 - Two cheap Chinese IP cameras (V380/IoTBing platforms) were hammering the resolver: `10.0.0.2` (the OMADA_PLDT gateway, NAT-forwarding DNS for everything behind it) made **59,963** queries to `*.av380.net` in 24h, generating **29,743** `geo_block` security events (CN IP detection firing every time). The geo_block check runs *after* unbound resolves, so each query also burned an upstream lookup.
 - Added three apex blocks to `blocked_domains` (source='custom') — apex matches catch every subdomain via the existing parent-domain match in `dns/blocker.py:is_blocked()`:
