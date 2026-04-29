@@ -447,10 +447,45 @@ install_route_reconciler() {
 }
 
 # ---------------------------------------------------------------------------
+# HOST_IP reconciliation
+# ---------------------------------------------------------------------------
+#
+# Detect and fix HOST_IP drift in .env. The dashboard, YouTube redirect, and
+# Captive Portal all advertise this IP to clients. If the host renumbers
+# (DHCP lease changes, static reassignment, NIC swap), the .env value goes
+# stale silently and clients are pointed at a dead address until the next
+# manual fix. This re-validates against actual interfaces every install run.
+
+reconcile_host_ip() {
+    if [ ! -f .env ]; then
+        return 0
+    fi
+
+    local detected
+    detected=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ -z "$detected" ]; then
+        return 0
+    fi
+
+    if grep -q "^HOST_IP=" .env; then
+        local current
+        current=$(grep "^HOST_IP=" .env | cut -d= -f2-)
+        if [ -n "$current" ] && ! ip -4 addr show 2>/dev/null | grep -qE "inet ${current}/"; then
+            warn "HOST_IP=${current} in .env is not on any interface; updating to ${detected}"
+            sed -i "s/^HOST_IP=.*/HOST_IP=${detected}/" .env
+        fi
+    else
+        echo "HOST_IP=${detected}" >> .env
+        info "Wrote HOST_IP=${detected} to .env"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Build & start
 # ---------------------------------------------------------------------------
 
 start_services() {
+    reconcile_host_ip
     info "Building and starting RichSinkhole..."
     docker compose build --quiet
     docker compose up -d

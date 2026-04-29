@@ -20,7 +20,7 @@ All notable changes to RichSinkhole are documented here.
 
 ### Fixed — `HOST_IP` drift causing wrong Server IP in dashboard, YouTube redirect, Captive Portal
 - `.env` had `HOST_IP=10.254.254.192` — the host's lease at first install — but the host's eth0 has been static `10.254.254.4` for weeks. Dashboard `/api/settings` was advertising the dead IP for that whole time, and the YouTube proxy / Captive Portal would have handed it out to clients if those features were active.
-- Corrected the value on prod and rebuilt with the right env. Local `setup.sh` (gitignored) on dev got a self-healing block that re-validates `HOST_IP` against `ip -4 addr show` on every run and rewrites stale values; not part of this commit since the file isn't tracked. Long-term: move the same safeguard into `install.sh` or a runtime check at dashboard boot.
+- Corrected the value on prod and rebuilt with the right env. Added `reconcile_host_ip()` to `install.sh:start_services()` that re-validates `HOST_IP` against `ip -4 addr show` on every install run; if the value isn't on any local interface, rewrite to `hostname -I`'s first answer, and if `HOST_IP=` is missing entirely, append it. Catches the same drift automatically next time install.sh runs.
 
 ### Fixed — Orphan `dashboard/routers/backup.py` comment + `scripts/rs-host-probe.py` DB path
 - `backup.py:23` claimed `/data` was "NAS-backed: sinkhole.db (query log)" — leftover from before `sinkhole.db` moved to `/local`. Updated to "NAS-backed: updater status files only".
